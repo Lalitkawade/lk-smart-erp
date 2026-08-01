@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../api/supabase';
 import type { Profile, Tenant } from '../types/erp.types';
 
+const DEFAULT_FALLBACK_TENANT_ID = 'default-hardware-erp';
+
 export function useAuth() {
   const [user, setUser] = useState<any | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -14,9 +16,11 @@ export function useAuth() {
     if (sessionStr) {
       try {
         const session = JSON.parse(sessionStr);
-        setUser(session.user);
-        setProfile(session.profile);
-        setTenant(session.tenant);
+        if (session && session.user) {
+          setUser(session.user);
+          setProfile(session.profile || null);
+          setTenant(session.tenant || null);
+        }
       } catch (e) {
         localStorage.removeItem('lk_session');
       }
@@ -24,86 +28,92 @@ export function useAuth() {
     setLoading(false);
 
     // Sync state with live Supabase authentication state shifts
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session?.user) {
-        try {
-          const { data: profileData } = await supabase
-            .from('profiles')
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_OUT' || !session?.user) {
+        setUser(null);
+        setProfile(null);
+        setTenant(null);
+        localStorage.removeItem('lk_session');
+        return;
+      }
+
+      try {
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .maybeSingle();
+
+        let tenantData: Tenant | null = null;
+        if (profileData && profileData.tenant_id) {
+          const { data: tData } = await supabase
+            .from('tenants')
             .select('*')
-            .eq('id', session.user.id)
+            .eq('id', profileData.tenant_id)
             .maybeSingle();
-
-          let tenantData: Tenant | null = null;
-          if (profileData && profileData.tenant_id) {
-            const { data: tData } = await supabase
-              .from('tenants')
-              .select('*')
-              .eq('id', profileData.tenant_id)
-              .maybeSingle();
-            tenantData = tData;
-          }
-
-          const fallbackUsername = session.user.email ? session.user.email.split('@')[0].toUpperCase() : 'OPERATOR';
-          const activeProfile: Profile = profileData || {
-            id: session.user.id,
-            tenant_id: 'default-hardware-erp',
-            username: fallbackUsername,
-            role: 'Owner',
-            status: 'Active',
-            created_at: new Date().toISOString()
-          };
-
-          const activeTenant: Tenant = tenantData || {
-            id: 'default-hardware-erp',
-            company_code: 'LKHARDWARE',
-            company_name: 'LK Hardware ERP',
-            owner_name: 'Store Owner',
-            owner_email: session.user.email || '',
-            plan: 'Enterprise',
-            status: 'Active',
-            created_at: new Date().toISOString()
-          };
-
-          setUser(session.user);
-          setProfile(activeProfile);
-          setTenant(activeTenant);
-
-          localStorage.setItem('lk_session', JSON.stringify({
-            user: session.user,
-            profile: activeProfile,
-            tenant: activeTenant
-          }));
-        } catch (e) {
-          console.warn('onAuthStateChange fallback:', e);
-          const fallbackProfile: Profile = {
-            id: session.user.id,
-            tenant_id: 'default-hardware-erp',
-            username: session.user.email ? session.user.email.split('@')[0].toUpperCase() : 'OPERATOR',
-            role: 'Owner',
-            status: 'Active',
-            created_at: new Date().toISOString()
-          };
-          const fallbackTenant: Tenant = {
-            id: 'default-hardware-erp',
-            company_code: 'LKHARDWARE',
-            company_name: 'LK Hardware ERP',
-            owner_name: 'Store Owner',
-            owner_email: session.user.email || '',
-            plan: 'Enterprise',
-            status: 'Active',
-            created_at: new Date().toISOString()
-          };
-          setUser(session.user);
-          setProfile(fallbackProfile);
-          setTenant(fallbackTenant);
+          tenantData = tData;
         }
-      } else {
-        const sessionStr = localStorage.getItem('lk_session');
-        if (!sessionStr) {
-          setUser(null);
-          setProfile(null);
-          setTenant(null);
-        }
+
+        const fallbackUsername = session.user.email ? session.user.email.split('@')[0].toUpperCase() : 'OPERATOR';
+        const activeProfile: Profile = profileData || {
+          id: session.user.id,
+          tenant_id: DEFAULT_FALLBACK_TENANT_ID,
+          username: fallbackUsername,
+          role: 'Owner',
+          status: 'Active',
+          created_at: new Date().toISOString()
+        };
+
+        const activeTenant: Tenant = tenantData || {
+          id: DEFAULT_FALLBACK_TENANT_ID,
+          company_code: 'LKHARDWARE',
+          company_name: 'LK Hardware ERP',
+          owner_name: 'Store Owner',
+          owner_email: session.user.email || '',
+          plan: 'Enterprise',
+          status: 'Active',
+          created_at: new Date().toISOString()
+        };
+
+        setUser(session.user);
+        setProfile(activeProfile);
+        setTenant(activeTenant);
+
+        localStorage.setItem('lk_session', JSON.stringify({
+          user: session.user,
+          profile: activeProfile,
+          tenant: activeTenant
+        }));
+      } catch (e) {
+        console.warn('onAuthStateChange fallback:', e);
+        const fallbackProfile: Profile = {
+          id: session.user.id,
+          tenant_id: DEFAULT_FALLBACK_TENANT_ID,
+          username: session.user.email ? session.user.email.split('@')[0].toUpperCase() : 'OPERATOR',
+          role: 'Owner',
+          status: 'Active',
+          created_at: new Date().toISOString()
+        };
+        const fallbackTenant: Tenant = {
+          id: DEFAULT_FALLBACK_TENANT_ID,
+          company_code: 'LKHARDWARE',
+          company_name: 'LK Hardware ERP',
+          owner_name: 'Store Owner',
+          owner_email: session.user.email || '',
+          plan: 'Enterprise',
+          status: 'Active',
+          created_at: new Date().toISOString()
+        };
+
+        setUser(session.user);
+        setProfile(fallbackProfile);
+        setTenant(fallbackTenant);
+
+        localStorage.setItem('lk_session', JSON.stringify({
+          user: session.user,
+          profile: fallbackProfile,
+          tenant: fallbackTenant
+        }));
       }
     });
 
@@ -207,11 +217,31 @@ export function useAuth() {
         }
       }
 
-      setUser(data.user);
-      setProfile(profileData);
-      setTenant(tenantData);
+      const activeProfile: Profile = profileData || {
+        id: data.user.id,
+        tenant_id: DEFAULT_FALLBACK_TENANT_ID,
+        username: (email.split('@')[0] || 'OPERATOR').toUpperCase(),
+        role: role || 'Owner',
+        status: 'Active',
+        created_at: new Date().toISOString()
+      };
 
-      const session = { user: data.user, profile: profileData, tenant: tenantData };
+      const activeTenant: Tenant = tenantData || {
+        id: DEFAULT_FALLBACK_TENANT_ID,
+        company_code: 'LKHARDWARE',
+        company_name: 'LK Hardware ERP',
+        owner_name: 'Store Owner',
+        owner_email: email,
+        plan: 'Enterprise',
+        status: 'Active',
+        created_at: new Date().toISOString()
+      };
+
+      setUser(data.user);
+      setProfile(activeProfile);
+      setTenant(activeTenant);
+
+      const session = { user: data.user, profile: activeProfile, tenant: activeTenant };
       localStorage.setItem('lk_session', JSON.stringify(session));
       return session;
     } catch (err: any) {
@@ -221,14 +251,14 @@ export function useAuth() {
       const fallbackUser = { id: 'usr-' + Date.now(), email };
       const fallbackProfile: Profile = {
         id: fallbackUser.id,
-        tenant_id: 'tenant-hardware-001',
+        tenant_id: DEFAULT_FALLBACK_TENANT_ID,
         username: (email.split('@')[0] || 'OPERATOR').toUpperCase(),
         role: role || 'Owner',
         status: 'Active',
         created_at: new Date().toISOString()
       };
       const fallbackTenant: Tenant = {
-        id: 'tenant-hardware-001',
+        id: DEFAULT_FALLBACK_TENANT_ID,
         company_code: 'LKHARDWARE',
         company_name: 'LK Hardware ERP',
         owner_name: 'Store Owner',
@@ -251,7 +281,9 @@ export function useAuth() {
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {}
     setUser(null);
     setProfile(null);
     setTenant(null);
