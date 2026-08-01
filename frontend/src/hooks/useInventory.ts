@@ -59,14 +59,36 @@ export function useInventory(tenantId: string, businessType?: string) {
       ? productPayload.id 
       : generateUuid();
 
+    const activeTenantId = (tenantId && isUuid(tenantId)) ? tenantId : '00000000-0000-0000-0000-000000000000';
+
     const cleanPayload: any = {
-      ...productPayload,
       id: productId,
+      tenant_id: activeTenantId,
       product_name: productPayload.product_name || 'General Product',
+      sku: productPayload.sku || null,
+      barcode: productPayload.barcode || null,
+      category_name: productPayload.category_name || 'General',
+      brand_name: productPayload.brand_name || 'Generic',
+      unit: productPayload.s_unit || productPayload.unit || 'Pcs',
       purchase_price: Number(productPayload.purchase_price || 0),
       selling_price: Number(productPayload.selling_price || 0),
+      dealer_price: Number(productPayload.dealer_price || 0),
+      mrp: Number(productPayload.mrp || 0),
       current_stock: Number(productPayload.current_stock || 0),
-      min_stock_level: Number(productPayload.min_stock_level || 10)
+      min_stock_level: Number(productPayload.min_stock_level || 10),
+      status: 'Active',
+      hsn: productPayload.hsn || null,
+      size: productPayload.size || null,
+      weight: productPayload.weight || null,
+      description: productPayload.description || null,
+      godown: productPayload.godown || null,
+      rack_number: productPayload.rack_number || null,
+      shelf_number: productPayload.shelf_number || null,
+      warehouse_location: productPayload.warehouse_location || null,
+      p_unit: productPayload.p_unit || 'Pcs',
+      s_unit: productPayload.s_unit || 'Pcs',
+      pieces_per_pack: Number(productPayload.pieces_per_pack || 1),
+      piece_selling_price: Number(productPayload.piece_selling_price || 0)
     };
 
     // 1. Instant local cache and UI state update (0ms latency!)
