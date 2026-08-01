@@ -634,7 +634,7 @@ export default function Customers({ onNewInvoice }: CustomersProps) {
                     value={formData.dob} onChange={(e) => setFormData({ ...formData, dob: e.target.value })} />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-textSecondary mb-1">Credit Limit (₹) *</label>
                   <input type="number" className="w-full bg-background border border-border rounded-lg p-2.5 text-xs text-foreground font-mono font-bold"
@@ -771,7 +771,7 @@ export default function Customers({ onNewInvoice }: CustomersProps) {
               </div>
 
               {/* Customer Metadata Card */}
-              <div className="bg-background p-4 border border-border rounded-xl grid grid-cols-2 md:grid-cols-4 gap-4 text-xs print:bg-white print:border-slate-300 print:text-black">
+              <div className="bg-background p-4 border border-border rounded-xl grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-xs print:bg-white print:border-slate-300 print:text-black">
                 <div>
                   <div className="text-textMuted text-[10px] uppercase font-bold">Account Name</div>
                   <div className="text-foreground print:text-black font-bold uppercase">{statementCustomer.customer_name}</div>

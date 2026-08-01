@@ -749,7 +749,7 @@ export default function Suppliers() {
               </div>
 
               {/* Supplier Metadata Card */}
-              <div className="bg-background p-4 border border-border rounded-lg grid grid-cols-2 gap-4 text-xs print:bg-white print:border-slate-300 print:text-black">
+              <div className="bg-background p-4 border border-border rounded-lg grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs print:bg-white print:border-slate-300 print:text-black">
                 <div>
                   <div className="text-textMuted text-[10px] uppercase font-bold">Supplier Name</div>
                   <div className="text-foreground print:text-black font-bold uppercase">{statementSupplier.supplier_name}</div>

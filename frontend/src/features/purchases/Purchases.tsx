@@ -651,7 +651,7 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-textSecondary mb-1">Mobile Phone Number</label>
                   <input 
@@ -674,7 +674,7 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-textSecondary mb-1">Owner / Contact Birthday</label>
                   <input 

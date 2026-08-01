@@ -763,7 +763,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                       </span>
                     </div>
                     
-                    <div className="grid grid-cols-2 gap-2 text-[11px] pt-1.5 border-t border-amber-500/30 font-semibold">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] pt-1.5 border-t border-amber-500/30 font-semibold">
                       <div>
                         <span className="text-slate-700 dark:text-slate-300 block text-[10px] font-bold">Previous Outstanding:</span>
                         <span className="font-mono text-base font-black text-rose-700 dark:text-rose-400">₹{previousOutstanding.toFixed(2)}</span>
@@ -816,7 +816,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                   </div>
                 )}
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs text-textSecondary mb-1 font-semibold">Payment Mode</label>
                     <select className="w-full bg-background border border-border rounded p-2 text-xs text-foreground font-semibold"
@@ -1245,7 +1245,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
             </div>
 
             {/* Customer Quick Info Card */}
-            <div className="grid grid-cols-3 gap-4 p-3.5 bg-slate-950 border border-slate-800 rounded-xl text-xs shrink-0">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-3.5 bg-slate-950 border border-slate-800 rounded-xl text-xs shrink-0">
               <div>
                 <div className="text-[10px] text-slate-400 uppercase font-bold tracking-wide">Contact Phone</div>
                 <div className="font-bold text-white font-mono text-sm mt-0.5">{matchedCustomer.phone || 'N/A'}</div>
@@ -1319,7 +1319,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                       </div>
 
                       {/* Payment Ledger Amounts Breakdown */}
-                      <div className="grid grid-cols-3 gap-2 bg-slate-900/90 p-2.5 rounded-lg text-xs font-semibold border border-slate-800">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-slate-900/90 p-2.5 rounded-lg text-xs font-semibold border border-slate-800">
                         <div>
                           <span className="text-[10px] text-slate-400 block uppercase font-bold">Bill Total</span>
                           <span className="font-mono font-extrabold text-slate-100">₹{totalAmt.toFixed(2)}</span>
