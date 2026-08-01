@@ -82,17 +82,73 @@ export default function App() {
   const [role, setRole] = useState('Owner');
   const [authLoading, setAuthLoading] = useState(false);
 
+  // Safe cache parsing helper
+  const safeParseArray = (key: string): any[] => {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+      return [];
+    }
+  };
+
+  // Atomic local cache updater
+  const saveLocalCache = (cacheObj: {
+    sales: any[];
+    purchases: any[];
+    expenses: any[];
+    products: any[];
+    customers: any[];
+    suppliers: any[];
+  }) => {
+    try {
+      const snapshot = {
+        lk_sales: JSON.stringify(cacheObj.sales || []),
+        lk_purchases: JSON.stringify(cacheObj.purchases || []),
+        lk_expenses: JSON.stringify(cacheObj.expenses || []),
+        lk_products: JSON.stringify(cacheObj.products || []),
+        lk_customers: JSON.stringify(cacheObj.customers || []),
+        lk_suppliers: JSON.stringify(cacheObj.suppliers || [])
+      };
+      Object.entries(snapshot).forEach(([key, val]) => localStorage.setItem(key, val));
+    } catch (e) {
+      console.warn('Local cache storage write error:', e);
+    }
+  };
+
+  // Consolidated merge helper that respects remote deletions while preserving offline drafts
+  const mergeRemoteWithOfflineDrafts = (remoteItems: any[], localItems: any[], keyField = 'id'): any[] => {
+    const validRemote = Array.isArray(remoteItems) ? remoteItems : [];
+    const validLocal = Array.isArray(localItems) ? localItems : [];
+
+    const map = new Map<string, any>();
+    validRemote.forEach(item => {
+      if (item) {
+        const idKey = item[keyField] || item.id || item.invoice_number || item.bill_number;
+        if (idKey) map.set(String(idKey), item);
+      }
+    });
+
+    // Only preserve local items that are explicitly flagged as offline drafts
+    validLocal.forEach(item => {
+      if (item && item.is_offline_draft) {
+        const idKey = item[keyField] || item.id || item.invoice_number || item.bill_number;
+        if (idKey && !map.has(String(idKey))) {
+          map.set(String(idKey), item);
+        }
+      }
+    });
+
+    return Array.from(map.values());
+  };
+
   // Load metrics and config settings
   const loadAppState = async () => {
     // 1. Load Local settings
     const settingsStr = localStorage.getItem('lk_settings');
-    if (settingsStr) {
-      try {
-        JSON.parse(settingsStr);
-        setBusinessType('Hardware Shop');
-      } catch (e) {}
-    } else {
-      // Default settings seed
+    if (!settingsStr) {
       const defaults = {
         company_name: 'LK Hardware ERP',
         logo_url: '',
@@ -104,10 +160,10 @@ export default function App() {
         module_mobile: false,
         module_fertilizer: false
       };
-      localStorage.setItem('lk_settings', JSON.stringify(defaults));
+      try { localStorage.setItem('lk_settings', JSON.stringify(defaults)); } catch (e) {}
     }
 
-    // 2. Fetch live metrics directly from Supabase (all real user items) with safe fallback
+    let isRemoteSuccessful = false;
     let liveSales: SalesInvoice[] = [];
     let livePurchases: PurchaseBill[] = [];
     let liveExpenses: Expense[] = [];
@@ -125,87 +181,74 @@ export default function App() {
         supabase.from('suppliers').select('*').order('supplier_name', { ascending: true })
       ]);
 
-      if (salesRes.status === 'fulfilled' && salesRes.value?.data) liveSales = salesRes.value.data as SalesInvoice[];
-      if (purchRes.status === 'fulfilled' && purchRes.value?.data) livePurchases = purchRes.value.data as PurchaseBill[];
-      if (expRes.status === 'fulfilled' && expRes.value?.data) liveExpenses = expRes.value.data as Expense[];
-      if (prodRes.status === 'fulfilled' && prodRes.value?.data) liveProducts = prodRes.value.data;
-      if (custRes.status === 'fulfilled' && custRes.value?.data) liveCustomers = custRes.value.data;
-      if (supRes.status === 'fulfilled' && supRes.value?.data) liveSuppliers = supRes.value.data;
+      const salesData = salesRes.status === 'fulfilled' ? salesRes.value?.data : null;
+      const purchData = purchRes.status === 'fulfilled' ? purchRes.value?.data : null;
+      const expData = expRes.status === 'fulfilled' ? expRes.value?.data : null;
+      const prodData = prodRes.status === 'fulfilled' ? prodRes.value?.data : null;
+      const custData = custRes.status === 'fulfilled' ? custRes.value?.data : null;
+      const supData = supRes.status === 'fulfilled' ? supRes.value?.data : null;
+
+      if (salesData || purchData || expData || prodData || custData || supData) {
+        isRemoteSuccessful = true;
+        liveSales = (salesData || []) as SalesInvoice[];
+        livePurchases = (purchData || []) as PurchaseBill[];
+        liveExpenses = (expData || []) as Expense[];
+        liveProducts = prodData || [];
+        liveCustomers = custData || [];
+        liveSuppliers = supData || [];
+      }
     } catch (err) {
       console.warn('Supabase state load note:', err);
     }
 
-    // Combine with local storage cache
-    try {
-      const localS = JSON.parse(localStorage.getItem('lk_sales') || '[]');
-      const localP = JSON.parse(localStorage.getItem('lk_purchases') || '[]');
-      const localE = JSON.parse(localStorage.getItem('lk_expenses') || '[]');
-      const localProds = JSON.parse(localStorage.getItem('lk_products') || '[]');
-      const localC = JSON.parse(localStorage.getItem('lk_customers') || '[]');
-      const localSups = JSON.parse(localStorage.getItem('lk_suppliers') || '[]');
+    if (isRemoteSuccessful) {
+      // Merge with pending offline drafts only so remote deletions converge properly
+      const localSales = safeParseArray('lk_sales');
+      const localPurchases = safeParseArray('lk_purchases');
+      const localExpenses = safeParseArray('lk_expenses');
+      const localProducts = safeParseArray('lk_products');
+      const localCustomers = safeParseArray('lk_customers');
+      const localSuppliers = safeParseArray('lk_suppliers');
 
-      const salesMap = new Map();
-      liveSales.forEach(s => { if (s?.id || s?.invoice_number) salesMap.set(s.invoice_number || s.id, s); });
-      localS.forEach((s: any) => { if (s && !salesMap.has(s.invoice_number || s.id)) salesMap.set(s.invoice_number || s.id, s); });
-      liveSales = Array.from(salesMap.values());
+      const mergedSales = mergeRemoteWithOfflineDrafts(liveSales, localSales, 'invoice_number');
+      const mergedPurchases = mergeRemoteWithOfflineDrafts(livePurchases, localPurchases, 'bill_number');
+      const mergedExpenses = mergeRemoteWithOfflineDrafts(liveExpenses, localExpenses, 'id');
+      const mergedProducts = mergeRemoteWithOfflineDrafts(liveProducts, localProducts, 'id');
+      const mergedCustomers = mergeRemoteWithOfflineDrafts(liveCustomers, localCustomers, 'id');
+      const mergedSuppliers = mergeRemoteWithOfflineDrafts(liveSuppliers, localSuppliers, 'id');
 
-      const purchMap = new Map();
-      livePurchases.forEach(p => { if (p?.id || p?.bill_number) purchMap.set(p.bill_number || p.id, p); });
-      localP.forEach((p: any) => { if (p && !purchMap.has(p.bill_number || p.id)) purchMap.set(p.bill_number || p.id, p); });
-      livePurchases = Array.from(purchMap.values());
+      setSales(mergedSales);
+      setPurchases(mergedPurchases);
+      setExpenses(mergedExpenses);
+      setProductsList(mergedProducts);
+      setCustomersList(mergedCustomers);
+      setSuppliersList(mergedSuppliers);
 
-      const expMap = new Map();
-      liveExpenses.forEach(e => { if (e?.id) expMap.set(e.id, e); });
-      localE.forEach((e: any) => { if (e?.id && !expMap.has(e.id)) expMap.set(e.id, e); });
-      liveExpenses = Array.from(expMap.values());
+      // Atomic cache update
+      saveLocalCache({
+        sales: mergedSales,
+        purchases: mergedPurchases,
+        expenses: mergedExpenses,
+        products: mergedProducts,
+        customers: mergedCustomers,
+        suppliers: mergedSuppliers
+      });
+    } else {
+      // Offline fallback: restore from validated local cache
+      const cachedSales = safeParseArray('lk_sales');
+      const cachedPurchases = safeParseArray('lk_purchases');
+      const cachedExpenses = safeParseArray('lk_expenses');
+      const cachedProducts = safeParseArray('lk_products');
+      const cachedCustomers = safeParseArray('lk_customers');
+      const cachedSuppliers = safeParseArray('lk_suppliers');
 
-      const prodMap = new Map();
-      liveProducts.forEach(p => { if (p?.id) prodMap.set(p.id, p); });
-      localProds.forEach((p: any) => { if (p?.id && !prodMap.has(p.id)) prodMap.set(p.id, p); });
-      liveProducts = Array.from(prodMap.values());
-
-      const custMap = new Map();
-      liveCustomers.forEach(c => { if (c?.id) custMap.set(c.id, c); });
-      localC.forEach((c: any) => { if (c?.id && !custMap.has(c.id)) custMap.set(c.id, c); });
-      liveCustomers = Array.from(custMap.values());
-
-      const supMap = new Map();
-      liveSuppliers.forEach(s => { if (s?.id) supMap.set(s.id, s); });
-      localSups.forEach((s: any) => { if (s?.id && !supMap.has(s.id)) supMap.set(s.id, s); });
-      liveSuppliers = Array.from(supMap.values());
-    } catch (e) {}
-
-    setSales(liveSales);
-    setPurchases(livePurchases);
-    setExpenses(liveExpenses);
-    setProductsList(liveProducts);
-    setCustomersList(liveCustomers);
-    setSuppliersList(liveSuppliers);
-
-    try {
-      localStorage.setItem('lk_sales', JSON.stringify(liveSales));
-      localStorage.setItem('lk_purchases', JSON.stringify(livePurchases));
-      localStorage.setItem('lk_expenses', JSON.stringify(liveExpenses));
-      localStorage.setItem('lk_products', JSON.stringify(liveProducts));
-      localStorage.setItem('lk_customers', JSON.stringify(liveCustomers));
-      localStorage.setItem('lk_suppliers', JSON.stringify(liveSuppliers));
-    } catch (e) {}
-
-    // Fallback if offline
-    const sStr = localStorage.getItem('lk_sales') || '[]';
-    const pStr = localStorage.getItem('lk_purchases') || '[]';
-    const eStr = localStorage.getItem('lk_expenses') || '[]';
-    const prodStr = localStorage.getItem('lk_products') || '[]';
-    const cStr = localStorage.getItem('lk_customers') || '[]';
-    const supStr = localStorage.getItem('lk_suppliers') || '[]';
-    try {
-      setSales(JSON.parse(sStr));
-      setPurchases(JSON.parse(pStr));
-      setExpenses(JSON.parse(eStr));
-      setProductsList(JSON.parse(prodStr));
-      setCustomersList(JSON.parse(cStr));
-      setSuppliersList(JSON.parse(supStr));
-    } catch (err) {}
+      setSales(cachedSales);
+      setPurchases(cachedPurchases);
+      setExpenses(cachedExpenses);
+      setProductsList(cachedProducts);
+      setCustomersList(cachedCustomers);
+      setSuppliersList(cachedSuppliers);
+    }
   };
 
   useEffect(() => {
