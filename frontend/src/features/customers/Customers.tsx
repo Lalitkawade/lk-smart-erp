@@ -150,83 +150,63 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
     setModalOpen(true);
   };
 
-  const handleSaveCustomer = async (e: React.FormEvent) => {
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const triggerToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 2500);
+  };
+
+  const handleSaveCustomer = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.customer_name.trim()) return;
 
+    const isUuid = (id: string) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    const generateUuid = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'f' + Date.now().toString(16).padStart(31, '0').slice(0, 31);
+
+    const custId = (editingCustomer && isUuid(editingCustomer.id)) ? editingCustomer.id : generateUuid();
     const formattedName = formData.customer_name.trim().toUpperCase();
-    const newCustomerObj: Customer = {
-      id: editingCustomer ? editingCustomer.id : 'cust-' + Date.now(),
+
+    const newCustomerObj = {
+      id: custId,
+      tenant_id: isUuid(tenantId) ? tenantId : '00000000-0000-0000-0000-000000000000',
       customer_name: formattedName,
-      phone: formData.phone,
-      email: formData.email,
-      address: formData.address,
-      dob: formData.dob || undefined,
-      credit_limit: formData.credit_limit,
-      outstanding: formData.outstanding,
-      created_at: editingCustomer ? editingCustomer.created_at : new Date().toISOString()
+      phone: formData.phone || null,
+      email: formData.email || null,
+      address: formData.address || null,
+      dob: formData.dob || null,
+      credit_limit: Number(formData.credit_limit || 0),
+      outstanding: Number(formData.outstanding || 0),
+      created_at: editingCustomer?.created_at || new Date().toISOString()
     };
 
-    // 1. Update local cache and state immediately
+    // 1. Instant local state & localStorage update (0ms latency!)
     try {
-      const currentLocal = JSON.parse(localStorage.getItem('lk_customers') || '[]');
-      let updatedLocal: any[] = [];
-      if (editingCustomer) {
-        updatedLocal = currentLocal.map((c: any) => c.id === editingCustomer.id ? newCustomerObj : c);
+      const localStr = localStorage.getItem('lk_customers') || '[]';
+      const localList = JSON.parse(localStr);
+      const existingIdx = localList.findIndex((c: any) => c.id === custId || (c.customer_name && c.customer_name.toUpperCase() === formattedName));
+      if (existingIdx >= 0) {
+        localList[existingIdx] = newCustomerObj;
       } else {
-        updatedLocal = [newCustomerObj, ...currentLocal.filter((c: any) => c.customer_name !== formattedName)];
+        localList.unshift(newCustomerObj);
       }
-      localStorage.setItem('lk_customers', JSON.stringify(updatedLocal));
+      localStorage.setItem('lk_customers', JSON.stringify(localList));
+      setCustomers(localList);
     } catch (err) {}
 
-    setCustomers(prev => {
-      if (editingCustomer) {
-        return prev.map(c => c.id === editingCustomer.id ? newCustomerObj : c);
-      } else {
-        return [newCustomerObj, ...prev.filter(c => c.customer_name !== formattedName)];
-      }
-    });
-
-    // 2. Persist to Supabase with schema fallback for dob
-    try {
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tenantId);
-      if (isUuid) {
-        const payload: any = {
-          customer_name: formattedName,
-          phone: formData.phone,
-          email: formData.email,
-          address: formData.address,
-          dob: formData.dob || null,
-          credit_limit: formData.credit_limit,
-          outstanding: formData.outstanding
-        };
-
-        if (editingCustomer) {
-          let { error } = await supabase.from('customers').update(payload).eq('id', editingCustomer.id);
-          if (error && error.message?.includes('dob')) {
-            delete payload.dob;
-            await supabase.from('customers').update(payload).eq('id', editingCustomer.id);
-          }
-        } else {
-          let { data: inserted, error } = await supabase.from('customers').insert({ tenant_id: tenantId, ...payload }).select().maybeSingle();
-          if (error && error.message?.includes('dob')) {
-            delete payload.dob;
-            const fallback = await supabase.from('customers').insert({ tenant_id: tenantId, ...payload }).select().maybeSingle();
-            inserted = fallback.data;
-          }
-          if (inserted?.id) {
-            newCustomerObj.id = inserted.id;
-          }
-        }
-      }
-    } catch (e: any) {
-      console.warn('Remote customer sync warning:', e);
-    }
-
-    await fetchCustomersData();
-    window.dispatchEvent(new Event('storage'));
+    // Close modal & trigger toast notification IMMEDIATELY (0ms latency!)
     setModalOpen(false);
-    alert('Customer profile successfully saved!');
+    triggerToast('⚡ Customer account saved successfully!');
+    window.dispatchEvent(new Event('storage'));
+
+    // 2. Non-blocking asynchronous Supabase database upsert in background
+    (async () => {
+      try {
+        await supabase.from('customers').upsert(newCustomerObj);
+      } catch (e) {
+        console.warn('Remote customer background save note:', e);
+      }
+    })();
   };
 
   const handleDeleteCustomer = async (id: string) => {
@@ -468,7 +448,14 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
   }, [masterCustomersList, search, filterTab]);
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in relative">
+      {/* Floating Toast Notification Banner */}
+      {toastMessage && (
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 bg-emerald-500 text-slate-950 px-5 py-2.5 rounded-full font-extrabold text-xs shadow-2xl flex items-center gap-2 border border-emerald-300 animate-bounce">
+          <i className="fa-solid fa-bolt text-sm"></i>
+          <span>{toastMessage}</span>
+        </div>
+      )}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 mb-6 bg-secondary border border-border p-4 sm:p-6 rounded-xl shadow-md">
         <div>
           <h2 className="text-xl font-bold text-foreground">Customer Details & Account History</h2>

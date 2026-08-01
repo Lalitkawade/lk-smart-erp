@@ -279,87 +279,63 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
     setModalOpen(true);
   };
 
-  const handleSaveSupplier = async (e: React.FormEvent) => {
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const triggerToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 2500);
+  };
+
+  const handleSaveSupplier = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.supplier_name.trim()) return;
 
+    const isUuid = (id: string) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    const generateUuid = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'f' + Date.now().toString(16).padStart(31, '0').slice(0, 31);
+
+    const supId = (editingSupplier && isUuid(editingSupplier.id)) ? editingSupplier.id : generateUuid();
     const formattedName = formData.supplier_name.trim().toUpperCase();
 
-    const newSupplierObj: Supplier = {
-      id: editingSupplier ? editingSupplier.id : 'sup-' + Date.now(),
+    const newSupplierObj = {
+      id: supId,
+      tenant_id: isUuid(tenantId) ? tenantId : '00000000-0000-0000-0000-000000000000',
       supplier_name: formattedName,
-      phone: formData.phone,
-      email: formData.email,
-      address: formData.address,
-      dob: formData.dob || undefined,
-      establishment_date: formData.establishment_date || undefined,
+      phone: formData.phone || null,
+      email: formData.email || null,
+      address: formData.address || null,
+      dob: formData.dob || null,
+      establishment_date: formData.establishment_date || null,
       outstanding: Number(formData.outstanding || 0),
-      initial_outstanding: Number(formData.outstanding || 0),
-      created_at: editingSupplier ? editingSupplier.created_at : new Date().toISOString()
+      created_at: editingSupplier?.created_at || new Date().toISOString()
     };
 
-    // 1. Immediately update local state & local storage cache for instant UI feedback
+    // 1. Instant local state & localStorage update (0ms latency!)
     try {
-      const currentLocal = JSON.parse(localStorage.getItem('lk_suppliers') || '[]');
-      let updatedLocal: any[] = [];
-      if (editingSupplier) {
-        updatedLocal = currentLocal.map((s: any) => s.id === editingSupplier.id ? newSupplierObj : s);
+      const localStr = localStorage.getItem('lk_suppliers') || '[]';
+      const localList = JSON.parse(localStr);
+      const existingIdx = localList.findIndex((s: any) => s.id === supId || (s.supplier_name && s.supplier_name.toUpperCase() === formattedName));
+      if (existingIdx >= 0) {
+        localList[existingIdx] = newSupplierObj;
       } else {
-        updatedLocal = [newSupplierObj, ...currentLocal.filter((s: any) => s.supplier_name !== formattedName)];
+        localList.unshift(newSupplierObj);
       }
-      localStorage.setItem('lk_suppliers', JSON.stringify(updatedLocal));
+      localStorage.setItem('lk_suppliers', JSON.stringify(localList));
+      setSuppliers(localList);
     } catch (err) {}
 
-    setSuppliers(prev => {
-      if (editingSupplier) {
-        return prev.map(s => s.id === editingSupplier.id ? newSupplierObj : s);
-      } else {
-        return [newSupplierObj, ...prev.filter(s => s.supplier_name !== formattedName)];
-      }
-    });
-
-    // 2. Persist to Supabase if tenantId is a valid UUID
-    try {
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tenantId);
-      if (isUuid) {
-        const payload: any = {
-          supplier_name: formattedName,
-          phone: formData.phone,
-          email: formData.email,
-          address: formData.address,
-          dob: formData.dob || null,
-          establishment_date: formData.establishment_date || null,
-          outstanding: formData.outstanding
-        };
-
-        if (editingSupplier) {
-          let { error } = await supabase.from('suppliers').update(payload).eq('id', editingSupplier.id);
-          if (error && (error.message?.includes('dob') || error.message?.includes('establishment_date'))) {
-            delete payload.dob;
-            delete payload.establishment_date;
-            await supabase.from('suppliers').update(payload).eq('id', editingSupplier.id);
-          }
-        } else {
-          let { data: inserted, error } = await supabase.from('suppliers').insert({ tenant_id: tenantId, ...payload }).select().maybeSingle();
-          if (error && (error.message?.includes('dob') || error.message?.includes('establishment_date'))) {
-            delete payload.dob;
-            delete payload.establishment_date;
-            const fallback = await supabase.from('suppliers').insert({ tenant_id: tenantId, ...payload }).select().maybeSingle();
-            inserted = fallback.data;
-          }
-          if (inserted?.id) {
-            newSupplierObj.id = inserted.id;
-          }
-        }
-      }
-    } catch (e: any) {
-      console.warn('Remote supplier sync warning:', e);
-    }
-
-    await fetchSuppliersData();
-    window.dispatchEvent(new Event('storage'));
+    // Close modal & trigger toast notification IMMEDIATELY (0ms latency!)
     setModalOpen(false);
-    alert('Supplier profile successfully saved!');
+    triggerToast('⚡ Supplier account saved successfully!');
+    window.dispatchEvent(new Event('storage'));
+
+    // 2. Non-blocking asynchronous Supabase database upsert in background
+    (async () => {
+      try {
+        await supabase.from('suppliers').upsert(newSupplierObj);
+      } catch (e) {
+        console.warn('Remote supplier background save note:', e);
+      }
+    })();
   };
 
   const handleDeleteSupplier = async (id: string) => {
@@ -510,7 +486,14 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
   }, [suppliers, search]);
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in relative">
+      {/* Floating Toast Notification Banner */}
+      {toastMessage && (
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 bg-emerald-500 text-slate-950 px-5 py-2.5 rounded-full font-extrabold text-xs shadow-2xl flex items-center gap-2 border border-emerald-300 animate-bounce">
+          <i className="fa-solid fa-bolt text-sm"></i>
+          <span>{toastMessage}</span>
+        </div>
+      )}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 mb-6 bg-secondary border border-border p-4 sm:p-6 rounded-xl shadow-md">
         <div>
           <h2 className="text-xl font-bold text-foreground">Vendor list</h2>

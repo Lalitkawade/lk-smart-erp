@@ -249,13 +249,15 @@ export function useBilling(tenantId: string) {
       }
 
       // 2. Create Invoice
+      const generatedInvId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'f' + Date.now().toString(16).padStart(31, '0').slice(0, 31);
+
       let invoicePayload: any = {
-        tenant_id: tenantId,
+        id: generatedInvId,
+        tenant_id: isValidUUID(tenantId) ? tenantId : '00000000-0000-0000-0000-000000000000',
         invoice_number: 'INV-' + Date.now().toString().slice(-6),
         customer_name: customerName.trim() || 'Cash Customer',
-        customer_phone: customerPhone,
-        payment_mode: currentPaymentMode,
-        transaction_id: currentTxnId || null,
+        customer_phone: customerPhone || null,
+        payment_mode: currentPaymentMode || 'Cash',
         ref_number: currentTxnId || null,
         payment_status: invoiceStatus,
         total_amount: totalAmount,
@@ -265,7 +267,7 @@ export function useBilling(tenantId: string) {
         sale_date: new Date().toISOString()
       };
 
-      let invoice: any = { ...invoicePayload, id: 'inv-' + Date.now() };
+      let invoice: any = { ...invoicePayload };
 
       if (isValidUUID(tenantId)) {
         try {
