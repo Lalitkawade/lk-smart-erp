@@ -48,6 +48,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
     }
   }, [autoOpenModal]);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
+  const [isEditingOutstanding, setIsEditingOutstanding] = useState(false);
   
   // Statement Modal
   const [statementCustomer, setStatementCustomer] = useState<Customer | null>(null);
@@ -647,12 +648,37 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                 <div>
                   <label className="block text-xs font-semibold text-textSecondary mb-1">Credit Limit (₹) *</label>
                   <input type="number" className="w-full bg-background border border-border rounded-lg p-2.5 text-xs text-foreground font-mono font-bold"
-                    value={formData.credit_limit} onChange={(e) => setFormData({ ...formData, credit_limit: parseInt(e.target.value) || 0 })} required />
+                    value={formData.credit_limit === 0 ? '' : formData.credit_limit} 
+                    placeholder="0"
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => setFormData({ ...formData, credit_limit: e.target.value === '' ? 0 : (parseInt(e.target.value) || 0) })} required />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-textSecondary mb-1">Initial Outstanding (₹) *</label>
-                  <input type="number" className="w-full bg-background border border-border rounded-lg p-2.5 text-xs text-foreground font-mono font-bold"
-                    value={formData.outstanding} onChange={(e) => setFormData({ ...formData, outstanding: parseInt(e.target.value) || 0 })} required disabled={!!editingCustomer} />
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-xs font-semibold text-textSecondary">Initial Outstanding (₹) *</label>
+                    {editingCustomer && (
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingOutstanding(!isEditingOutstanding)}
+                        className="text-[10px] font-extrabold text-amber-500 hover:text-amber-400 underline flex items-center gap-1 cursor-pointer"
+                      >
+                        <i className={`fa-solid ${isEditingOutstanding ? 'fa-lock' : 'fa-pen-to-square'}`}></i>
+                        {isEditingOutstanding ? 'Lock Field' : '✏️ Correct Dues'}
+                      </button>
+                    )}
+                  </div>
+                  <input type="number" 
+                    disabled={!!editingCustomer && !isEditingOutstanding}
+                    className={`w-full border rounded-lg p-2.5 text-xs font-mono font-bold transition ${
+                      !!editingCustomer && !isEditingOutstanding
+                        ? 'bg-background/50 border-border text-textMuted cursor-not-allowed opacity-80'
+                        : 'bg-background border-border text-foreground focus:outline-none'
+                    }`}
+                    value={formData.outstanding === 0 ? '' : formData.outstanding} 
+                    placeholder="0"
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => setFormData({ ...formData, outstanding: e.target.value === '' ? 0 : (parseInt(e.target.value) || 0) })} 
+                    required />
                 </div>
               </div>
               <div>
@@ -697,7 +723,10 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
               <div>
                 <label className="block text-xs font-semibold text-textSecondary mb-1">Collection Receipt Amount (₹) *</label>
                 <input type="number" className="w-full bg-background border border-border rounded-lg p-2.5 text-sm text-foreground font-mono font-bold"
-                  value={payFormData.amount} onChange={(e) => setPayFormData({ ...payFormData, amount: parseInt(e.target.value) || 0 })} required />
+                  value={payFormData.amount === 0 ? '' : payFormData.amount} 
+                  placeholder="0"
+                  onFocus={(e) => e.target.select()}
+                  onChange={(e) => setPayFormData({ ...payFormData, amount: e.target.value === '' ? 0 : (parseInt(e.target.value) || 0) })} required />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-textSecondary mb-1">Payment Mode</label>

@@ -6,6 +6,7 @@ export interface UnstockedDemand {
   tenant_id: string;
   item_name: string;
   request_count: number;
+  min_alert_qty?: number;
   status: 'Pending' | 'Added to Stock' | 'Dismissed';
   last_requested_at: string;
 }
@@ -13,6 +14,17 @@ export interface UnstockedDemand {
 export function useDemandTracker(tenantId?: string) {
   const [demands, setDemands] = useState<UnstockedDemand[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [alertThreshold, setThresholdState] = useState<number>(() => {
+    const saved = localStorage.getItem('lk_demand_alert_threshold');
+    return saved ? Math.max(1, parseInt(saved) || 5) : 5;
+  });
+
+  const setAlertThreshold = (newThreshold: number) => {
+    const val = Math.max(1, newThreshold);
+    setThresholdState(val);
+    localStorage.setItem('lk_demand_alert_threshold', val.toString());
+    window.dispatchEvent(new Event('storage'));
+  };
 
   const activeTenantId = tenantId || 'default-hardware-erp';
 
@@ -21,6 +33,12 @@ export function useDemandTracker(tenantId?: string) {
     if (!activeTenantId) return;
     setIsLoading(true);
     
+    // Sync threshold from local storage
+    const savedThreshold = localStorage.getItem('lk_demand_alert_threshold');
+    if (savedThreshold) {
+      setThresholdState(Math.max(1, parseInt(savedThreshold) || 5));
+    }
+
     // First read local cache for instant UI rendering
     const cached = localStorage.getItem('lk_unstocked_demands');
     if (cached) {
@@ -139,6 +157,26 @@ export function useDemandTracker(tenantId?: string) {
     await logDemand(item.item_name);
   };
 
+  // Update min alert threshold for an individual item
+  const updateItemThreshold = async (id: string, minQty: number) => {
+    const val = Math.max(1, minQty);
+    const updated = demands.map(d => d.id === id ? { ...d, min_alert_qty: val } : d);
+    setDemands(updated);
+    localStorage.setItem('lk_unstocked_demands', JSON.stringify(updated));
+
+    if (tenantId) {
+      try {
+        await supabase
+          .from('unstocked_item_demands')
+          .update({ min_alert_qty: val })
+          .eq('id', id);
+      } catch (e) {
+        console.warn('Supabase update notice for min_alert_qty:', e);
+      }
+    }
+    window.dispatchEvent(new Event('storage'));
+  };
+
   // Remove/Dismiss demand item
   const dismissDemand = async (id: string) => {
     const updated = demands.filter(d => d.id !== id);
@@ -158,12 +196,18 @@ export function useDemandTracker(tenantId?: string) {
     window.dispatchEvent(new Event('storage'));
   };
 
-  // High demand warnings (count >= 5)
-  const highDemandAlerts = demands.filter(d => d.request_count >= 5 && d.status === 'Pending');
+  // High demand warnings (count >= item.min_alert_qty || alertThreshold)
+  const highDemandAlerts = demands.filter(d => {
+    const threshold = d.min_alert_qty !== undefined ? d.min_alert_qty : alertThreshold;
+    return d.request_count >= threshold && d.status === 'Pending';
+  });
 
   return {
     demands,
     highDemandAlerts,
+    alertThreshold,
+    setAlertThreshold,
+    updateItemThreshold,
     logDemand,
     incrementDemand,
     dismissDemand,

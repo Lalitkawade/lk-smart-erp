@@ -61,9 +61,29 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
   const [supplierId, setSupplierId] = useState('');
   const [billNumber, setBillNumber] = useState('');
   const [purchaseDate, setPurchaseDate] = useState(new Date().toISOString().slice(0, 10));
-  const [paymentMode, setPaymentMode] = useState('Bank Transfer');
+  const [paymentMode, setPaymentMode] = useState('UPI');
+  const [transactionId, setTransactionId] = useState('');
   const [paidAmount, setPaidAmount] = useState(0);
   const [isPartialPayment, setIsPartialPayment] = useState(false);
+
+  // Vendor & Product Autocomplete Search States
+  const [vendorSearchQuery, setVendorSearchQuery] = useState('');
+  const [vendorDropdownOpen, setVendorDropdownOpen] = useState(false);
+  const [productRowSearch, setProductRowSearch] = useState<{ [key: number]: string }>({});
+  const [openProductRowDropdown, setOpenProductRowDropdown] = useState<number | null>(null);
+
+  const selectedSup = useMemo(() => {
+    return suppliers.find(s => s.id === supplierId);
+  }, [suppliers, supplierId]);
+
+  const filteredSuppliers = useMemo(() => {
+    const query = vendorSearchQuery.trim().toLowerCase();
+    if (!query) return suppliers;
+    return suppliers.filter(s => 
+      s.supplier_name.toLowerCase().includes(query) ||
+      (s.phone && s.phone.includes(query))
+    );
+  }, [suppliers, vendorSearchQuery]);
 
   // Quick Vendor Registration State
   const [quickVendorModalOpen, setQuickVendorModalOpen] = useState(false);
@@ -203,14 +223,27 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
       } catch (err) {}
       setSuppliers(currentSups);
 
-      // 3. Fetch products
+      // 3. Fetch products and merge with local storage cache
       const { data: prodsData } = await supabase
         .from('products')
         .select('*')
         .eq('tenant_id', tenantId)
         .order('product_name', { ascending: true });
 
-      if (prodsData) setProducts(prodsData as Product[]);
+      let currentProds: Product[] = (prodsData || []) as Product[];
+      try {
+        const localPStr = localStorage.getItem('lk_products') || '[]';
+        const localP: Product[] = JSON.parse(localPStr);
+        if (localP.length > 0) {
+          const map = new Map<string, Product>();
+          currentProds.forEach(p => { if (p && p.id) map.set(p.id, p); });
+          localP.forEach(p => {
+            if (p && p.id && !map.has(p.id)) map.set(p.id, p);
+          });
+          currentProds = Array.from(map.values());
+        }
+      } catch (err) {}
+      setProducts(currentProds);
     } catch (e) {
       console.error('Failed to sync purchases records with Supabase:', e);
     }
@@ -264,6 +297,8 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
       bill_number: billNumber || 'PB-' + Date.now().toString().slice(-5),
       supplier_name: selectedSup.supplier_name,
       payment_mode: paymentMode,
+      ref_number: transactionId.trim() || null,
+      transaction_id: transactionId.trim() || null,
       total_amount: totalAmount,
       paid_amount: effectivePaid,
       due_amount: dueAmount,
@@ -316,6 +351,8 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
             bill_number: newBillObj.bill_number,
             supplier_name: selectedSup.supplier_name,
             payment_mode: paymentMode,
+            ref_number: transactionId.trim() || null,
+            transaction_id: transactionId.trim() || null,
             total_amount: totalAmount,
             paid_amount: effectivePaid,
             due_amount: dueAmount,
@@ -346,6 +383,7 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
     setModalOpen(false);
     setBillItems([{ product_id: '', qty: 1, rate: 0 }]);
     setBillNumber('');
+    setTransactionId('');
     setPaidAmount(0);
     setIsPartialPayment(false);
     alert('Procurement Bill successfully saved! Stock levels incremented and vendor ledgers adjusted.');
@@ -474,22 +512,85 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div>
                   <div className="flex justify-between items-center mb-1">
-                    <label className="block text-xs text-textSecondary font-semibold">Select Supplier *</label>
+                    <label className="block text-xs text-textSecondary font-semibold">Select Supplier / Vendor *</label>
                     <button 
                       type="button" 
                       onClick={() => setQuickVendorModalOpen(true)}
-                      className="text-[11px] text-emerald-400 hover:text-emerald-350 font-bold flex items-center gap-1 active:scale-95"
+                      className="text-[11px] text-emerald-400 hover:text-emerald-350 font-bold flex items-center gap-1 active:scale-95 cursor-pointer"
                     >
                       ➕ Quick Register Vendor
                     </button>
                   </div>
-                  <select className="w-full bg-background border border-border rounded p-2 text-xs text-foreground uppercase font-bold"
-                    value={supplierId} onChange={(e) => setSupplierId(e.target.value)} required>
-                    <option value="">-- Choose vendor --</option>
-                    {suppliers.map(s => (
-                      <option key={s.id} value={s.id}>{s.supplier_name}</option>
-                    ))}
-                  </select>
+
+                  <div className="relative">
+                    <input 
+                      type="text" 
+                      className="w-full bg-background border border-border rounded-lg p-2.5 text-xs text-foreground font-bold uppercase focus:border-emerald-500 focus:outline-none pr-8"
+                      value={vendorSearchQuery || selectedSup?.supplier_name || ''} 
+                      onFocus={() => setVendorDropdownOpen(true)}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setVendorSearchQuery(val);
+                        setVendorDropdownOpen(true);
+                        if (!val.trim()) setSupplierId('');
+                      }} 
+                      placeholder="🔍 Type to search vendor name..."
+                    />
+                    {(supplierId || vendorSearchQuery) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSupplierId('');
+                          setVendorSearchQuery('');
+                          setVendorDropdownOpen(false);
+                        }}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-textMuted hover:text-foreground text-xs font-bold cursor-pointer"
+                        title="Clear vendor selection"
+                      >
+                        &times;
+                      </button>
+                    )}
+
+                    {/* Floating Interactive Vendor Autocomplete Dropdown */}
+                    {vendorDropdownOpen && (
+                      <div className="absolute left-0 right-0 top-full mt-1 bg-secondary border border-border rounded-xl shadow-2xl z-50 max-h-56 overflow-y-auto divide-y divide-border/40 scrollbar-thin animate-fade-in">
+                        {filteredSuppliers.length === 0 ? (
+                          <div className="p-3 text-center text-xs space-y-2">
+                            <p className="text-textMuted font-medium">No vendors found matching "{vendorSearchQuery}".</p>
+                            <button 
+                              type="button"
+                              onClick={() => {
+                                setQuickVendorFormData(prev => ({ ...prev, supplier_name: vendorSearchQuery.toUpperCase() }));
+                                setVendorDropdownOpen(false);
+                                setQuickVendorModalOpen(true);
+                              }}
+                              className="px-3 py-1.5 bg-emerald-500/20 text-emerald-400 font-extrabold text-xs rounded-lg border border-emerald-500/30 transition hover:bg-emerald-500/30 cursor-pointer"
+                            >
+                              ➕ Register "{vendorSearchQuery.toUpperCase()}" as New Vendor
+                            </button>
+                          </div>
+                        ) : (
+                          filteredSuppliers.map((s) => (
+                            <div 
+                              key={s.id}
+                              onClick={() => {
+                                setSupplierId(s.id);
+                                setVendorSearchQuery(s.supplier_name);
+                                setVendorDropdownOpen(false);
+                              }}
+                              className={`p-2.5 hover:bg-background/80 cursor-pointer flex justify-between items-center transition ${supplierId === s.id ? 'bg-amber-500/10 font-black text-amber-400' : 'text-foreground'}`}
+                            >
+                              <div className="space-y-0.5">
+                                <div className="text-xs font-bold uppercase">{s.supplier_name}</div>
+                                <div className="text-[10px] text-textMuted">Phone: {s.phone || 'N/A'} {s.outstanding ? `| Outstanding Dues: ₹${Number(s.outstanding).toFixed(2)}` : ''}</div>
+                              </div>
+                              {supplierId === s.id && <span className="text-emerald-400 font-bold text-xs">✓ Selected</span>}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div>
                   <label className="block text-xs text-textSecondary mb-1">Supplier Bill Number</label>
@@ -505,11 +606,32 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
                   <label className="block text-xs text-textSecondary mb-1">Payment Channel</label>
                   <select className="w-full bg-background border border-border rounded p-2 text-xs text-foreground font-semibold"
                     value={paymentMode} onChange={(e) => setPaymentMode(e.target.value)}>
+                    <option value="UPI">UPI / GPay</option>
+                    <option value="Card">Credit / Debit Card</option>
                     <option value="Bank Transfer">Bank Transfer / NEFT</option>
                     <option value="Cash">Cash Voucher</option>
-                    <option value="UPI">UPI / GPay</option>
                   </select>
                 </div>
+
+                {/* Transaction ID / UTR Input for GPay, Credit Card, Bank Transfer */}
+                {paymentMode !== 'Cash' && (
+                  <div className="col-span-1 md:col-span-4 animate-fade-in bg-slate-900/60 p-3 rounded-xl border border-emerald-500/40 space-y-1">
+                    <label className="block text-xs text-emerald-400 font-extrabold flex items-center justify-between">
+                      <span className="flex items-center gap-1.5 uppercase tracking-wide">
+                        <i className="fa-solid fa-receipt text-emerald-400"></i> Transaction ID / UTR / Reference No.
+                      </span>
+                      <span className="text-[10px] text-emerald-500 font-bold uppercase">(GPay / Card / Bank Ref)</span>
+                    </label>
+                    <input 
+                      type="text"
+                      className="w-full bg-background border border-emerald-500/60 rounded-lg p-2.5 text-xs text-foreground font-mono font-bold focus:border-emerald-400 focus:outline-none uppercase"
+                      value={transactionId}
+                      onChange={(e) => setTransactionId(e.target.value)}
+                      placeholder="e.g. UPI-981240192849 / CARD-492019 / GPay Ref ID"
+                    />
+                    <p className="text-[10px] text-textMuted font-medium">Record payment transaction reference number for vendor GPay, UPI, or Credit Card entries.</p>
+                  </div>
+                )}
               </div>
 
               {/* Items row adder */}
@@ -521,32 +643,110 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
                   </button>
                 </div>
 
+                {/* Explicit Header Labels */}
+                <div className="hidden md:flex gap-3 px-3 text-[11px] font-black uppercase text-slate-900 dark:text-slate-100 tracking-wider border-b border-border/80 pb-1">
+                  <div className="flex-1 min-w-[220px]">Product Catalog Item</div>
+                  <div className="w-24 text-center">Qty (Units)</div>
+                  <div className="w-32 text-right">Purchase Price (₹)</div>
+                  <div className="w-32 text-right">Total (₹)</div>
+                  <div className="w-6"></div>
+                </div>
+
                 <div className="space-y-2">
-                  {billItems.map((item, idx) => (
-                    <div key={idx} className="flex gap-3 items-center bg-background/40 p-3 rounded-lg border border-border flex-wrap md:flex-nowrap">
-                      <div className="flex-1 min-w-[200px]">
-                        <select className="w-full bg-background border border-border rounded p-2 text-xs text-foreground font-semibold"
-                          value={item.product_id} onChange={(e) => handleItemChange(idx, 'product_id', e.target.value)} required>
-                          <option value="">-- Choose Product catalog --</option>
-                          {products.map(p => (
-                            <option key={p.id} value={p.id}>{p.product_name} (Stock: {p.current_stock})</option>
-                          ))}
-                        </select>
-                      </div>
+                  {billItems.map((item, idx) => {
+                    const selectedProd = products.find(p => p.id === item.product_id);
+                    const rowQuery = (productRowSearch[idx] !== undefined ? productRowSearch[idx] : (selectedProd?.product_name || '')).toLowerCase().trim();
+                    const filteredProdsForRow = rowQuery 
+                      ? products.filter(p => p.product_name.toLowerCase().includes(rowQuery) || p.sku?.toLowerCase().includes(rowQuery) || p.barcode?.toLowerCase().includes(rowQuery))
+                      : products;
+
+                    return (
+                      <div key={idx} className="flex gap-3 items-center bg-background/40 p-3 rounded-lg border border-border flex-wrap md:flex-nowrap">
+                        {/* Searchable Product Dropdown */}
+                        <div className="flex-1 min-w-[220px] relative">
+                          <label className="block md:hidden text-[10px] font-extrabold text-slate-900 dark:text-slate-100 uppercase mb-1">Product Catalog Item</label>
+                          <div className="relative">
+                            <input
+                              type="text"
+                              className="w-full bg-background border border-border rounded p-2 text-xs text-foreground font-bold uppercase focus:border-emerald-500 focus:outline-none pr-7"
+                              value={productRowSearch[idx] !== undefined ? productRowSearch[idx] : (selectedProd?.product_name || '')}
+                              onFocus={() => setOpenProductRowDropdown(idx)}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setProductRowSearch(prev => ({ ...prev, [idx]: val }));
+                                setOpenProductRowDropdown(idx);
+                                if (!val.trim()) {
+                                  handleItemChange(idx, 'product_id', '');
+                                }
+                              }}
+                              placeholder="🔍 Type product name, SKU or scan..."
+                            />
+                            {(item.product_id || productRowSearch[idx]) && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  handleItemChange(idx, 'product_id', '');
+                                  setProductRowSearch(prev => ({ ...prev, [idx]: '' }));
+                                  setOpenProductRowDropdown(null);
+                                }}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 text-textMuted hover:text-foreground text-xs font-bold cursor-pointer"
+                                title="Clear product selection"
+                              >
+                                &times;
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Floating Product Autocomplete Dropdown */}
+                          {openProductRowDropdown === idx && (
+                            <div className="absolute left-0 right-0 top-full mt-1 bg-secondary border border-border rounded-xl shadow-2xl z-50 max-h-56 overflow-y-auto divide-y divide-border/40 scrollbar-thin animate-fade-in">
+                              {filteredProdsForRow.length === 0 ? (
+                                <div className="p-3 text-center text-xs text-textMuted font-medium">
+                                  No matching products found in catalog for "{productRowSearch[idx]}".
+                                </div>
+                              ) : (
+                                filteredProdsForRow.map((p) => (
+                                  <div
+                                    key={p.id}
+                                    onClick={() => {
+                                      handleItemChange(idx, 'product_id', p.id);
+                                      handleItemChange(idx, 'rate', Number(p.purchase_price || 0));
+                                      setProductRowSearch(prev => ({ ...prev, [idx]: p.product_name }));
+                                      setOpenProductRowDropdown(null);
+                                    }}
+                                    className={`p-2.5 hover:bg-background/80 cursor-pointer flex justify-between items-center transition ${item.product_id === p.id ? 'bg-emerald-500/10 text-emerald-400 font-bold' : 'text-foreground'}`}
+                                  >
+                                    <div>
+                                      <div className="text-xs font-bold uppercase">{p.product_name}</div>
+                                      <div className="text-[10px] text-textMuted font-semibold">
+                                        Stock: <span className="font-bold text-foreground">{p.current_stock}</span> {p.s_unit || p.unit || 'Pcs'} | Cost: ₹{Number(p.purchase_price || 0).toFixed(2)}
+                                      </div>
+                                    </div>
+                                    {item.product_id === p.id && <span className="text-emerald-400 text-xs font-bold">✓ Selected</span>}
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          )}
+                        </div>
                       <div className="w-24">
+                        <label className="block text-[10px] font-extrabold text-slate-900 dark:text-slate-100 uppercase mb-1">Qty</label>
                         <input type="number" className="w-full bg-background border border-border rounded p-2 text-xs text-center text-foreground font-semibold"
                           value={item.qty} onChange={(e) => handleItemChange(idx, 'qty', parseInt(e.target.value) || 1)} placeholder="Qty" min={1} required />
                       </div>
                       <div className="w-32">
+                        <label className="block text-[10px] font-extrabold text-slate-900 dark:text-slate-100 uppercase mb-1">Purchase Price (₹)</label>
                         <input type="number" step="any" className="w-full bg-background border border-border rounded p-2 text-xs text-right text-foreground font-mono font-bold"
-                          value={item.rate} onChange={(e) => handleItemChange(idx, 'rate', parseFloat(e.target.value) || 0)} placeholder="Rate (₹)" required />
+                          value={item.rate} onChange={(e) => handleItemChange(idx, 'rate', parseFloat(e.target.value) || 0)} placeholder="Price (₹)" required />
                       </div>
                       <div className="w-32 text-right font-bold text-xs text-textSecondary py-2">
+                        <label className="block text-[10px] font-extrabold text-slate-900 dark:text-slate-100 uppercase mb-1">Total Amount</label>
                         ₹{(item.qty * item.rate).toFixed(2)}
                       </div>
-                      <button type="button" className="text-rose-500 font-bold px-2" onClick={() => handleRemoveItemRow(idx)}>&times;</button>
+                      <button type="button" className="text-rose-500 font-bold px-2 self-end mb-2 md:self-center md:mb-0" onClick={() => handleRemoveItemRow(idx)} title="Remove row">&times;</button>
                     </div>
-                  ))}
+                  );
+                })}
                 </div>
               </div>
 

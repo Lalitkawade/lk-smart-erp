@@ -205,6 +205,9 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
     additional_stock: 0
   });
 
+  const [isEditingBaseStock, setIsEditingBaseStock] = useState(false);
+  const [isEditingTax, setIsEditingTax] = useState(false);
+
   const [purchases, setPurchases] = useState<any[]>([]);
   const [sales, setSales] = useState<any[]>([]);
 
@@ -265,11 +268,15 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
       piece_selling_price: 0,
       additional_stock: 0
     });
+    setIsEditingBaseStock(false);
+    setIsEditingTax(false);
     setModalOpen(true);
   };
 
   const handleOpenEdit = (p: any) => {
     setEditingProduct(p);
+    setIsEditingBaseStock(false);
+    setIsEditingTax(false);
     
     // Parse location values
     const locationStr = p.warehouse_location || '';
@@ -768,12 +775,18 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
                 <div>
                   <label className="block text-xs font-semibold text-textSecondary mb-1">Cost (Purchase Price) *</label>
                   <input type="number" step="any" className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none" required
-                    value={formData.purchase_price} onChange={(e) => setFormData({ ...formData, purchase_price: Number(e.target.value) })} />
+                    value={formData.purchase_price === 0 ? '' : formData.purchase_price} 
+                    placeholder="0"
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => setFormData({ ...formData, purchase_price: e.target.value === '' ? 0 : Number(e.target.value) })} />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-textSecondary mb-1">Selling Price *</label>
                   <input type="number" step="any" className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none font-bold text-emerald-450" required
-                    value={formData.selling_price} onChange={(e) => setFormData({ ...formData, selling_price: Number(e.target.value) })} />
+                    value={formData.selling_price === 0 ? '' : formData.selling_price} 
+                    placeholder="0"
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => setFormData({ ...formData, selling_price: e.target.value === '' ? 0 : Number(e.target.value) })} />
                 </div>
                 
                 {/* Margin Inline calculation */}
@@ -794,20 +807,46 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
                 {editingProduct ? (
                   <>
                     <div>
-                      <label className="block text-xs font-semibold text-textMuted mb-1">Current Base Stock (Read Only)</label>
-                      <input type="number" disabled className="w-full bg-background/50 border border-border rounded-lg p-2 text-textMuted font-mono font-bold cursor-not-allowed opacity-80"
-                        value={formData.current_stock} />
+                      <div className="flex justify-between items-center mb-1">
+                        <label className="block text-xs font-semibold text-textSecondary">
+                          Current Base Stock {isEditingBaseStock ? '(Correction Mode)' : ''}
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setIsEditingBaseStock(!isEditingBaseStock)}
+                          className="text-[10px] font-extrabold text-amber-500 hover:text-amber-400 underline flex items-center gap-1 cursor-pointer"
+                        >
+                          <i className={`fa-solid ${isEditingBaseStock ? 'fa-lock' : 'fa-pen-to-square'}`}></i> 
+                          {isEditingBaseStock ? 'Lock Field' : '✏️ Correct / Edit Base Stock'}
+                        </button>
+                      </div>
+                      <input 
+                        type="number" 
+                        step="any"
+                        disabled={!isEditingBaseStock}
+                        className={`w-full border rounded-lg p-2 font-mono font-bold transition ${
+                          isEditingBaseStock 
+                            ? 'bg-background border-amber-500 text-foreground focus:outline-none focus:ring-2 focus:ring-amber-500/20' 
+                            : 'bg-background/50 border-border text-textMuted cursor-not-allowed opacity-80'
+                        }`}
+                        value={formData.current_stock === 0 ? '' : formData.current_stock} 
+                        placeholder="0"
+                        onFocus={(e) => e.target.select()}
+                        onChange={(e) => setFormData({ ...formData, current_stock: e.target.value === '' ? 0 : Number(e.target.value) })} 
+                      />
                     </div>
                     <div>
                       <label className="block text-xs font-extrabold text-emerald-400 mb-1">➕ Add New Inflow Stock</label>
                       <input type="number" step="any" min="0" className="w-full bg-background border border-emerald-500/50 rounded-lg p-2 text-emerald-400 focus:outline-none font-mono font-extrabold"
                         placeholder="Enter qty to add (e.g. 20)..."
-                        value={formData.additional_stock} onChange={(e) => setFormData({ ...formData, additional_stock: Number(e.target.value) })} />
+                        value={formData.additional_stock === 0 ? '' : formData.additional_stock} 
+                        onFocus={(e) => e.target.select()}
+                        onChange={(e) => setFormData({ ...formData, additional_stock: e.target.value === '' ? 0 : Number(e.target.value) })} />
                     </div>
                     <div className="col-span-1 sm:col-span-2 bg-emerald-500/10 border border-emerald-500/30 p-2.5 rounded-lg text-xs font-bold text-emerald-400 flex justify-between items-center flex-wrap gap-2">
                       <span>Updated Total Stock after saving:</span>
                       <span className="font-mono text-sm font-black">
-                        {formData.current_stock} + {formData.additional_stock || 0} = {Number(formData.current_stock || 0) + Number(formData.additional_stock || 0)} {formData.s_unit || 'Pcs'}
+                        {formData.current_stock || 0} + {formData.additional_stock || 0} = {Number(formData.current_stock || 0) + Number(formData.additional_stock || 0)} {formData.s_unit || 'Pcs'}
                       </span>
                     </div>
                   </>
@@ -815,13 +854,19 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
                   <div>
                     <label className="block text-xs font-semibold text-textSecondary mb-1">Initial Stock *</label>
                     <input type="number" className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none font-mono" required
-                      value={formData.current_stock} onChange={(e) => setFormData({ ...formData, current_stock: Number(e.target.value) })} />
+                      value={formData.current_stock === 0 ? '' : formData.current_stock} 
+                      placeholder="0"
+                      onFocus={(e) => e.target.select()}
+                      onChange={(e) => setFormData({ ...formData, current_stock: e.target.value === '' ? 0 : Number(e.target.value) })} />
                   </div>
                 )}
                 <div>
                   <label className="block text-xs font-semibold text-textSecondary mb-1">Min Stock Warning *</label>
                   <input type="number" className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none font-mono" required
-                    value={formData.min_stock_level} onChange={(e) => setFormData({ ...formData, min_stock_level: Number(e.target.value) })} />
+                    value={formData.min_stock_level === 0 ? '' : formData.min_stock_level} 
+                    placeholder="0"
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => setFormData({ ...formData, min_stock_level: e.target.value === '' ? 0 : Number(e.target.value) })} />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-textSecondary mb-1">HSN Code of Product</label>
@@ -829,17 +874,32 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
                     value={formData.hsn} onChange={(e) => setFormData({ ...formData, hsn: e.target.value })} placeholder="e.g. 7214" />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-textSecondary mb-1 flex justify-between items-center">
-                    <span>GST Tax Rate (%)</span>
-                    <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">(Frozen)</span>
-                  </label>
-                  <select disabled className="w-full bg-background/50 border border-border/60 rounded-lg p-2 text-textMuted focus:outline-none font-semibold cursor-not-allowed opacity-75"
-                    value={0} onChange={() => {}}>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-xs font-semibold text-textSecondary">GST Tax Rate (%)</label>
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingTax(!isEditingTax)}
+                      className="text-[10px] font-extrabold text-amber-500 hover:text-amber-400 underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <i className={`fa-solid ${isEditingTax ? 'fa-lock' : 'fa-pen-to-square'}`}></i>
+                      {isEditingTax ? 'Lock Tax' : '✏️ Edit Tax Rate'}
+                    </button>
+                  </div>
+                  <select 
+                    disabled={!isEditingTax} 
+                    className={`w-full border rounded-lg p-2 font-semibold transition ${
+                      isEditingTax 
+                        ? 'bg-background border-amber-500 text-foreground focus:outline-none' 
+                        : 'bg-background/50 border-border/60 text-textMuted cursor-not-allowed opacity-75'
+                    }`}
+                    value={formData.gst || 0} 
+                    onChange={(e) => setFormData({ ...formData, gst: Number(e.target.value) })}
+                  >
                     <option value={0}>0% (GST Disabled)</option>
-                    <option value={5}>5% (Frozen)</option>
-                    <option value={12}>12% (Frozen)</option>
-                    <option value={18}>18% (Frozen)</option>
-                    <option value={28}>28% (Frozen)</option>
+                    <option value={5}>5% GST</option>
+                    <option value={12}>12% GST</option>
+                    <option value={18}>18% GST</option>
+                    <option value={28}>28% GST</option>
                   </select>
                 </div>
                 <div>

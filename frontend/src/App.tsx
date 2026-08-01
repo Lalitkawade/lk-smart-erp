@@ -177,7 +177,20 @@ export default function App() {
         setSales(liveSales);
         setPurchases(livePurchases);
         setExpenses(liveExpenses);
-        if (prodRes.data) setProductsList(prodRes.data);
+        
+        // Merge remote and local products to ensure no added items are missed
+        const localProdsStr = localStorage.getItem('lk_products') || '[]';
+        let localProds: any[] = [];
+        try { localProds = JSON.parse(localProdsStr); } catch (e) {}
+
+        const prodMap = new Map<string, any>();
+        (prodRes.data || []).forEach((p: any) => { if (p && p.id) prodMap.set(p.id, p); });
+        localProds.forEach((p: any) => { if (p && p.id && !prodMap.has(p.id)) prodMap.set(p.id, p); });
+
+        const mergedProducts = Array.from(prodMap.values());
+        setProductsList(mergedProducts);
+        localStorage.setItem('lk_products', JSON.stringify(mergedProducts));
+
         if (custRes.data) setCustomersList(custRes.data);
         if (supRes.data) setSuppliersList(supRes.data);
         return;
@@ -197,7 +210,7 @@ export default function App() {
       setSales(JSON.parse(sStr));
       setPurchases(JSON.parse(pStr));
       setExpenses(JSON.parse(eStr));
-      setProductsList(JSON.parse(prodStr).filter((p: any) => p.tenant_id === (tenant?.id || 'default-hardware-erp')));
+      setProductsList(JSON.parse(prodStr));
       setCustomersList(JSON.parse(cStr));
       setSuppliersList(JSON.parse(supStr));
     } catch (err) {}
@@ -454,18 +467,31 @@ export default function App() {
                 <span className="text-[9px] text-sidebar-text font-bold tracking-widest uppercase block mt-0.5">{businessType}</span>
               </div>
               <div className="flex items-center gap-1">
-                <button onClick={() => setSidebarCollapsed(true)} className="hidden md:block p-1.5 rounded-lg hover:bg-sidebar-hover text-sidebar hover:text-sidebar-active transition" title="Collapse sidebar">
+                <button 
+                  onClick={() => setSidebarCollapsed(true)} 
+                  className="hidden md:flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-extrabold text-xs border border-slate-700 shadow-sm transition active:scale-95 cursor-pointer" 
+                  title="Collapse sidebar menu"
+                >
                   <i className="fa-solid fa-indent"></i>
+                  <span className="text-[10px] uppercase font-black tracking-wider">Collapse</span>
                 </button>
-                <button onClick={() => setMobileMenuOpen(false)} className="md:hidden p-1.5 rounded-lg hover:bg-sidebar-hover text-sidebar hover:text-sidebar-active transition" title="Close drawer">
+                <button 
+                  onClick={() => setMobileMenuOpen(false)} 
+                  className="md:hidden p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-extrabold transition" 
+                  title="Close menu drawer"
+                >
                   <i className="fa-solid fa-xmark text-sm"></i>
                 </button>
               </div>
             </div>
           ) : (
             <div className="p-4 border-b border-border/40 flex flex-col justify-center items-center h-16">
-              <button onClick={() => setSidebarCollapsed(false)} className="p-1.5 rounded-lg hover:bg-sidebar-hover text-sidebar hover:text-sidebar-active transition" title="Expand sidebar">
-                <i className="fa-solid fa-outdent text-sm"></i>
+              <button 
+                onClick={() => setSidebarCollapsed(false)} 
+                className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-400 font-extrabold text-sm border border-slate-700 shadow-sm transition active:scale-95 cursor-pointer flex items-center justify-center" 
+                title="Expand sidebar menu"
+              >
+                <i className="fa-solid fa-outdent"></i>
               </button>
             </div>
           )}
@@ -573,10 +599,22 @@ export default function App() {
         {/* Top Navbar */}
         <header className="bg-secondary border-b border-border h-16 px-4 md:px-6 flex justify-between items-center select-none shadow-sm sticky top-0 z-30">
           <div className="flex items-center gap-3 min-w-0">
+            {/* Desktop Sidebar Expand / Collapse Toggle Button */}
+            <button 
+              type="button"
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)} 
+              className="hidden md:flex items-center gap-2 px-3 py-1.5 text-xs text-foreground bg-background hover:bg-slate-100 dark:hover:bg-slate-800 border border-border rounded-lg transition font-extrabold shadow-xs active:scale-95 cursor-pointer shrink-0"
+              title={sidebarCollapsed ? "Expand Sidebar Menu" : "Collapse Sidebar Menu"}
+            >
+              <i className={`fa-solid ${sidebarCollapsed ? 'fa-outdent text-amber-500' : 'fa-indent text-emerald-500'} text-sm`}></i>
+              <span className="text-[11px] uppercase tracking-wider">{sidebarCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}</span>
+            </button>
+
             {/* Mobile Hamburger Drawer Toggle */}
             <button 
+              type="button"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)} 
-              className="md:hidden p-2 text-textSecondary hover:text-textPrimary bg-background border border-border rounded-lg transition shrink-0 flex items-center justify-center"
+              className="md:hidden p-2 text-textSecondary hover:text-textPrimary bg-background border border-border rounded-lg transition shrink-0 flex items-center justify-center cursor-pointer"
               title="Open Navigation Menu"
             >
               <i className="fa-solid fa-bars text-sm"></i>
@@ -884,58 +922,13 @@ export default function App() {
             <Expenses autoOpenModal={expenseAutoOpen} onModalClosed={() => setExpenseAutoOpen(false)} />
           )}
           {activeTab === 'inventory-stock' && (
-            <div className="bg-secondary border border-border rounded-xl p-6 shadow-md space-y-4 animate-fade-in">
-              <div>
-                <h2 className="text-xl font-bold text-foreground">Inventory & Stock</h2>
-                <p className="text-xs text-textMuted mt-1">Real-time stock levels, unit mappings, and asset valuation</p>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm text-textSecondary">
-                  <thead>
-                    <tr className="border-b border-border text-textPrimary font-extrabold uppercase tracking-wider text-xs">
-                      <th className="py-3">HSN Code</th>
-                      <th className="py-3">Product Name</th>
-                      <th className="py-3">Cost (₹)</th>
-                      <th className="py-3">P. Unit</th>
-                      <th className="py-3">S. Unit</th>
-                      <th className="py-3">Stock</th>
-                      <th className="py-3">Stock Amount (₹)</th>
-                      <th className="py-3">Stock Location</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {productsList.length === 0 ? (
-                      <tr><td colSpan={8} className="py-6 text-center text-textMuted">No products available in stock register.</td></tr>
-                    ) : productsList.map((p: any) => {
-                      const cost = Number(p.purchase_price || 0);
-                      const stock = Number(p.current_stock || 0);
-                      const stockAmount = cost * stock;
-                      return (
-                        <tr key={p.id} className="border-b border-border hover:bg-slate-100/10 dark:hover:bg-slate-800/10">
-                          <td className="py-3.5 font-mono text-xs font-bold text-foreground">{p.hsn || '-'}</td>
-                          <td className="py-3.5 font-semibold text-foreground uppercase">{p.product_name}</td>
-                          <td className="py-3.5 font-mono">₹{cost.toFixed(2)}</td>
-                          <td className="py-3.5">{p.p_unit || p.unit || 'Pcs'}</td>
-                          <td className="py-3.5">{p.s_unit || p.unit || 'Pcs'}</td>
-                          <td className="py-3.5 font-bold text-foreground">{stock}</td>
-                          <td className="py-3.5 font-mono font-bold text-emerald-450">₹{stockAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                          <td className="py-3.5 text-xs text-textMuted">📍 {p.warehouse_location || 'Shop shelf'}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+            <Products tenantId={tenant?.id || 'default-hardware-erp'} businessType={businessType as any} autoOpenModal={productAutoOpen} onModalClosed={() => setProductAutoOpen(false)} />
           )}
           {activeTab === 'reports' && (
             <Reports tenantId={tenant?.id || 'default-hardware-erp'} sales={sales} purchases={purchases} />
           )}
           {activeTab === 'excel-export' && (
             <ExcelExport />
-          )}
-          {activeTab === 'expenses' && (
-            <Expenses />
           )}
         </main>
 

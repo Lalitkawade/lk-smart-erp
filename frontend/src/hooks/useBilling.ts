@@ -7,6 +7,7 @@ export function useBilling(tenantId: string) {
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [paymentMode, setPaymentMode] = useState('Cash');
+  const [transactionId, setTransactionId] = useState('');
   const [sales, setSales] = useState<SalesInvoice[]>([]);
 
   const fetchSales = async () => {
@@ -101,12 +102,13 @@ export function useBilling(tenantId: string) {
     setCart(cart.filter(i => !(i.product.id === productId && i.isLoose === isLoose)));
   };
 
-  const processCheckout = async (options?: { amountCollected?: number; repayUdharAmount?: number; paymentMode?: string }) => {
+  const processCheckout = async (options?: { amountCollected?: number; repayUdharAmount?: number; paymentMode?: string; transactionId?: string }) => {
     if (cart.length === 0) throw new Error('Cart is empty.');
 
     const totalAmount = cart.reduce((acc, curr) => acc + curr.qty * curr.rate, 0);
     const gstAmount = 0; // GST is frozen for retail billing
     const currentPaymentMode = options?.paymentMode || paymentMode;
+    const currentTxnId = options?.transactionId !== undefined ? options.transactionId : transactionId;
 
     try {
       let matchedCustomer: any = null;
@@ -239,7 +241,7 @@ export function useBilling(tenantId: string) {
             tenant_id: tenantId,
             customer_id: matchedCustomer.id,
             amount: appliedToPreviousUdhar,
-            payment_mode: currentPaymentMode === 'Split' ? 'Cash' : currentPaymentMode,
+            payment_mode: currentPaymentMode || 'Cash',
             ref_number: 'POS-UDHAR-REP-' + Date.now().toString().slice(-6),
             payment_date: new Date().toISOString()
           });
@@ -253,6 +255,8 @@ export function useBilling(tenantId: string) {
         customer_name: customerName.trim() || 'Cash Customer',
         customer_phone: customerPhone,
         payment_mode: currentPaymentMode,
+        transaction_id: currentTxnId || null,
+        ref_number: currentTxnId || null,
         payment_status: invoiceStatus,
         total_amount: totalAmount,
         paid_amount: paidAmount,
@@ -356,6 +360,7 @@ export function useBilling(tenantId: string) {
       setCart([]);
       setCustomerName('Cash Customer');
       setCustomerPhone('');
+      setTransactionId('');
       return compiledInvoice;
     } catch (e) {
       console.error('Checkout processing error fallback:', e);
@@ -371,6 +376,8 @@ export function useBilling(tenantId: string) {
     setCustomerPhone,
     paymentMode,
     setPaymentMode,
+    transactionId,
+    setTransactionId,
     addToCart,
     updateCartQty,
     removeFromCart,

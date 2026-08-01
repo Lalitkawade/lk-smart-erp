@@ -26,6 +26,8 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
     setCustomerPhone,
     paymentMode,
     setPaymentMode,
+    transactionId,
+    setTransactionId,
     addToCart,
     updateCartQty,
     removeFromCart,
@@ -342,7 +344,8 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
       const bill = await processCheckout({
         amountCollected: collectedNum,
         repayUdharAmount: repayNum,
-        paymentMode
+        paymentMode,
+        transactionId: transactionId.trim()
       });
       alert('Invoice successfully billed, inventory stock decremented.');
       setBillingModal(false);
@@ -587,10 +590,11 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                               <span className="text-emerald-400 font-bold">Total: ₹{(item.rate * item.qty).toFixed(2)}</span>
                             </div>
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] font-extrabold text-slate-900 dark:text-slate-100 uppercase">Qty:</span>
                             <input type="number" className="w-14 bg-background border border-border rounded text-center text-xs text-foreground p-1 font-mono font-bold focus:outline-none focus:border-emerald-500"
-                              value={item.qty} onChange={(e) => handleQtyChange(item.product.id, parseInt(e.target.value) || 1, !!item.isLoose)} />
-                            <button type="button" className="text-rose-500 hover:text-rose-400 text-sm font-bold px-1" onClick={() => removeFromCart(item.product.id, !!item.isLoose)}>&times;</button>
+                              value={item.qty} onChange={(e) => handleQtyChange(item.product.id, parseInt(e.target.value) || 1, !!item.isLoose)} title="Quantity" />
+                            <button type="button" className="text-rose-500 hover:text-rose-400 text-sm font-bold px-1" onClick={() => removeFromCart(item.product.id, !!item.isLoose)} title="Remove item">&times;</button>
                           </div>
                         </div>
                       );
@@ -832,9 +836,9 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                       value={paymentMode} onChange={(e) => setPaymentMode(e.target.value)}>
                       <option value="Cash">Cash</option>
                       <option value="UPI">UPI / GPay</option>
-                      <option value="Card">Card</option>
-                      <option value="Credit">Credit (Full Udhar)</option>
-                      <option value="Split">Split Balance</option>
+                      <option value="Card">Credit / Debit Card</option>
+                      <option value="Bank">Bank Transfer / NEFT</option>
+                      <option value="Credit">Credit (Udhar Account)</option>
                     </select>
                   </div>
 
@@ -846,18 +850,31 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                       min="0"
                       className="w-full bg-background border border-border rounded p-2 text-xs text-foreground font-mono font-bold focus:border-emerald-500 focus:outline-none"
                       value={amountCollectedInput}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setAmountCollectedInput(val);
-                        const num = parseFloat(val);
-                        if (!isNaN(num) && num >= 0 && num < totalAmount) {
-                          setPaymentMode('Split');
-                        }
-                      }}
+                      onChange={(e) => setAmountCollectedInput(e.target.value)}
                       placeholder={`₹${totalAmount.toFixed(2)} (Default full)`}
                     />
                   </div>
                 </div>
+
+                {/* Transaction ID / UTR Input for GPay, Credit Card, Bank Transfer, etc. */}
+                {(paymentMode === 'UPI' || paymentMode === 'Card' || paymentMode === 'Bank' || (paymentMode !== 'Cash' && paymentMode !== 'Credit')) && (
+                  <div className="animate-fade-in bg-slate-900/60 p-3 rounded-xl border border-emerald-500/40 space-y-1">
+                    <label className="block text-xs text-emerald-400 font-extrabold flex items-center justify-between">
+                      <span className="flex items-center gap-1.5 uppercase tracking-wide">
+                        <i className="fa-solid fa-receipt text-emerald-400"></i> Transaction ID / UTR / Ref No.
+                      </span>
+                      <span className="text-[10px] text-emerald-500 font-bold uppercase">(GPay / Card / Bank Ref)</span>
+                    </label>
+                    <input 
+                      type="text"
+                      className="w-full bg-background border border-emerald-500/60 rounded-lg p-2.5 text-xs text-foreground font-mono font-bold focus:border-emerald-400 focus:outline-none uppercase"
+                      value={transactionId}
+                      onChange={(e) => setTransactionId(e.target.value)}
+                      placeholder="e.g. UPI-981240192849 / CARD-492019 / GPay Ref ID"
+                    />
+                    <p className="text-[10px] text-textMuted font-medium">Record reference / transaction ID for GPay, UPI, or Credit Card entries.</p>
+                  </div>
+                )}
 
                 {/* Smart Real-Time Payment Allocation Calculator Breakdown */}
                 {(() => {
@@ -1041,7 +1058,13 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                       <div className="space-y-0.5">
                         <div className="flex"><span className="w-24 text-slate-500 font-semibold">Invoice No:</span> <span className="font-mono font-black">{printInvoice.invoice_number}</span></div>
                         <div className="flex"><span className="w-24 text-slate-500 font-semibold">Date & Time:</span> <span className="font-semibold">{new Date(printInvoice.sale_date).toLocaleString()}</span></div>
-                        <div className="flex"><span className="w-24 text-slate-500 font-semibold">Payment Mode:</span> <span className="font-bold uppercase text-emerald-700">{printInvoice.payment_mode || 'Cash'}</span></div>
+                        <div className="flex">
+                          <span className="w-24 text-slate-500 font-semibold">Payment Mode:</span> 
+                          <span className="font-bold uppercase text-emerald-700">
+                            {printInvoice.payment_mode || 'Cash'}
+                            {(printInvoice.transaction_id || printInvoice.ref_number) ? ` (Txn ID: ${printInvoice.transaction_id || printInvoice.ref_number})` : ''}
+                          </span>
+                        </div>
                       </div>
                       <div className="space-y-0.5">
                         <div className="flex"><span className="w-28 text-slate-500 font-semibold">Billed To:</span> <span className="font-bold uppercase">{printInvoice.customer_name || 'Cash Customer'}</span></div>
@@ -1436,8 +1459,10 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                 <input 
                   type="number" 
                   className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground font-mono font-bold"
-                  value={quickCustFormData.credit_limit} 
-                  onChange={(e) => setQuickCustFormData({ ...quickCustFormData, credit_limit: parseInt(e.target.value) || 50000 })} 
+                  value={quickCustFormData.credit_limit === 0 ? '' : quickCustFormData.credit_limit} 
+                  placeholder="0"
+                  onFocus={(e) => e.target.select()}
+                  onChange={(e) => setQuickCustFormData({ ...quickCustFormData, credit_limit: e.target.value === '' ? 0 : (parseInt(e.target.value) || 0) })} 
                 />
               </div>
 

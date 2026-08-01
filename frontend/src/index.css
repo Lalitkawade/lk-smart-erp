@@ -33,74 +33,77 @@
   --radius-lg: 14px;
   --radius-full: 9999px;
 
-  /* Color Hunt Custom Theme Palette (#8FA28A, #C7D3C0, #F7F1ED, #C8A96B) - Default Dark Mode */
-  --bg-primary: #1C221C;       /* Dark Sage Charcoal Canvas */
-  --bg-secondary: #263026;     /* Deep Sage Card Container */
-  --bg-sidebar: #141A14;       /* Ultra Dark Sage Sidebar */
-  --bg-sidebar-hover: #323E32; /* Sidebar Item Hover */
+  /* Color Palette - High Contrast Clean Theme with Bold Black Text & Large Fonts */
+  --bg-primary: #F8FAFC;       /* Crisp Light Slate Canvas */
+  --bg-secondary: #FFFFFF;     /* Pure White Card Container */
+  --bg-sidebar: #0F172A;       /* Deep Navy Slate Sidebar */
+  --bg-sidebar-hover: #1E293B; /* Sidebar Item Hover */
   
-  --text-sidebar: #C7D3C0;
-  --text-sidebar-active: #F7F1ED;
-  --text-primary: #F7F1ED;     /* Warm Off-White Cream Primary Text */
-  --text-secondary: #C7D3C0;   /* Pale Sage Secondary Text */
-  --text-muted: #8FA28A;       /* Muted Sage Text */
+  --text-sidebar: #E2E8F0;
+  --text-sidebar-active: #FFFFFF;
+  --text-primary: #000000;     /* Pure Black Primary Text */
+  --text-secondary: #1E293B;   /* Deep Dark Slate Secondary Text */
+  --text-muted: #475569;       /* Dark Muted Gray Text */
   
-  --primary: #8FA28A;          /* Sage Green Accent */
-  --primary-hover: #A1B49C;
-  --primary-light: rgba(143, 162, 138, 0.2);
+  --primary: #2563EB;          /* Vibrant Royal Blue Accent */
+  --primary-hover: #1D4ED8;
+  --primary-light: rgba(37, 99, 235, 0.12);
   
-  --secondary: #C8A96B;        /* Muted Warm Gold Secondary Accent */
-  --secondary-hover: #B89758;
+  --secondary: #D97706;        /* Warm Amber Secondary Accent */
+  --secondary-hover: #B45309;
   
-  --success: #8FA28A;          /* Sage Green */
-  --warning: #C8A96B;          /* Muted Gold */
-  --danger: #F43F5E;           /* Rose Red */
-  --info: #3B82F6;             /* Vibrant Blue */
+  --success: #16A34A;          /* Bold Green */
+  --warning: #D97706;          /* Amber Warning */
+  --danger: #DC2626;           /* Vivid Red */
+  --info: #2563EB;             /* Blue */
 
-  --border-color: #334033;     /* Muted Sage Border */
-  --border-focus: #8FA28A;
-  --card-glow: rgba(247, 241, 237, 0.06);
+  --border-color: #E2E8F0;     /* Crisp Light Gray Border */
+  --border-focus: #2563EB;
+  --card-glow: rgba(0, 0, 0, 0.05);
   
-  --scrollbar-track: #1C221C;
-  --scrollbar-thumb: #334033;
+  --scrollbar-track: #F8FAFC;
+  --scrollbar-thumb: #CBD5E1;
 }
 
 [data-theme="light"] {
-  /* Color Hunt Signature Light Mode Theme */
-  --bg-primary: #F7F1ED;       /* Warm Off-White Cream Canvas */
-  --bg-secondary: #FFFFFF;     /* Crisp Warm Card Surface */
-  --bg-sidebar: #263026;       /* Deep Muted Sage Dark Sidebar */
-  --bg-sidebar-hover: #323E32; /* Sidebar Item Hover */
+  --bg-primary: #F8FAFC;
+  --bg-secondary: #FFFFFF;
+  --bg-sidebar: #0F172A;
+  --bg-sidebar-hover: #1E293B;
   
-  --text-sidebar: #C7D3C0;
-  --text-sidebar-active: #F7F1ED;
-  --text-primary: #1C221C;     /* Dark Sage Charcoal Text */
-  --text-secondary: #425042;   /* Muted Deep Sage Text */
-  --text-muted: #6D7C6D;       /* Muted Soft Text */
+  --text-sidebar: #E2E8F0;
+  --text-sidebar-active: #FFFFFF;
+  --text-primary: #000000;     /* Solid Black */
+  --text-secondary: #1E293B;   /* Very Dark Slate */
+  --text-muted: #475569;       /* Dark Slate Muted */
   
-  --primary: #8FA28A;          /* Sage Green Accent */
-  --primary-hover: #758771;
-  --primary-light: rgba(143, 162, 138, 0.15);
+  --primary: #2563EB;
+  --primary-hover: #1D4ED8;
+  --primary-light: rgba(37, 99, 235, 0.12);
   
-  --secondary: #C8A96B;        /* Muted Warm Gold Accent */
-  --secondary-hover: #B89758;
+  --secondary: #D97706;
+  --secondary-hover: #B45309;
   
-  --success: #758771;
-  --warning: #C8A96B;
+  --success: #16A34A;
+  --warning: #D97706;
   --danger: #DC2626;
   --info: #2563EB;
   
-  --border-color: #C7D3C0;     /* Soft Pale Sage Divider Lines */
-  --border-focus: #8FA28A;
-  --card-glow: rgba(143, 162, 138, 0.08);
+  --border-color: #CBD5E1;
+  --border-focus: #2563EB;
+  --card-glow: rgba(0, 0, 0, 0.05);
   
-  --scrollbar-track: #F7F1ED;
-  --scrollbar-thumb: #C7D3C0;
+  --scrollbar-track: #F8FAFC;
+  --scrollbar-thumb: #CBD5E1;
 }
 
 /* ==========================================================================
-   RESET & BASE STYLES
+   RESET & BASE STYLES - LARGE FONTS & SOLID BLACK TEXT
    ========================================================================== */
+html {
+  font-size: 18px; /* High legibility base font size */
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -110,8 +113,10 @@
 
 body {
   background-color: var(--bg-primary);
-  color: var(--text-primary);
-  line-height: 1.5;
+  color: #000000;
+  font-size: 1.125rem; /* 18px */
+  line-height: 1.6;
+  font-weight: 500;
   overflow-x: hidden;
   transition: background-color var(--transition-normal), color var(--transition-normal);
 }
