@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+
+# Production build
+dist/
+frontend/dist/
+
+# Environment credentials & secrets
+.env
+.env.*
+*.env
+frontend/.env
+frontend/.env.*
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Editor & System files
+.vscode/
+.idea/
+.DS_Store
+.skils/
