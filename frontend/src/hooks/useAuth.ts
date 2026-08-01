@@ -33,29 +33,77 @@ export function useAuth() {
             .eq('id', session.user.id)
             .maybeSingle();
 
+          let tenantData: Tenant | null = null;
           if (profileData && profileData.tenant_id) {
-            const { data: tenantData } = await supabase
+            const { data: tData } = await supabase
               .from('tenants')
               .select('*')
               .eq('id', profileData.tenant_id)
               .maybeSingle();
-
-            setUser(session.user);
-            setProfile(profileData);
-            setTenant(tenantData);
-
-            localStorage.setItem('lk_session', JSON.stringify({
-              user: session.user,
-              profile: profileData,
-              tenant: tenantData
-            }));
+            tenantData = tData;
           }
-        } catch (e) {}
+
+          const fallbackUsername = session.user.email ? session.user.email.split('@')[0].toUpperCase() : 'OPERATOR';
+          const activeProfile: Profile = profileData || {
+            id: session.user.id,
+            tenant_id: 'default-hardware-erp',
+            username: fallbackUsername,
+            role: 'Owner',
+            status: 'Active',
+            created_at: new Date().toISOString()
+          };
+
+          const activeTenant: Tenant = tenantData || {
+            id: 'default-hardware-erp',
+            company_code: 'LKHARDWARE',
+            company_name: 'LK Hardware ERP',
+            owner_name: 'Store Owner',
+            owner_email: session.user.email || '',
+            plan: 'Enterprise',
+            status: 'Active',
+            created_at: new Date().toISOString()
+          };
+
+          setUser(session.user);
+          setProfile(activeProfile);
+          setTenant(activeTenant);
+
+          localStorage.setItem('lk_session', JSON.stringify({
+            user: session.user,
+            profile: activeProfile,
+            tenant: activeTenant
+          }));
+        } catch (e) {
+          console.warn('onAuthStateChange fallback:', e);
+          const fallbackProfile: Profile = {
+            id: session.user.id,
+            tenant_id: 'default-hardware-erp',
+            username: session.user.email ? session.user.email.split('@')[0].toUpperCase() : 'OPERATOR',
+            role: 'Owner',
+            status: 'Active',
+            created_at: new Date().toISOString()
+          };
+          const fallbackTenant: Tenant = {
+            id: 'default-hardware-erp',
+            company_code: 'LKHARDWARE',
+            company_name: 'LK Hardware ERP',
+            owner_name: 'Store Owner',
+            owner_email: session.user.email || '',
+            plan: 'Enterprise',
+            status: 'Active',
+            created_at: new Date().toISOString()
+          };
+          setUser(session.user);
+          setProfile(fallbackProfile);
+          setTenant(fallbackTenant);
+        }
       } else {
-        setUser(null);
-        setProfile(null);
-        setTenant(null);
-        localStorage.removeItem('lk_session');
+        const sessionStr = localStorage.getItem('lk_session');
+        if (!sessionStr) {
+          setUser(null);
+          setProfile(null);
+          setTenant(null);
+        }
       }
     });
 
