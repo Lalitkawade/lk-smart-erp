@@ -1032,8 +1032,8 @@ h1, h2, h3, h4, .font-heading {
 
 @media (max-width: 768px) {
   /* Prevent horizontal screen overflow */
-  html, body, #root, .app-container, .app-main {
-    overflow-x: hidden !important;
+  html, body, #root {
+    overflow-x: hidden;
     width: 100vw;
   }
 
@@ -1049,61 +1049,42 @@ h1, h2, h3, h4, .font-heading {
     grid-template-columns: 1fr;
   }
 
-  /* Prevent Overlapping Headings & Action Buttons */
-  .panel-header, 
-  header, 
-  div[class*="border-b"][class*="flex"], 
-  div[class*="bg-secondary"][class*="flex"] {
-    flex-direction: column !important;
-    align-items: stretch !important;
-    gap: 12px !important;
+  /* Page & Panel Section Headers */
+  .panel-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px;
   }
 
-  .panel-header > div, 
-  div[class*="border-b"] > div, 
-  div[class*="bg-secondary"] > div {
-    max-width: 100%;
-    word-break: break-word;
+  .panel-actions {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 8px;
   }
 
-  .panel-actions, 
-  div[class*="flex"][class*="gap"] {
-    flex-wrap: wrap !important;
-    width: 100% !important;
-  }
-
-  /* Table Header & Cell Spacing on Mobile */
-  table th, 
+  /* Table Header & Cell Padding on Mobile */
   .data-table th, 
-  tr > th {
-    padding: 8px 10px !important;
-    font-size: 0.675rem !important;
-    white-space: nowrap !important;
-    letter-spacing: 0.01em !important;
+  table th {
+    padding: 8px 10px;
+    font-size: 0.7rem;
+    white-space: nowrap;
   }
 
-  table td, 
   .data-table td, 
-  tr > td {
-    padding: 8px 10px !important;
-    font-size: 0.75rem !important;
-    white-space: nowrap !important;
+  table td {
+    padding: 8px 10px;
+    font-size: 0.775rem;
+    white-space: nowrap;
   }
 
-  /* Force Responsive Horizontal Touch Scroll for ALL Tables */
-  table {
-    min-width: 550px !important;
-  }
-
+  /* Responsive Horizontal Touch Scroll for Data Tables */
   .table-responsive, 
-  div[class*="overflow-x-auto"], 
-  table {
-    display: block !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    overflow-x: auto !important;
-    -webkit-overflow-scrolling: touch !important;
-    border-radius: 8px;
+  .overflow-x-auto {
+    display: block;
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   /* Modal Dialogs on Mobile */
@@ -1112,7 +1093,7 @@ h1, h2, h3, h4, .font-heading {
     max-width: 95% !important;
     margin: 8px auto !important;
     max-height: 90vh !important;
-    padding: 14px !important;
+    padding: 16px !important;
     border-radius: 16px !important;
     overflow-y: auto !important;
   }
@@ -1124,7 +1105,7 @@ h1, h2, h3, h4, .font-heading {
   input[type="password"], 
   select, 
   textarea {
-    font-size: 16px !important;
+    font-size: 16px;
   }
 
   /* Touch-friendly buttons and controls */
@@ -1132,5 +1113,6 @@ h1, h2, h3, h4, .font-heading {
     touch-action: manipulation;
   }
 }
+
 
 
