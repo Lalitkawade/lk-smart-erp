@@ -118,25 +118,29 @@ export default function App() {
     }
   };
 
-  // Consolidated merge helper that respects remote deletions while preserving offline drafts
-  const mergeRemoteWithOfflineDrafts = (remoteItems: any[], localItems: any[], keyField = 'id'): any[] => {
+  // Consolidated merge helper that respects remote deletions, entity-specific keys, and preserves offline drafts
+  const mergeRemoteWithOfflineDrafts = (
+    remoteItems: any[],
+    localItems: any[],
+    getKey: (item: any) => string | undefined
+  ): any[] => {
     const validRemote = Array.isArray(remoteItems) ? remoteItems : [];
     const validLocal = Array.isArray(localItems) ? localItems : [];
 
     const map = new Map<string, any>();
     validRemote.forEach(item => {
       if (item) {
-        const idKey = item[keyField] || item.id || item.invoice_number || item.bill_number;
-        if (idKey) map.set(String(idKey), item);
+        const key = getKey(item);
+        if (key) map.set(key, item);
       }
     });
 
     // Only preserve local items that are explicitly flagged as offline drafts
     validLocal.forEach(item => {
       if (item && item.is_offline_draft) {
-        const idKey = item[keyField] || item.id || item.invoice_number || item.bill_number;
-        if (idKey && !map.has(String(idKey))) {
-          map.set(String(idKey), item);
+        const key = getKey(item);
+        if (key && !map.has(key)) {
+          map.set(key, item);
         }
       }
     });
@@ -164,12 +168,12 @@ export default function App() {
     }
 
     let isRemoteSuccessful = false;
-    let liveSales: SalesInvoice[] = [];
-    let livePurchases: PurchaseBill[] = [];
-    let liveExpenses: Expense[] = [];
-    let liveProducts: any[] = [];
-    let liveCustomers: any[] = [];
-    let liveSuppliers: any[] = [];
+    let salesData: SalesInvoice[] | null = null;
+    let purchData: PurchaseBill[] | null = null;
+    let expData: Expense[] | null = null;
+    let prodData: any[] | null = null;
+    let custData: any[] | null = null;
+    let supData: any[] | null = null;
 
     try {
       const [salesRes, purchRes, expRes, prodRes, custRes, supRes] = await Promise.allSettled([
@@ -181,28 +185,21 @@ export default function App() {
         supabase.from('suppliers').select('*').order('supplier_name', { ascending: true })
       ]);
 
-      const salesData = salesRes.status === 'fulfilled' ? salesRes.value?.data : null;
-      const purchData = purchRes.status === 'fulfilled' ? purchRes.value?.data : null;
-      const expData = expRes.status === 'fulfilled' ? expRes.value?.data : null;
-      const prodData = prodRes.status === 'fulfilled' ? prodRes.value?.data : null;
-      const custData = custRes.status === 'fulfilled' ? custRes.value?.data : null;
-      const supData = supRes.status === 'fulfilled' ? supRes.value?.data : null;
+      if (salesRes.status === 'fulfilled' && !salesRes.value.error && salesRes.value.data) salesData = salesRes.value.data as SalesInvoice[];
+      if (purchRes.status === 'fulfilled' && !purchRes.value.error && purchRes.value.data) purchData = purchRes.value.data as PurchaseBill[];
+      if (expRes.status === 'fulfilled' && !expRes.value.error && expRes.value.data) expData = expRes.value.data as Expense[];
+      if (prodRes.status === 'fulfilled' && !prodRes.value.error && prodRes.value.data) prodData = prodRes.value.data;
+      if (custRes.status === 'fulfilled' && !custRes.value.error && custRes.value.data) custData = custRes.value.data;
+      if (supRes.status === 'fulfilled' && !supRes.value.error && supRes.value.data) supData = supRes.value.data;
 
-      if (salesData || purchData || expData || prodData || custData || supData) {
+      if (salesData !== null || purchData !== null || expData !== null || prodData !== null || custData !== null || supData !== null) {
         isRemoteSuccessful = true;
-        liveSales = (salesData || []) as SalesInvoice[];
-        livePurchases = (purchData || []) as PurchaseBill[];
-        liveExpenses = (expData || []) as Expense[];
-        liveProducts = prodData || [];
-        liveCustomers = custData || [];
-        liveSuppliers = supData || [];
       }
     } catch (err) {
       console.warn('Supabase state load note:', err);
     }
 
     if (isRemoteSuccessful) {
-      // Merge with pending offline drafts only so remote deletions converge properly
       const localSales = safeParseArray('lk_sales');
       const localPurchases = safeParseArray('lk_purchases');
       const localExpenses = safeParseArray('lk_expenses');
@@ -210,12 +207,29 @@ export default function App() {
       const localCustomers = safeParseArray('lk_customers');
       const localSuppliers = safeParseArray('lk_suppliers');
 
-      const mergedSales = mergeRemoteWithOfflineDrafts(liveSales, localSales, 'invoice_number');
-      const mergedPurchases = mergeRemoteWithOfflineDrafts(livePurchases, localPurchases, 'bill_number');
-      const mergedExpenses = mergeRemoteWithOfflineDrafts(liveExpenses, localExpenses, 'id');
-      const mergedProducts = mergeRemoteWithOfflineDrafts(liveProducts, localProducts, 'id');
-      const mergedCustomers = mergeRemoteWithOfflineDrafts(liveCustomers, localCustomers, 'id');
-      const mergedSuppliers = mergeRemoteWithOfflineDrafts(liveSuppliers, localSuppliers, 'id');
+      const mergedSales = salesData !== null 
+        ? mergeRemoteWithOfflineDrafts(salesData, localSales, s => s.invoice_number || s.id)
+        : localSales;
+
+      const mergedPurchases = purchData !== null 
+        ? mergeRemoteWithOfflineDrafts(purchData, localPurchases, p => p.bill_number || p.id)
+        : localPurchases;
+
+      const mergedExpenses = expData !== null 
+        ? mergeRemoteWithOfflineDrafts(expData, localExpenses, e => e.id)
+        : localExpenses;
+
+      const mergedProducts = prodData !== null 
+        ? mergeRemoteWithOfflineDrafts(prodData, localProducts, p => p.id)
+        : localProducts;
+
+      const mergedCustomers = custData !== null 
+        ? mergeRemoteWithOfflineDrafts(custData, localCustomers, c => c.id)
+        : localCustomers;
+
+      const mergedSuppliers = supData !== null 
+        ? mergeRemoteWithOfflineDrafts(supData, localSuppliers, s => s.id)
+        : localSuppliers;
 
       setSales(mergedSales);
       setPurchases(mergedPurchases);

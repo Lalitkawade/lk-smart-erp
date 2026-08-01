@@ -1,3 +1,7 @@
+import { useState, useEffect } from 'react';
+import { supabase } from '../api/supabase';
+import type { Product } from '../types/erp.types';
+
 export function useInventory(tenantId: string, businessType?: string) {
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
