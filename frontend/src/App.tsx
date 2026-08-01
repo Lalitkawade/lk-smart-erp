@@ -21,7 +21,7 @@ export default function App() {
   const { user, profile, tenant, loading, signIn, signOut } = useAuth();
   const { highDemandAlerts } = useDemandTracker(tenant?.id);
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [theme, setTheme] = useState(localStorage.getItem('lk_theme') || 'dark');
+  const [theme, setTheme] = useState(localStorage.getItem('lk_theme') || 'light');
   const [businessType, setBusinessType] = useState('Hardware Shop');
   const [purchaseAutoOpen, setPurchaseAutoOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
