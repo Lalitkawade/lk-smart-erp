@@ -471,7 +471,7 @@ export default function App() {
               <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center text-primary font-black text-xl uppercase border-2 border-primary/30 shadow-sm mb-2.5">
                 {profile?.username?.slice(0, 2) || 'OP'}
               </div>
-              <div className="font-heading font-extrabold text-sm text-sidebar-active uppercase tracking-tight leading-tight">{profile?.username || 'Robert Grant'}</div>
+              <div className="font-heading font-extrabold text-sm text-sidebar-active uppercase tracking-tight leading-tight truncate max-w-full px-1 w-full" title={profile?.username}>{profile?.username || 'Robert Grant'}</div>
               <div className="text-[10px] text-sidebar-text font-semibold uppercase tracking-wider mt-1">{profile?.role || 'Store Manager'}</div>
             </div>
           ) : (
@@ -730,7 +730,7 @@ export default function App() {
         </header>
 
         {/* Dynamic Views Router */}
-        <main className="p-6 overflow-y-auto flex-1">
+        <main className="p-3 sm:p-6 overflow-y-auto flex-1">
           {activeTab === 'dashboard' && (
             <Dashboard tenantId={tenant?.id || 'default-hardware-erp'} sales={sales} purchases={purchases} expenses={expenses} onNavigate={setActiveTab} />
           )}

@@ -332,34 +332,34 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
 
         {/* Filter controls */}
         <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-          <div className="flex items-center bg-background border border-border rounded-lg p-1 text-xs font-semibold">
+          <div className="flex items-center overflow-x-auto max-w-full bg-background border border-border rounded-lg p-1 text-xs font-semibold scrollbar-none flex-nowrap shrink-0">
             <button
               onClick={() => setTimeRange('10days')}
-              className={`px-3 py-1.5 rounded-md transition ${timeRange === '10days' ? 'bg-primary text-white font-bold' : 'text-textSecondary hover:text-foreground'}`}
+              className={`px-3 py-1.5 rounded-md transition whitespace-nowrap ${timeRange === '10days' ? 'bg-primary text-white font-bold' : 'text-textSecondary hover:text-foreground'}`}
             >
               10 Days
             </button>
             <button
               onClick={() => setTimeRange('month')}
-              className={`px-3 py-1.5 rounded-md transition ${timeRange === 'month' ? 'bg-primary text-white font-bold' : 'text-textSecondary hover:text-foreground'}`}
+              className={`px-3 py-1.5 rounded-md transition whitespace-nowrap ${timeRange === 'month' ? 'bg-primary text-white font-bold' : 'text-textSecondary hover:text-foreground'}`}
             >
               Month
             </button>
             <button
               onClick={() => setTimeRange('year')}
-              className={`px-3 py-1.5 rounded-md transition ${timeRange === 'year' ? 'bg-primary text-white font-bold' : 'text-textSecondary hover:text-foreground'}`}
+              className={`px-3 py-1.5 rounded-md transition whitespace-nowrap ${timeRange === 'year' ? 'bg-primary text-white font-bold' : 'text-textSecondary hover:text-foreground'}`}
             >
               Year
             </button>
             <button
               onClick={() => setTimeRange('all')}
-              className={`px-3 py-1.5 rounded-md transition ${timeRange === 'all' ? 'bg-primary text-white font-bold' : 'text-textSecondary hover:text-foreground'}`}
+              className={`px-3 py-1.5 rounded-md transition whitespace-nowrap ${timeRange === 'all' ? 'bg-primary text-white font-bold' : 'text-textSecondary hover:text-foreground'}`}
             >
               All Time
             </button>
             <button
               onClick={() => setTimeRange('custom')}
-              className={`px-3 py-1.5 rounded-md transition ${timeRange === 'custom' ? 'bg-primary text-white font-bold' : 'text-textSecondary hover:text-foreground'}`}
+              className={`px-3 py-1.5 rounded-md transition whitespace-nowrap ${timeRange === 'custom' ? 'bg-primary text-white font-bold' : 'text-textSecondary hover:text-foreground'}`}
             >
               Custom
             </button>

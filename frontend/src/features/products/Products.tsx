@@ -694,15 +694,15 @@ export default function Products({ tenantId, businessType }: ProductsProps) {
 
             {/* Scrollable Form Body */}
             <form onSubmit={handleSaveProduct} className="flex-1 min-h-0 overflow-y-auto pr-2 space-y-4 scrollbar-thin">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2 relative">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="col-span-1 sm:col-span-2 relative">
                   <label className="block text-xs font-semibold text-textSecondary mb-1">Product Name *</label>
                   <input type="text" className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none focus:border-emerald-500 font-semibold uppercase" required
                     value={formData.product_name} onChange={(e) => setFormData({ ...formData, product_name: e.target.value })} />
                 </div>
 
                 {similarProducts.length > 0 && !editingProduct && (
-                  <div className="col-span-2 bg-slate-900 border border-amber-500/40 rounded-xl p-3 space-y-2 shadow-xl animate-fade-in text-xs">
+                  <div className="col-span-1 sm:col-span-2 bg-slate-900 border border-amber-500/40 rounded-xl p-3 space-y-2 shadow-xl animate-fade-in text-xs">
                     <div className="flex items-center justify-between text-[11px] font-extrabold text-amber-400 uppercase tracking-wide">
                       <span className="flex items-center gap-1.5">
                         <i className="fa-solid fa-magnifying-glass text-amber-400"></i>
@@ -768,7 +768,7 @@ export default function Products({ tenantId, businessType }: ProductsProps) {
                 </div>
                 
                 {/* Margin Inline calculation */}
-                <div className="col-span-2 bg-amber-500/10 p-3 rounded-xl border border-amber-500/30 text-xs flex justify-between items-center shadow-xs">
+                <div className="col-span-1 sm:col-span-2 bg-amber-500/10 p-3 rounded-xl border border-amber-500/30 text-xs flex justify-between items-center shadow-xs flex-wrap gap-2">
                   <span className="font-extrabold text-slate-900 dark:text-slate-100 flex items-center gap-1.5 uppercase tracking-wide">
                     <i className="fa-solid fa-chart-line text-emerald-500"></i> Calculated Retail Margin (based on Purchase Cost):
                   </span>
@@ -795,7 +795,7 @@ export default function Products({ tenantId, businessType }: ProductsProps) {
                         placeholder="Enter qty to add (e.g. 20)..."
                         value={formData.additional_stock} onChange={(e) => setFormData({ ...formData, additional_stock: Number(e.target.value) })} />
                     </div>
-                    <div className="col-span-2 bg-emerald-500/10 border border-emerald-500/30 p-2.5 rounded-lg text-xs font-bold text-emerald-400 flex justify-between items-center">
+                    <div className="col-span-1 sm:col-span-2 bg-emerald-500/10 border border-emerald-500/30 p-2.5 rounded-lg text-xs font-bold text-emerald-400 flex justify-between items-center flex-wrap gap-2">
                       <span>Updated Total Stock after saving:</span>
                       <span className="font-mono text-sm font-black">
                         {formData.current_stock} + {formData.additional_stock || 0} = {Number(formData.current_stock || 0) + Number(formData.additional_stock || 0)} {formData.s_unit || 'Pcs'}
@@ -843,7 +843,7 @@ export default function Products({ tenantId, businessType }: ProductsProps) {
                   <input type="text" className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none text-xs"
                     value={formData.weight} onChange={(e) => setFormData({ ...formData, weight: e.target.value })} placeholder="e.g. 1.2kg, 500g" />
                 </div>
-                <div className="col-span-2">
+                <div className="col-span-1 sm:col-span-2">
                   <label className="block text-xs font-semibold text-textSecondary mb-1">Product Description</label>
                   <textarea className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none text-xs" rows={2}
                     value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} placeholder="Enter detailed specifications..." />
@@ -853,7 +853,7 @@ export default function Products({ tenantId, businessType }: ProductsProps) {
               {/* Units & Stock Location Logistics */}
               <div className="bg-background/40 p-4 border border-border rounded-lg space-y-4">
                 <h4 className="text-xs font-bold text-emerald-450 uppercase tracking-wide">Logistics & Units</h4>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-semibold text-textSecondary mb-1">Purchase Unit (P. Unit)</label>
                     <input type="text" className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none text-xs" placeholder="e.g. Bags, Bundles, Boxes"
@@ -869,7 +869,7 @@ export default function Products({ tenantId, businessType }: ProductsProps) {
                 {/* Stock Location Breakdown: Godown + Rack + Shelf */}
                 <div className="pt-3 border-t border-border/50">
                   <label className="block text-xs font-bold text-textSecondary mb-2 uppercase tracking-wide">Stock Location (Warehouse / Shelf Breakdown)</label>
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
                       <label className="block text-[11px] font-semibold text-textMuted mb-1">Godown (Warehouse)</label>
                       <input type="text" className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none text-xs font-medium" placeholder="e.g. Main Godown A"
@@ -895,7 +895,7 @@ export default function Products({ tenantId, businessType }: ProductsProps) {
                 <p className="text-[10px] text-textMuted leading-normal">
                   Configure this if you buy this product in packets/boxes but sometimes sell them in individual loose pieces.
                 </p>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-semibold text-textSecondary mb-1">Pieces per Pack</label>
                     <input type="number" className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none text-xs font-mono font-bold" placeholder="e.g. 100"
