@@ -10,20 +10,19 @@ export function useInventory(tenantId: string, businessType?: string) {
 
   const fetchProducts = async () => {
     let remoteProducts: Product[] = [];
-    if (tenantId && isUuid(tenantId)) {
-      try {
-        const { data, error } = await supabase
-          .from('products')
-          .select('*')
-          .eq('tenant_id', tenantId)
-          .order('product_name', { ascending: true });
+    const activeTenantId = (tenantId && isUuid(tenantId)) ? tenantId : '00000000-0000-0000-0000-000000000000';
+    try {
+      const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .or(`tenant_id.eq.${activeTenantId},tenant_id.eq.default-hardware-erp`)
+        .order('product_name', { ascending: true });
 
-        if (!error && data) {
-          remoteProducts = data as Product[];
-        }
-      } catch (e) {
-        console.warn('Remote product sync note:', e);
+      if (!error && data) {
+        remoteProducts = data as Product[];
       }
+    } catch (e) {
+      console.warn('Remote product sync note:', e);
     }
 
     // Merge with local storage cache for offline/resilient access
@@ -56,11 +55,12 @@ export function useInventory(tenantId: string, businessType?: string) {
   const saveProduct = async (productPayload: Omit<Product, 'created_at'> & { id?: string }) => {
     const cleanPayload = { ...productPayload };
     const productId = cleanPayload.id || 'prod-' + Date.now();
+    const activeTenantId = (tenantId && isUuid(tenantId)) ? tenantId : '00000000-0000-0000-0000-000000000000';
     
     const newProdObj: Product = {
       ...cleanPayload,
       id: productId,
-      tenant_id: tenantId || 'default-hardware-erp',
+      tenant_id: activeTenantId,
       product_name: cleanPayload.product_name || 'General Product',
       purchase_price: Number(cleanPayload.purchase_price || 0),
       selling_price: Number(cleanPayload.selling_price || 0),
@@ -83,35 +83,34 @@ export function useInventory(tenantId: string, businessType?: string) {
       setProducts(localList);
     } catch (err) {}
 
-    // 2. Attempt remote Supabase database insert/update if valid UUID
-    if (tenantId && isUuid(tenantId)) {
-      try {
-        if (cleanPayload.id) {
-          const { error } = await supabase.from('products').update(cleanPayload).eq('id', cleanPayload.id);
-          if (error && (error.message?.includes('column') || (error as any).code === 'PGRST204')) {
-            delete (cleanPayload as any).dealer_price;
-            delete (cleanPayload as any).mrp;
-            delete (cleanPayload as any).gst;
-            delete (cleanPayload as any).godown;
-            delete (cleanPayload as any).rack_number;
-            delete (cleanPayload as any).shelf_number;
-            await supabase.from('products').update(cleanPayload).eq('id', cleanPayload.id);
-          }
-        } else {
-          const { error } = await supabase.from('products').insert({ ...cleanPayload, tenant_id: tenantId });
-          if (error && (error.message?.includes('column') || (error as any).code === 'PGRST204')) {
-            delete (cleanPayload as any).dealer_price;
-            delete (cleanPayload as any).mrp;
-            delete (cleanPayload as any).gst;
-            delete (cleanPayload as any).godown;
-            delete (cleanPayload as any).rack_number;
-            delete (cleanPayload as any).shelf_number;
-            await supabase.from('products').insert({ ...cleanPayload, tenant_id: tenantId });
-          }
+    // 2. Attempt remote Supabase database insert/update
+    try {
+      if (cleanPayload.id && isUuid(cleanPayload.id)) {
+        const { error } = await supabase.from('products').update(cleanPayload).eq('id', cleanPayload.id);
+        if (error && (error.message?.includes('column') || (error as any).code === 'PGRST204')) {
+          delete (cleanPayload as any).dealer_price;
+          delete (cleanPayload as any).mrp;
+          delete (cleanPayload as any).gst;
+          delete (cleanPayload as any).godown;
+          delete (cleanPayload as any).rack_number;
+          delete (cleanPayload as any).shelf_number;
+          await supabase.from('products').update(cleanPayload).eq('id', cleanPayload.id);
         }
-      } catch (err) {
-        console.warn('Supabase remote save note (saving locally):', err);
+      } else {
+        const insertPayload = { ...cleanPayload, tenant_id: activeTenantId };
+        const { error } = await supabase.from('products').insert(insertPayload);
+        if (error && (error.message?.includes('column') || (error as any).code === 'PGRST204')) {
+          delete (insertPayload as any).dealer_price;
+          delete (insertPayload as any).mrp;
+          delete (insertPayload as any).gst;
+          delete (insertPayload as any).godown;
+          delete (insertPayload as any).rack_number;
+          delete (insertPayload as any).shelf_number;
+          await supabase.from('products').insert(insertPayload);
+        }
       }
+    } catch (err) {
+      console.warn('Supabase remote save note (saving locally):', err);
     }
 
     window.dispatchEvent(new Event('storage'));
