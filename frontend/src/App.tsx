@@ -107,96 +107,95 @@ export default function App() {
       localStorage.setItem('lk_settings', JSON.stringify(defaults));
     }
 
-    // 2. Fetch live metrics directly from Supabase if logged in
-    if (tenant?.id) {
+    // 2. Fetch live metrics directly from Supabase
+    const activeTenantId = tenant?.id || '00000000-0000-0000-0000-000000000000';
+    try {
+      const [salesRes, purchRes, expRes, prodRes, custRes, supRes] = await Promise.all([
+        supabase.from('sales_invoices').select('*, items:sales_items(*, product:products(*))').or(`tenant_id.eq.${activeTenantId},tenant_id.eq.default-hardware-erp,tenant_id.eq.00000000-0000-0000-0000-000000000000`).order('sale_date', { ascending: false }),
+        supabase.from('purchase_bills').select('*, items:purchase_items(*, product:products(*))').or(`tenant_id.eq.${activeTenantId},tenant_id.eq.default-hardware-erp,tenant_id.eq.00000000-0000-0000-0000-000000000000`).order('purchase_date', { ascending: false }),
+        supabase.from('expenses').select('*').or(`tenant_id.eq.${activeTenantId},tenant_id.eq.default-hardware-erp,tenant_id.eq.00000000-0000-0000-0000-000000000000`).order('expense_date', { ascending: false }),
+        supabase.from('products').select('*').or(`tenant_id.eq.${activeTenantId},tenant_id.eq.default-hardware-erp,tenant_id.eq.00000000-0000-0000-0000-000000000000`),
+        supabase.from('customers').select('*').or(`tenant_id.eq.${activeTenantId},tenant_id.eq.default-hardware-erp,tenant_id.eq.00000000-0000-0000-0000-000000000000`),
+        supabase.from('suppliers').select('*').or(`tenant_id.eq.${activeTenantId},tenant_id.eq.default-hardware-erp,tenant_id.eq.00000000-0000-0000-0000-000000000000`)
+      ]);
+
+      let liveSales: SalesInvoice[] = (salesRes.data || []) as SalesInvoice[];
+      let livePurchases: PurchaseBill[] = (purchRes.data || []) as PurchaseBill[];
+      let liveExpenses: Expense[] = (expRes.data || []) as Expense[];
+
+      // Deduplicate and combine with local storage cache if present
       try {
-        const [salesRes, purchRes, expRes, prodRes, custRes, supRes] = await Promise.all([
-          supabase.from('sales_invoices').select('*, items:sales_items(*, product:products(*))').eq('tenant_id', tenant.id).order('sale_date', { ascending: false }),
-          supabase.from('purchase_bills').select('*, items:purchase_items(*, product:products(*))').eq('tenant_id', tenant.id).order('purchase_date', { ascending: false }),
-          supabase.from('expenses').select('*').eq('tenant_id', tenant.id).order('expense_date', { ascending: false }),
-          supabase.from('products').select('*').eq('tenant_id', tenant.id),
-          supabase.from('customers').select('*').eq('tenant_id', tenant.id),
-          supabase.from('suppliers').select('*').eq('tenant_id', tenant.id)
-        ]);
+        const localS = JSON.parse(localStorage.getItem('lk_sales') || '[]');
+        const localP = JSON.parse(localStorage.getItem('lk_purchases') || '[]');
+        const localE = JSON.parse(localStorage.getItem('lk_expenses') || '[]');
 
-        let liveSales: SalesInvoice[] = (salesRes.data || []) as SalesInvoice[];
-        let livePurchases: PurchaseBill[] = (purchRes.data || []) as PurchaseBill[];
-        let liveExpenses: Expense[] = (expRes.data || []) as Expense[];
+        if (localS.length > 0) {
+          const salesMap = new Map();
+          liveSales.forEach(s => {
+            const primaryKey = s.invoice_number || s.id;
+            if (primaryKey) salesMap.set(primaryKey, s);
+          });
+          localS.forEach((s: any) => {
+            const primaryKey = s.invoice_number || s.id;
+            if (primaryKey && !salesMap.has(primaryKey) && (!s.invoice_number || !salesMap.has(s.invoice_number))) {
+              salesMap.set(primaryKey, s);
+            }
+          });
+          liveSales = Array.from(salesMap.values());
+        }
 
-        // Deduplicate and combine with local storage cache if present
-        try {
-          const localS = JSON.parse(localStorage.getItem('lk_sales') || '[]');
-          const localP = JSON.parse(localStorage.getItem('lk_purchases') || '[]');
-          const localE = JSON.parse(localStorage.getItem('lk_expenses') || '[]');
+        if (localP.length > 0) {
+          const purchMap = new Map();
+          livePurchases.forEach(p => {
+            const primaryKey = p.bill_number || p.id;
+            if (primaryKey) purchMap.set(primaryKey, p);
+          });
+          localP.forEach((p: any) => {
+            const primaryKey = p.bill_number || p.id;
+            if (primaryKey && !purchMap.has(primaryKey) && (!p.bill_number || !purchMap.has(p.bill_number))) {
+              purchMap.set(primaryKey, p);
+            }
+          });
+          livePurchases = Array.from(purchMap.values());
+        }
 
-          if (localS.length > 0) {
-            const salesMap = new Map();
-            liveSales.forEach(s => {
-              const primaryKey = s.invoice_number || s.id;
-              if (primaryKey) salesMap.set(primaryKey, s);
-            });
-            localS.forEach((s: any) => {
-              const primaryKey = s.invoice_number || s.id;
-              if (primaryKey && !salesMap.has(primaryKey) && (!s.invoice_number || !salesMap.has(s.invoice_number))) {
-                salesMap.set(primaryKey, s);
-              }
-            });
-            liveSales = Array.from(salesMap.values());
-          }
+        if (localE.length > 0) {
+          const expMap = new Map();
+          liveExpenses.forEach(e => expMap.set(e.id, e));
+          localE.forEach((e: any) => {
+            if (e.id && !expMap.has(e.id)) expMap.set(e.id, e);
+          });
+          liveExpenses = Array.from(expMap.values());
+        }
+      } catch (err) {}
 
-          if (localP.length > 0) {
-            const purchMap = new Map();
-            livePurchases.forEach(p => {
-              const primaryKey = p.bill_number || p.id;
-              if (primaryKey) purchMap.set(primaryKey, p);
-            });
-            localP.forEach((p: any) => {
-              const primaryKey = p.bill_number || p.id;
-              if (primaryKey && !purchMap.has(primaryKey) && (!p.bill_number || !purchMap.has(p.bill_number))) {
-                purchMap.set(primaryKey, p);
-              }
-            });
-            livePurchases = Array.from(purchMap.values());
-          }
+      // Overwrite local storage cache with synchronized database records
+      localStorage.setItem('lk_sales', JSON.stringify(liveSales));
+      localStorage.setItem('lk_purchases', JSON.stringify(livePurchases));
+      localStorage.setItem('lk_expenses', JSON.stringify(liveExpenses));
 
-          if (localE.length > 0) {
-            const expMap = new Map();
-            liveExpenses.forEach(e => expMap.set(e.id, e));
-            localE.forEach((e: any) => {
-              if (e.id && !expMap.has(e.id)) expMap.set(e.id, e);
-            });
-            liveExpenses = Array.from(expMap.values());
-          }
-        } catch (err) {}
+      setSales(liveSales);
+      setPurchases(livePurchases);
+      setExpenses(liveExpenses);
+      
+      // Merge remote and local products to ensure no added items are missed
+      const localProdsStr = localStorage.getItem('lk_products') || '[]';
+      let localProds: any[] = [];
+      try { localProds = JSON.parse(localProdsStr); } catch (e) {}
 
-        // Overwrite local storage cache with synchronized database records
-        localStorage.setItem('lk_sales', JSON.stringify(liveSales));
-        localStorage.setItem('lk_purchases', JSON.stringify(livePurchases));
-        localStorage.setItem('lk_expenses', JSON.stringify(liveExpenses));
+      const prodMap = new Map<string, any>();
+      (prodRes.data || []).forEach((p: any) => { if (p && p.id) prodMap.set(p.id, p); });
+      localProds.forEach((p: any) => { if (p && p.id && !prodMap.has(p.id)) prodMap.set(p.id, p); });
 
-        setSales(liveSales);
-        setPurchases(livePurchases);
-        setExpenses(liveExpenses);
-        
-        // Merge remote and local products to ensure no added items are missed
-        const localProdsStr = localStorage.getItem('lk_products') || '[]';
-        let localProds: any[] = [];
-        try { localProds = JSON.parse(localProdsStr); } catch (e) {}
+      const mergedProducts = Array.from(prodMap.values());
+      setProductsList(mergedProducts);
+      localStorage.setItem('lk_products', JSON.stringify(mergedProducts));
 
-        const prodMap = new Map<string, any>();
-        (prodRes.data || []).forEach((p: any) => { if (p && p.id) prodMap.set(p.id, p); });
-        localProds.forEach((p: any) => { if (p && p.id && !prodMap.has(p.id)) prodMap.set(p.id, p); });
-
-        const mergedProducts = Array.from(prodMap.values());
-        setProductsList(mergedProducts);
-        localStorage.setItem('lk_products', JSON.stringify(mergedProducts));
-
-        if (custRes.data) setCustomersList(custRes.data);
-        if (supRes.data) setSuppliersList(supRes.data);
-        return;
-      } catch (e) {
-        console.error('Error syncing app state from Supabase:', e);
-      }
+      if (custRes.data) setCustomersList(custRes.data);
+      if (supRes.data) setSuppliersList(supRes.data);
+      return;
+    } catch (e) {
+      console.error('Error syncing app state from Supabase:', e);
     }
 
     // Fallback if offline
