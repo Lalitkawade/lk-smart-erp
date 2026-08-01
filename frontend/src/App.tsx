@@ -272,9 +272,24 @@ export default function App() {
     // Listen to storage events so child page logs immediately update parent dashboards
     window.addEventListener('storage', loadAppState);
     window.addEventListener('focus', loadAppState);
+
+    // Supabase Real-Time Cross-Device Subscription Channel
+    const realtimeChannel = supabase
+      .channel('realtime-erp-sync')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public' },
+        (payload) => {
+          console.log('⚡ Real-time database update received:', payload.table);
+          loadAppState();
+        }
+      )
+      .subscribe();
+
     return () => {
       window.removeEventListener('storage', loadAppState);
       window.removeEventListener('focus', loadAppState);
+      supabase.removeChannel(realtimeChannel);
     };
   }, [theme, tenant, activeTab]);
 
