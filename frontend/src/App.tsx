@@ -107,16 +107,15 @@ export default function App() {
       localStorage.setItem('lk_settings', JSON.stringify(defaults));
     }
 
-    // 2. Fetch live metrics directly from Supabase
-    const activeTenantId = tenant?.id || '00000000-0000-0000-0000-000000000000';
+    // 2. Fetch live metrics directly from Supabase (all real user items)
     try {
       const [salesRes, purchRes, expRes, prodRes, custRes, supRes] = await Promise.all([
-        supabase.from('sales_invoices').select('*, items:sales_items(*, product:products(*))').or(`tenant_id.eq.${activeTenantId},tenant_id.eq.default-hardware-erp,tenant_id.eq.00000000-0000-0000-0000-000000000000`).order('sale_date', { ascending: false }),
-        supabase.from('purchase_bills').select('*, items:purchase_items(*, product:products(*))').or(`tenant_id.eq.${activeTenantId},tenant_id.eq.default-hardware-erp,tenant_id.eq.00000000-0000-0000-0000-000000000000`).order('purchase_date', { ascending: false }),
-        supabase.from('expenses').select('*').or(`tenant_id.eq.${activeTenantId},tenant_id.eq.default-hardware-erp,tenant_id.eq.00000000-0000-0000-0000-000000000000`).order('expense_date', { ascending: false }),
-        supabase.from('products').select('*').or(`tenant_id.eq.${activeTenantId},tenant_id.eq.default-hardware-erp,tenant_id.eq.00000000-0000-0000-0000-000000000000`),
-        supabase.from('customers').select('*').or(`tenant_id.eq.${activeTenantId},tenant_id.eq.default-hardware-erp,tenant_id.eq.00000000-0000-0000-0000-000000000000`),
-        supabase.from('suppliers').select('*').or(`tenant_id.eq.${activeTenantId},tenant_id.eq.default-hardware-erp,tenant_id.eq.00000000-0000-0000-0000-000000000000`)
+        supabase.from('sales_invoices').select('*, items:sales_items(*, product:products(*))').order('sale_date', { ascending: false }),
+        supabase.from('purchase_bills').select('*, items:purchase_items(*, product:products(*))').order('purchase_date', { ascending: false }),
+        supabase.from('expenses').select('*').order('expense_date', { ascending: false }),
+        supabase.from('products').select('*').order('product_name', { ascending: true }),
+        supabase.from('customers').select('*').order('customer_name', { ascending: true }),
+        supabase.from('suppliers').select('*').order('supplier_name', { ascending: true })
       ]);
 
       let liveSales: SalesInvoice[] = (salesRes.data || []) as SalesInvoice[];
@@ -169,10 +168,6 @@ export default function App() {
         }
       } catch (err) {}
 
-      if (liveSales.length === 0) liveSales = DEFAULT_SEED_SALES;
-      if (livePurchases.length === 0) livePurchases = DEFAULT_SEED_PURCHASES;
-      if (liveExpenses.length === 0) liveExpenses = DEFAULT_SEED_EXPENSES;
-
       // Overwrite local storage cache with synchronized database records
       localStorage.setItem('lk_sales', JSON.stringify(liveSales));
       localStorage.setItem('lk_purchases', JSON.stringify(livePurchases));
@@ -191,14 +186,12 @@ export default function App() {
       (prodRes.data || []).forEach((p: any) => { if (p && p.id) prodMap.set(p.id, p); });
       localProds.forEach((p: any) => { if (p && p.id && !prodMap.has(p.id)) prodMap.set(p.id, p); });
 
-      let mergedProducts = Array.from(prodMap.values());
-      if (mergedProducts.length === 0) mergedProducts = DEFAULT_SEED_PRODUCTS;
-
+      const mergedProducts = Array.from(prodMap.values());
       setProductsList(mergedProducts);
       localStorage.setItem('lk_products', JSON.stringify(mergedProducts));
 
-      const cData = custRes.data && custRes.data.length > 0 ? custRes.data : DEFAULT_SEED_CUSTOMERS;
-      const sData = supRes.data && supRes.data.length > 0 ? supRes.data : DEFAULT_SEED_SUPPLIERS;
+      const cData = custRes.data || [];
+      const sData = supRes.data || [];
       setCustomersList(cData);
       setSuppliersList(sData);
       localStorage.setItem('lk_customers', JSON.stringify(cData));

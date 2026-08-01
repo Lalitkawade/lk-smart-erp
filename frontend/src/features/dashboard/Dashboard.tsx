@@ -38,15 +38,8 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
       try { parsedC = JSON.parse(c); } catch (e) {}
     }
 
-    setSuppliers(parsedS.length > 0 ? parsedS : [
-      { id: 'sup-seed-1', supplier_name: 'ASIAN PAINTS LTD', outstanding: 4800 },
-      { id: 'sup-seed-2', supplier_name: 'SUPREME INDUSTRIES LTD', outstanding: 0 }
-    ]);
-
-    setCustomers(parsedC.length > 0 ? parsedC : [
-      { id: 'cust-seed-1', customer_name: 'RAMESH KUMAR (BUILDER)', outstanding: 0 },
-      { id: 'cust-seed-2', customer_name: 'SURESH HARDWARE WORKS', outstanding: 2500 }
-    ]);
+    setSuppliers(parsedS);
+    setCustomers(parsedC);
   };
 
   useEffect(() => {
