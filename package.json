@@ -2,9 +2,13 @@
   "name": "lk-smart-erp",
   "version": "1.0.0",
   "description": "LK Smart ERP - Inventory & Billing SaaS for Indian Businesses",
+  "workspaces": [
+    "frontend"
+  ],
   "scripts": {
+    "postinstall": "npm --prefix frontend install",
     "dev": "npm --prefix frontend run dev",
-    "build": "npm --prefix frontend run build",
+    "build": "npm --prefix frontend install && npm --prefix frontend run build",
     "preview": "npm --prefix frontend run preview"
   },
   "dependencies": {
