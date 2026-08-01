@@ -7,9 +7,11 @@ import type { Product, BusinessType } from '../../types/erp.types';
 interface ProductsProps {
   tenantId: string;
   businessType: BusinessType;
+  autoOpenModal?: boolean;
+  onModalClosed?: () => void;
 }
 
-export default function Products({ tenantId, businessType }: ProductsProps) {
+export default function Products({ tenantId, businessType, autoOpenModal, onModalClosed }: ProductsProps) {
   const { products, isLoading, saveProduct, deleteProduct } = useInventory(tenantId, businessType);
   const [search, setSearch] = useState('');
   const [suppliers, setSuppliers] = useState<any[]>([]);
@@ -17,6 +19,13 @@ export default function Products({ tenantId, businessType }: ProductsProps) {
   // Modals
   const [modalOpen, setModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+
+  useEffect(() => {
+    if (autoOpenModal) {
+      handleOpenAdd();
+      if (onModalClosed) onModalClosed();
+    }
+  }, [autoOpenModal]);
 
   // History Modal State
   const [historyModalOpen, setHistoryModalOpen] = useState(false);

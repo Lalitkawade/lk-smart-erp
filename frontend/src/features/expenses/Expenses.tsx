@@ -14,7 +14,12 @@ interface Expense {
   expense_date: string;
 }
 
-export default function Expenses() {
+interface ExpensesProps {
+  autoOpenModal?: boolean;
+  onModalClosed?: () => void;
+}
+
+export default function Expenses({ autoOpenModal, onModalClosed }: ExpensesProps = {}) {
   const { tenant } = useAuth();
   const tenantId = tenant?.id || 'default-hardware-erp';
 
@@ -23,6 +28,13 @@ export default function Expenses() {
   
   // Modals
   const [modalOpen, setModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (autoOpenModal) {
+      handleOpenAdd();
+      if (onModalClosed) onModalClosed();
+    }
+  }, [autoOpenModal]);
 
   // Form State
   const [formData, setFormData] = useState({

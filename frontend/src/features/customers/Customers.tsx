@@ -26,9 +26,11 @@ interface PaymentRecord {
 
 interface CustomersProps {
   onNewInvoice?: (customerName: string) => void;
+  autoOpenModal?: boolean;
+  onModalClosed?: () => void;
 }
 
-export default function Customers({ onNewInvoice }: CustomersProps) {
+export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }: CustomersProps) {
   const { tenant } = useAuth();
   const tenantId = tenant?.id || 'default-hardware-erp';
 
@@ -38,6 +40,13 @@ export default function Customers({ onNewInvoice }: CustomersProps) {
   
   // Modals Control
   const [modalOpen, setModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (autoOpenModal) {
+      handleOpenAdd();
+      if (onModalClosed) onModalClosed();
+    }
+  }, [autoOpenModal]);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   
   // Statement Modal

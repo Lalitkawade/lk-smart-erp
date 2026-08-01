@@ -11,9 +11,11 @@ interface SalesProps {
   tenantName: string;
   autoCustomerName?: string | null;
   onAutoCustomerConsumed?: () => void;
+  autoOpenModal?: boolean;
+  onModalClosed?: () => void;
 }
 
-export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCustomerConsumed }: SalesProps) {
+export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCustomerConsumed, autoOpenModal, onModalClosed }: SalesProps) {
   const { products, isLoading: prodLoading } = useInventory(tenantId);
   const { logDemand } = useDemandTracker(tenantId);
   const {
@@ -33,6 +35,13 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
 
   // Billing & Print Modals
   const [billingModal, setBillingModal] = useState(false);
+
+  useEffect(() => {
+    if (autoOpenModal) {
+      setBillingModal(true);
+      if (onModalClosed) onModalClosed();
+    }
+  }, [autoOpenModal]);
   const [printInvoice, setPrintInvoice] = useState<any | null>(null);
   const [posSearch, setPosSearch] = useState('');
   const [registeredCustomers, setRegisteredCustomers] = useState<any[]>([]);

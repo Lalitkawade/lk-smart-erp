@@ -25,7 +25,12 @@ interface SupplierPaymentRecord {
   payment_date: string;
 }
 
-export default function Suppliers() {
+interface SuppliersProps {
+  autoOpenModal?: boolean;
+  onModalClosed?: () => void;
+}
+
+export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersProps = {}) {
   const { tenant } = useAuth();
   const tenantId = tenant?.id || 'default-hardware-erp';
 
@@ -42,6 +47,13 @@ export default function Suppliers() {
   
   // Modals Control
   const [modalOpen, setModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (autoOpenModal) {
+      handleOpenAdd();
+      if (onModalClosed) onModalClosed();
+    }
+  }, [autoOpenModal]);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
   
   // Statement Modal

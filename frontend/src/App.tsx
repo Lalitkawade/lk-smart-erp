@@ -69,6 +69,11 @@ export default function App() {
   const [customersList, setCustomersList] = useState<any[]>([]);
   const [suppliersList, setSuppliersList] = useState<any[]>([]);
   const [salesAutoCustomer, setSalesAutoCustomer] = useState<string | null>(null);
+  const [salesAutoOpen, setSalesAutoOpen] = useState(false);
+  const [productAutoOpen, setProductAutoOpen] = useState(false);
+  const [expenseAutoOpen, setExpenseAutoOpen] = useState(false);
+  const [customerAutoOpen, setCustomerAutoOpen] = useState(false);
+  const [supplierAutoOpen, setSupplierAutoOpen] = useState(false);
 
   // Auth form states
   const [email, setEmail] = useState('');
@@ -735,46 +740,119 @@ export default function App() {
             <Dashboard tenantId={tenant?.id || 'default-hardware-erp'} sales={sales} purchases={purchases} expenses={expenses} onNavigate={setActiveTab} />
           )}
           {activeTab === 'new-entry' && (
-            <div className="space-y-6 animate-fade-in max-w-4xl mx-auto mt-4">
-              <div className="bg-secondary border border-border p-6 rounded-xl shadow-md">
-                <h2 className="text-lg font-bold text-foreground">New Transaction Desk</h2>
-                <p className="text-xs text-textMuted mt-1">Select the transaction ledger type to record in system</p>
+            <div className="space-y-6 animate-fade-in max-w-5xl mx-auto my-4">
+              <div className="bg-secondary border border-border p-4 sm:p-6 rounded-xl shadow-md">
+                <h2 className="text-lg font-black text-foreground uppercase tracking-tight">New Entry Quick Action Desk</h2>
+                <p className="text-xs text-textMuted mt-1">Select an entry card below to log new transactions, inventory, vendors, customers, or expenses</p>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+                {/* 1. Sale Entry */}
+                <button 
+                  onClick={() => {
+                    setSalesAutoOpen(true);
+                    setActiveTab('sales');
+                  }}
+                  className="bg-secondary border border-border hover:border-emerald-500 rounded-xl p-5 sm:p-6 flex flex-col items-center justify-center text-center gap-3 group transition shadow-md"
+                >
+                  <div className="w-14 h-14 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center border border-emerald-500/30 group-hover:scale-110 transition duration-150">
+                    <i className="fa-solid fa-file-invoice-dollar text-xl"></i>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-foreground group-hover:text-emerald-400 transition uppercase">a. POS Sales Invoice</h3>
+                    <p className="text-xs text-textMuted mt-1">Checkout shopping cart and create retail sales invoice</p>
+                  </div>
+                </button>
+
+                {/* 2. Purchase Entry */}
                 <button 
                   onClick={() => {
                     setPurchaseAutoOpen(true);
                     setActiveTab('purchases');
                   }}
-                  className="bg-secondary border border-border hover:border-blue-500 rounded-xl p-8 flex flex-col items-center justify-center text-center gap-4 group transition shadow-lg"
+                  className="bg-secondary border border-border hover:border-blue-500 rounded-xl p-5 sm:p-6 flex flex-col items-center justify-center text-center gap-3 group transition shadow-md"
                 >
-                  <div className="w-16 h-16 rounded-full bg-blue-950/40 text-blue-400 flex items-center justify-center border border-blue-900 group-hover:scale-110 transition duration-150">
-                    <i className="fa-solid fa-cart-shopping text-2xl"></i>
+                  <div className="w-14 h-14 rounded-full bg-blue-500/10 text-blue-400 flex items-center justify-center border border-blue-500/30 group-hover:scale-110 transition duration-150">
+                    <i className="fa-solid fa-cart-shopping text-xl"></i>
                   </div>
                   <div>
-                    <h3 className="text-base font-bold text-foreground group-hover:text-blue-450 transition">a. Purchase Entry</h3>
-                    <p className="text-xs text-textMuted mt-1 max-w-[280px]">Record procurements from suppliers and increment stock counts</p>
+                    <h3 className="text-sm font-bold text-foreground group-hover:text-blue-400 transition uppercase">b. Procurement Bill</h3>
+                    <p className="text-xs text-textMuted mt-1">Record supplier purchase bills and update material stock</p>
                   </div>
                 </button>
+
+                {/* 3. Add Product */}
                 <button 
                   onClick={() => {
-                    setActiveTab('sales');
+                    setProductAutoOpen(true);
+                    setActiveTab('products');
                   }}
-                  className="bg-secondary border border-border hover:border-emerald-500 rounded-xl p-8 flex flex-col items-center justify-center text-center gap-4 group transition shadow-lg"
+                  className="bg-secondary border border-border hover:border-amber-500 rounded-xl p-5 sm:p-6 flex flex-col items-center justify-center text-center gap-3 group transition shadow-md"
                 >
-                  <div className="w-16 h-16 rounded-full bg-emerald-955/40 text-emerald-450 flex items-center justify-center border border-emerald-900 group-hover:scale-110 transition duration-150">
-                    <i className="fa-solid fa-file-invoice-dollar text-2xl"></i>
+                  <div className="w-14 h-14 rounded-full bg-amber-500/10 text-amber-400 flex items-center justify-center border border-amber-500/30 group-hover:scale-110 transition duration-150">
+                    <i className="fa-solid fa-boxes-stacked text-xl"></i>
                   </div>
                   <div>
-                    <h3 className="text-base font-bold text-foreground group-hover:text-emerald-400 transition">b. Sale Entry</h3>
-                    <p className="text-xs text-textMuted mt-1 max-w-[280px]">Checkout POS shopping carts and create sales invoices</p>
+                    <h3 className="text-sm font-bold text-foreground group-hover:text-amber-400 transition uppercase">c. Add New Product</h3>
+                    <p className="text-xs text-textMuted mt-1">Configure new inventory product, price rates, and shelf locations</p>
+                  </div>
+                </button>
+
+                {/* 4. Log Expense */}
+                <button 
+                  onClick={() => {
+                    setExpenseAutoOpen(true);
+                    setActiveTab('expenses');
+                  }}
+                  className="bg-secondary border border-border hover:border-rose-500 rounded-xl p-5 sm:p-6 flex flex-col items-center justify-center text-center gap-3 group transition shadow-md"
+                >
+                  <div className="w-14 h-14 rounded-full bg-rose-500/10 text-rose-400 flex items-center justify-center border border-rose-500/30 group-hover:scale-110 transition duration-150">
+                    <i className="fa-solid fa-hand-holding-dollar text-xl"></i>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-foreground group-hover:text-rose-400 transition uppercase">d. Log Shop Expense</h3>
+                    <p className="text-xs text-textMuted mt-1">Audit daily shop operating costs, rent, electricity, and salaries</p>
+                  </div>
+                </button>
+
+                {/* 5. Register Customer */}
+                <button 
+                  onClick={() => {
+                    setCustomerAutoOpen(true);
+                    setActiveTab('customers');
+                  }}
+                  className="bg-secondary border border-border hover:border-purple-500 rounded-xl p-5 sm:p-6 flex flex-col items-center justify-center text-center gap-3 group transition shadow-md"
+                >
+                  <div className="w-14 h-14 rounded-full bg-purple-500/10 text-purple-400 flex items-center justify-center border border-purple-500/30 group-hover:scale-110 transition duration-150">
+                    <i className="fa-solid fa-user-plus text-xl"></i>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-foreground group-hover:text-purple-400 transition uppercase">e. Register Customer</h3>
+                    <p className="text-xs text-textMuted mt-1">Create new customer profile and setup credit limit ledgers</p>
+                  </div>
+                </button>
+
+                {/* 6. Register Vendor */}
+                <button 
+                  onClick={() => {
+                    setSupplierAutoOpen(true);
+                    setActiveTab('suppliers');
+                  }}
+                  className="bg-secondary border border-border hover:border-teal-500 rounded-xl p-5 sm:p-6 flex flex-col items-center justify-center text-center gap-3 group transition shadow-md"
+                >
+                  <div className="w-14 h-14 rounded-full bg-teal-500/10 text-teal-400 flex items-center justify-center border border-teal-500/30 group-hover:scale-110 transition duration-150">
+                    <i className="fa-solid fa-truck-ramp-box text-xl"></i>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-foreground group-hover:text-teal-400 transition uppercase">f. Register Vendor</h3>
+                    <p className="text-xs text-textMuted mt-1">Add material supplier profiles and establishment details</p>
                   </div>
                 </button>
               </div>
             </div>
           )}
           {activeTab === 'products' && (
-            <Products tenantId={tenant?.id || 'default-hardware-erp'} businessType={businessType as any} />
+            <Products tenantId={tenant?.id || 'default-hardware-erp'} businessType={businessType as any} autoOpenModal={productAutoOpen} onModalClosed={() => setProductAutoOpen(false)} />
           )}
           {activeTab === 'sales' && (
             <Sales 
@@ -782,6 +860,8 @@ export default function App() {
               tenantName={companyName} 
               autoCustomerName={salesAutoCustomer}
               onAutoCustomerConsumed={() => setSalesAutoCustomer(null)}
+              autoOpenModal={salesAutoOpen}
+              onModalClosed={() => setSalesAutoOpen(false)}
             />
           )}
           {activeTab === 'purchases' && (
@@ -793,10 +873,15 @@ export default function App() {
                 setSalesAutoCustomer(custName);
                 setActiveTab('sales');
               }}
+              autoOpenModal={customerAutoOpen}
+              onModalClosed={() => setCustomerAutoOpen(false)}
             />
           )}
           {activeTab === 'suppliers' && (
-            <Suppliers />
+            <Suppliers autoOpenModal={supplierAutoOpen} onModalClosed={() => setSupplierAutoOpen(false)} />
+          )}
+          {activeTab === 'expenses' && (
+            <Expenses autoOpenModal={expenseAutoOpen} onModalClosed={() => setExpenseAutoOpen(false)} />
           )}
           {activeTab === 'inventory-stock' && (
             <div className="bg-secondary border border-border rounded-xl p-6 shadow-md space-y-4 animate-fade-in">
