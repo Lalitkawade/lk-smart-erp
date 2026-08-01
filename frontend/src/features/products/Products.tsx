@@ -403,6 +403,13 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
     }
   };
 
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const triggerToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 2500);
+  };
+
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -479,9 +486,9 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
         ...(targetProductId && { id: targetProductId })
       };
 
-      const savedProd = await saveProduct(productPayload as any);
+      const savedProd = saveProduct(productPayload as any);
 
-      // Check if prices changed or new stock was added to record in Product History ledger
+      // Check if prices changed or new stock was added to record in Product History ledger asynchronously
       const effectiveProdId = savedProd?.id || targetProductId;
       const isPriceChanged = editingProduct && (
         editingProduct.purchase_price !== formData.purchase_price || 
@@ -489,40 +496,37 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
       );
 
       if (effectiveProdId && (addedStockInflow > 0 || isPriceChanged)) {
-        try {
-          await logInflowPurchaseHistory(
-            tenantId,
-            effectiveProdId,
-            formData.product_name,
-            addedStockInflow > 0 ? addedStockInflow : 0,
-            formData.purchase_price,
-            formData.selling_price,
-            selectedSup ? selectedSup.supplier_name : (formData.supplier_name || 'Direct Stock Inflow / Price Update')
-          );
-        } catch (e) {}
-      }
-
-      if (isMergeOperation || (editingProduct && addedStockInflow > 0)) {
-        alert(`Stock updated! Added +${addedStockInflow} ${formData.s_unit || 'Pcs'}. New Total Stock: ${finalStock} ${formData.s_unit || 'Pcs'}`);
-      } else {
-        alert('Product saved successfully!');
+        logInflowPurchaseHistory(
+          tenantId,
+          effectiveProdId,
+          formData.product_name,
+          addedStockInflow > 0 ? addedStockInflow : 0,
+          formData.purchase_price,
+          formData.selling_price,
+          selectedSup ? selectedSup.supplier_name : (formData.supplier_name || 'Direct Stock Inflow / Price Update')
+        ).catch(() => {});
       }
 
       setModalOpen(false);
+      if (isMergeOperation || (editingProduct && addedStockInflow > 0)) {
+        triggerToast(`Stock updated! Added +${addedStockInflow} ${formData.s_unit || 'Pcs'}. Total Stock: ${finalStock}`);
+      } else {
+        triggerToast('⚡ Product saved successfully!');
+      }
       window.dispatchEvent(new Event('storage'));
     } catch (err: any) {
-      alert('Save failed: ' + err.message);
+      triggerToast('⚠️ Save failed: ' + err.message);
     }
   };
 
   const handleDeleteProduct = async (pId: string) => {
     if (!window.confirm('Delete this product item?')) return;
     try {
-      await deleteProduct(pId);
-      alert('Product deleted.');
-      window.dispatchEvent(new Event('storage')); // Notify dashboard
+      deleteProduct(pId);
+      triggerToast('Product item removed');
+      window.dispatchEvent(new Event('storage'));
     } catch (err: any) {
-      alert(err.message);
+      triggerToast(err.message);
     }
   };
 
@@ -538,7 +542,14 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
   });
 
   return (
-    <div className="bg-secondary border border-border rounded-xl p-4 sm:p-6">
+    <div className="bg-secondary border border-border rounded-xl p-4 sm:p-6 relative">
+      {/* Non-blocking Floating Toast Banner Notification */}
+      {toastMessage && (
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 bg-emerald-500 text-slate-950 px-5 py-2.5 rounded-full font-extrabold text-xs shadow-2xl flex items-center gap-2 border border-emerald-300 animate-bounce">
+          <i className="fa-solid fa-bolt text-sm"></i>
+          <span>{toastMessage}</span>
+        </div>
+      )}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 mb-6">
         <div>
           <h2 className="text-xl font-bold text-foreground">Products</h2>

@@ -3,42 +3,45 @@ import { supabase } from '../api/supabase';
 import type { Product } from '../types/erp.types';
 
 export function useInventory(tenantId: string, businessType?: string) {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  // 1. Instant local initial state load (0ms latency)
+  const [products, setProducts] = useState<Product[]>(() => {
+    try {
+      const localStr = localStorage.getItem('lk_products');
+      if (localStr) {
+        const parsed = JSON.parse(localStr);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return [];
+  });
+
+  const [isLoading, setIsLoading] = useState<boolean>(() => products.length === 0);
 
   const isUuid = (id: string) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
   const fetchProducts = async () => {
-    let remoteProducts: Product[] = [];
     try {
       const { data, error } = await supabase
         .from('products')
         .select('*')
         .order('product_name', { ascending: true });
 
-      if (!error && data) {
-        remoteProducts = data as Product[];
+      if (!error && data && Array.isArray(data)) {
+        const remoteProducts = data as Product[];
+        const localStr = localStorage.getItem('lk_products') || '[]';
+        let localList: Product[] = [];
+        try { localList = JSON.parse(localStr); } catch (e) {}
+
+        const prodMap = new Map<string, Product>();
+        remoteProducts.forEach(p => { if (p && p.id) prodMap.set(p.id, p); });
+        localList.forEach(p => { if (p && p.id && !prodMap.has(p.id)) prodMap.set(p.id, p); });
+
+        const combined = Array.from(prodMap.values());
+        setProducts(combined);
+        try { localStorage.setItem('lk_products', JSON.stringify(combined)); } catch (e) {}
       }
     } catch (e) {
       console.warn('Remote product sync note:', e);
-    }
-
-    // Merge with local storage cache for offline/resilient access
-    try {
-      const localStr = localStorage.getItem('lk_products') || '[]';
-      const localList: Product[] = JSON.parse(localStr);
-      const prodMap = new Map<string, Product>();
-
-      remoteProducts.forEach(p => prodMap.set(p.id, p));
-      localList.forEach(p => {
-        if (!prodMap.has(p.id)) prodMap.set(p.id, p);
-      });
-
-      const combined = Array.from(prodMap.values());
-      setProducts(combined);
-      localStorage.setItem('lk_products', JSON.stringify(combined));
-    } catch (e) {
-      setProducts(remoteProducts);
     } finally {
       setIsLoading(false);
     }
@@ -50,7 +53,7 @@ export function useInventory(tenantId: string, businessType?: string) {
     return () => window.removeEventListener('storage', fetchProducts);
   }, [tenantId, businessType]);
 
-  const saveProduct = async (productPayload: Omit<Product, 'created_at'> & { id?: string }) => {
+  const saveProduct = (productPayload: Omit<Product, 'created_at'> & { id?: string }) => {
     const cleanPayload = { ...productPayload };
     const productId = cleanPayload.id || 'prod-' + Date.now();
     const activeTenantId = (tenantId && isUuid(tenantId)) ? tenantId : '00000000-0000-0000-0000-000000000000';
@@ -67,7 +70,7 @@ export function useInventory(tenantId: string, businessType?: string) {
       created_at: new Date().toISOString()
     } as Product;
 
-    // 1. Immediate local cache and state persistence
+    // 1. Instant local cache and UI state update (0ms latency!)
     try {
       const localStr = localStorage.getItem('lk_products') || '[]';
       const localList: Product[] = JSON.parse(localStr);
@@ -81,42 +84,44 @@ export function useInventory(tenantId: string, businessType?: string) {
       setProducts(localList);
     } catch (err) {}
 
-    // 2. Attempt remote Supabase database insert/update
-    try {
-      if (cleanPayload.id && isUuid(cleanPayload.id)) {
-        const { error } = await supabase.from('products').update(cleanPayload).eq('id', cleanPayload.id);
-        if (error && (error.message?.includes('column') || (error as any).code === 'PGRST204')) {
-          delete (cleanPayload as any).dealer_price;
-          delete (cleanPayload as any).mrp;
-          delete (cleanPayload as any).gst;
-          delete (cleanPayload as any).godown;
-          delete (cleanPayload as any).rack_number;
-          delete (cleanPayload as any).shelf_number;
-          await supabase.from('products').update(cleanPayload).eq('id', cleanPayload.id);
+    // 2. Non-blocking asynchronous remote Supabase sync in background
+    (async () => {
+      try {
+        if (cleanPayload.id && isUuid(cleanPayload.id)) {
+          const { error } = await supabase.from('products').update(cleanPayload).eq('id', cleanPayload.id);
+          if (error && (error.message?.includes('column') || (error as any).code === 'PGRST204')) {
+            delete (cleanPayload as any).dealer_price;
+            delete (cleanPayload as any).mrp;
+            delete (cleanPayload as any).gst;
+            delete (cleanPayload as any).godown;
+            delete (cleanPayload as any).rack_number;
+            delete (cleanPayload as any).shelf_number;
+            await supabase.from('products').update(cleanPayload).eq('id', cleanPayload.id);
+          }
+        } else {
+          const insertPayload = { ...cleanPayload, tenant_id: activeTenantId };
+          const { error } = await supabase.from('products').insert(insertPayload);
+          if (error && (error.message?.includes('column') || (error as any).code === 'PGRST204')) {
+            delete (insertPayload as any).dealer_price;
+            delete (insertPayload as any).mrp;
+            delete (insertPayload as any).gst;
+            delete (insertPayload as any).godown;
+            delete (insertPayload as any).rack_number;
+            delete (insertPayload as any).shelf_number;
+            await supabase.from('products').insert(insertPayload);
+          }
         }
-      } else {
-        const insertPayload = { ...cleanPayload, tenant_id: activeTenantId };
-        const { error } = await supabase.from('products').insert(insertPayload);
-        if (error && (error.message?.includes('column') || (error as any).code === 'PGRST204')) {
-          delete (insertPayload as any).dealer_price;
-          delete (insertPayload as any).mrp;
-          delete (insertPayload as any).gst;
-          delete (insertPayload as any).godown;
-          delete (insertPayload as any).rack_number;
-          delete (insertPayload as any).shelf_number;
-          await supabase.from('products').insert(insertPayload);
-        }
+      } catch (err) {
+        console.warn('Supabase remote background save note:', err);
       }
-    } catch (err) {
-      console.warn('Supabase remote save note (saving locally):', err);
-    }
+    })();
 
     window.dispatchEvent(new Event('storage'));
     return newProdObj;
   };
 
-  const deleteProduct = async (productId: string) => {
-    // 1. Immediate local cache deletion
+  const deleteProduct = (productId: string) => {
+    // 1. Instant local cache deletion (0ms latency!)
     try {
       const localStr = localStorage.getItem('lk_products') || '[]';
       const localList: Product[] = JSON.parse(localStr);
@@ -125,12 +130,12 @@ export function useInventory(tenantId: string, businessType?: string) {
       setProducts(updated);
     } catch (err) {}
 
-    // 2. Attempt remote Supabase deletion
-    if (tenantId && isUuid(tenantId)) {
+    // 2. Non-blocking asynchronous remote Supabase deletion
+    (async () => {
       try {
         await supabase.from('products').delete().eq('id', productId);
       } catch (err) {}
-    }
+    })();
 
     window.dispatchEvent(new Event('storage'));
   };
