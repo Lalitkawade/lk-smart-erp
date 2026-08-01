@@ -14,10 +14,10 @@ type TimeRange = '10days' | 'month' | 'year' | 'all' | 'custom';
 
 export default function Dashboard({ tenantId, sales, purchases, expenses, onNavigate }: DashboardProps) {
   const { products } = useInventory(tenantId);
-  const [timeRange, setTimeRange] = useState<TimeRange>('10days');
+  const [timeRange, setTimeRange] = useState<TimeRange>('all');
   const [startDate, setStartDate] = useState<string>(() => {
     const d = new Date();
-    d.setDate(d.getDate() - 10);
+    d.setDate(d.getDate() - 30);
     return d.toISOString().split('T')[0];
   });
   const [endDate, setEndDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
@@ -29,12 +29,24 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
   const loadLocals = () => {
     const s = localStorage.getItem('lk_suppliers');
     const c = localStorage.getItem('lk_customers');
+    let parsedS: any[] = [];
+    let parsedC: any[] = [];
     if (s) {
-      try { setSuppliers(JSON.parse(s)); } catch (e) {}
+      try { parsedS = JSON.parse(s); } catch (e) {}
     }
     if (c) {
-      try { setCustomers(JSON.parse(c)); } catch (e) {}
+      try { parsedC = JSON.parse(c); } catch (e) {}
     }
+
+    setSuppliers(parsedS.length > 0 ? parsedS : [
+      { id: 'sup-seed-1', supplier_name: 'ASIAN PAINTS LTD', outstanding: 4800 },
+      { id: 'sup-seed-2', supplier_name: 'SUPREME INDUSTRIES LTD', outstanding: 0 }
+    ]);
+
+    setCustomers(parsedC.length > 0 ? parsedC : [
+      { id: 'cust-seed-1', customer_name: 'RAMESH KUMAR (BUILDER)', outstanding: 0 },
+      { id: 'cust-seed-2', customer_name: 'SURESH HARDWARE WORKS', outstanding: 2500 }
+    ]);
   };
 
   useEffect(() => {

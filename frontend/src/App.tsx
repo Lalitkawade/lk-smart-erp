@@ -169,6 +169,10 @@ export default function App() {
         }
       } catch (err) {}
 
+      if (liveSales.length === 0) liveSales = DEFAULT_SEED_SALES;
+      if (livePurchases.length === 0) livePurchases = DEFAULT_SEED_PURCHASES;
+      if (liveExpenses.length === 0) liveExpenses = DEFAULT_SEED_EXPENSES;
+
       // Overwrite local storage cache with synchronized database records
       localStorage.setItem('lk_sales', JSON.stringify(liveSales));
       localStorage.setItem('lk_purchases', JSON.stringify(livePurchases));
@@ -187,12 +191,18 @@ export default function App() {
       (prodRes.data || []).forEach((p: any) => { if (p && p.id) prodMap.set(p.id, p); });
       localProds.forEach((p: any) => { if (p && p.id && !prodMap.has(p.id)) prodMap.set(p.id, p); });
 
-      const mergedProducts = Array.from(prodMap.values());
+      let mergedProducts = Array.from(prodMap.values());
+      if (mergedProducts.length === 0) mergedProducts = DEFAULT_SEED_PRODUCTS;
+
       setProductsList(mergedProducts);
       localStorage.setItem('lk_products', JSON.stringify(mergedProducts));
 
-      if (custRes.data) setCustomersList(custRes.data);
-      if (supRes.data) setSuppliersList(supRes.data);
+      const cData = custRes.data && custRes.data.length > 0 ? custRes.data : DEFAULT_SEED_CUSTOMERS;
+      const sData = supRes.data && supRes.data.length > 0 ? supRes.data : DEFAULT_SEED_SUPPLIERS;
+      setCustomersList(cData);
+      setSuppliersList(sData);
+      localStorage.setItem('lk_customers', JSON.stringify(cData));
+      localStorage.setItem('lk_suppliers', JSON.stringify(sData));
       return;
     } catch (e) {
       console.error('Error syncing app state from Supabase:', e);
