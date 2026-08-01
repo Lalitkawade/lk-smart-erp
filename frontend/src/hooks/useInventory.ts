@@ -2,93 +2,6 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../api/supabase';
 import type { Product } from '../types/erp.types';
 
-const DEFAULT_HARDWARE_PRODUCTS: Product[] = [
-  {
-    id: 'prod-seed-1',
-    tenant_id: 'default-hardware-erp',
-    product_name: 'ULTRATECH CEMENT BAG (50KG)',
-    hsn: '2523',
-    purchase_price: 340,
-    selling_price: 390,
-    current_stock: 120,
-    min_stock_level: 25,
-    unit: 'Bags',
-    p_unit: 'Bags',
-    s_unit: 'Bags',
-    warehouse_location: 'Godown A - Rack 1'
-  },
-  {
-    id: 'prod-seed-2',
-    tenant_id: 'default-hardware-erp',
-    product_name: 'STAINLESS STEEL DOOR HINGES (4 INCH)',
-    hsn: '8302',
-    purchase_price: 45,
-    selling_price: 75,
-    current_stock: 350,
-    min_stock_level: 50,
-    unit: 'Pairs',
-    p_unit: 'Box',
-    s_unit: 'Pairs',
-    warehouse_location: 'Shelf 3B'
-  },
-  {
-    id: 'prod-seed-3',
-    tenant_id: 'default-hardware-erp',
-    product_name: 'SUPREME PVC PIPE 110MM (6 METER)',
-    hsn: '3917',
-    purchase_price: 420,
-    selling_price: 540,
-    current_stock: 45,
-    min_stock_level: 10,
-    unit: 'Pcs',
-    p_unit: 'Bundle',
-    s_unit: 'Pcs',
-    warehouse_location: 'Outside Pipe Yard'
-  },
-  {
-    id: 'prod-seed-4',
-    tenant_id: 'default-hardware-erp',
-    product_name: 'GALVANIZED IRON WIRE NAILS (2 INCH)',
-    hsn: '7317',
-    purchase_price: 65,
-    selling_price: 90,
-    current_stock: 80,
-    min_stock_level: 15,
-    unit: 'Kg',
-    p_unit: 'Box (20kg)',
-    s_unit: 'Kg',
-    warehouse_location: 'Counter Drawer 1'
-  },
-  {
-    id: 'prod-seed-5',
-    tenant_id: 'default-hardware-erp',
-    product_name: 'ASIAN PAINTS TRACTOR EMULSION (20 LITRE)',
-    hsn: '3209',
-    purchase_price: 2100,
-    selling_price: 2650,
-    current_stock: 18,
-    min_stock_level: 5,
-    unit: 'Buckets',
-    p_unit: 'Buckets',
-    s_unit: 'Buckets',
-    warehouse_location: 'Paint Section Shelf A'
-  },
-  {
-    id: 'prod-seed-6',
-    tenant_id: 'default-hardware-erp',
-    product_name: 'ANCHOR ROMA 6A 1-WAY MODULAR SWITCH',
-    hsn: '8536',
-    purchase_price: 22,
-    selling_price: 38,
-    current_stock: 200,
-    min_stock_level: 30,
-    unit: 'Pcs',
-    p_unit: 'Box (20pcs)',
-    s_unit: 'Pcs',
-    warehouse_location: 'Electrical Rack 2'
-  }
-];
-
 export function useInventory(tenantId: string, businessType?: string) {
   // 1. Instant local initial state load (0ms latency)
   const [products, setProducts] = useState<Product[]>(() => {
@@ -96,15 +9,16 @@ export function useInventory(tenantId: string, businessType?: string) {
       const localStr = localStorage.getItem('lk_products');
       if (localStr) {
         const parsed = JSON.parse(localStr);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) return parsed;
       }
     } catch (e) {}
-    return DEFAULT_HARDWARE_PRODUCTS;
+    return [];
   });
 
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(() => products.length === 0);
 
   const isUuid = (id: string) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+  const generateUuid = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'f' + Date.now().toString(16).padStart(31, '0').slice(0, 31);
 
   const fetchProducts = async () => {
     try {
@@ -123,9 +37,7 @@ export function useInventory(tenantId: string, businessType?: string) {
         remoteProducts.forEach(p => { if (p && p.id) prodMap.set(p.id, p); });
         localList.forEach(p => { if (p && p.id && !prodMap.has(p.id)) prodMap.set(p.id, p); });
 
-        let combined = Array.from(prodMap.values());
-        if (combined.length === 0) combined = DEFAULT_HARDWARE_PRODUCTS;
-
+        const combined = Array.from(prodMap.values());
         setProducts(combined);
         try { localStorage.setItem('lk_products', JSON.stringify(combined)); } catch (e) {}
       }
@@ -143,21 +55,19 @@ export function useInventory(tenantId: string, businessType?: string) {
   }, [tenantId, businessType]);
 
   const saveProduct = (productPayload: Omit<Product, 'created_at'> & { id?: string }) => {
-    const cleanPayload = { ...productPayload };
-    const productId = cleanPayload.id || 'prod-' + Date.now();
-    const activeTenantId = (tenantId && isUuid(tenantId)) ? tenantId : '00000000-0000-0000-0000-000000000000';
-    
-    const newProdObj: Product = {
-      ...cleanPayload,
+    const productId = (productPayload.id && isUuid(productPayload.id)) 
+      ? productPayload.id 
+      : generateUuid();
+
+    const cleanPayload: any = {
+      ...productPayload,
       id: productId,
-      tenant_id: activeTenantId,
-      product_name: cleanPayload.product_name || 'General Product',
-      purchase_price: Number(cleanPayload.purchase_price || 0),
-      selling_price: Number(cleanPayload.selling_price || 0),
-      current_stock: Number(cleanPayload.current_stock || 0),
-      min_stock_level: Number(cleanPayload.min_stock_level || 10),
-      created_at: new Date().toISOString()
-    } as Product;
+      product_name: productPayload.product_name || 'General Product',
+      purchase_price: Number(productPayload.purchase_price || 0),
+      selling_price: Number(productPayload.selling_price || 0),
+      current_stock: Number(productPayload.current_stock || 0),
+      min_stock_level: Number(productPayload.min_stock_level || 10)
+    };
 
     // 1. Instant local cache and UI state update (0ms latency!)
     try {
@@ -165,40 +75,32 @@ export function useInventory(tenantId: string, businessType?: string) {
       const localList: Product[] = JSON.parse(localStr);
       const existingIdx = localList.findIndex(p => p.id === productId);
       if (existingIdx >= 0) {
-        localList[existingIdx] = { ...localList[existingIdx], ...newProdObj };
+        localList[existingIdx] = { ...localList[existingIdx], ...cleanPayload };
       } else {
-        localList.unshift(newProdObj);
+        localList.unshift(cleanPayload);
       }
       localStorage.setItem('lk_products', JSON.stringify(localList));
       setProducts(localList);
     } catch (err) {}
 
-    // 2. Non-blocking asynchronous remote Supabase sync in background
+    // 2. Non-blocking asynchronous remote Supabase upsert in background
     (async () => {
       try {
-        if (cleanPayload.id && isUuid(cleanPayload.id)) {
-          const { error } = await supabase.from('products').update(cleanPayload).eq('id', cleanPayload.id);
-          if (error && (error.message?.includes('column') || (error as any).code === 'PGRST204')) {
-            delete (cleanPayload as any).dealer_price;
-            delete (cleanPayload as any).mrp;
-            delete (cleanPayload as any).gst;
-            delete (cleanPayload as any).godown;
-            delete (cleanPayload as any).rack_number;
-            delete (cleanPayload as any).shelf_number;
-            await supabase.from('products').update(cleanPayload).eq('id', cleanPayload.id);
-          }
-        } else {
-          const insertPayload = { ...cleanPayload, tenant_id: activeTenantId };
-          const { error } = await supabase.from('products').insert(insertPayload);
-          if (error && (error.message?.includes('column') || (error as any).code === 'PGRST204')) {
-            delete (insertPayload as any).dealer_price;
-            delete (insertPayload as any).mrp;
-            delete (insertPayload as any).gst;
-            delete (insertPayload as any).godown;
-            delete (insertPayload as any).rack_number;
-            delete (insertPayload as any).shelf_number;
-            await supabase.from('products').insert(insertPayload);
-          }
+        const { error } = await supabase.from('products').upsert(cleanPayload);
+        if (error) {
+          console.warn('Supabase product upsert note:', error.message);
+          // Fallback core fields if extra custom columns fail schema check
+          const corePayload = {
+            id: cleanPayload.id,
+            product_name: cleanPayload.product_name,
+            purchase_price: cleanPayload.purchase_price,
+            selling_price: cleanPayload.selling_price,
+            current_stock: cleanPayload.current_stock,
+            min_stock_level: cleanPayload.min_stock_level,
+            unit: cleanPayload.unit || 'Pcs',
+            hsn: cleanPayload.hsn || null
+          };
+          await supabase.from('products').upsert(corePayload);
         }
       } catch (err) {
         console.warn('Supabase remote background save note:', err);
@@ -206,7 +108,7 @@ export function useInventory(tenantId: string, businessType?: string) {
     })();
 
     window.dispatchEvent(new Event('storage'));
-    return newProdObj;
+    return cleanPayload;
   };
 
   const deleteProduct = (productId: string) => {
