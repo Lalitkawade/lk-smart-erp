@@ -1,9 +1,64 @@
-import { StrictMode } from 'react';
+import React, { StrictMode, Component, ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
 import App from './App.tsx';
 
-// Global UX Improvement: Throughout the web app, when user focuses/clicks any numeric input or field containing default '0', auto-select all text so typing immediately replaces it with clean entry without leading zeroes.
+interface ErrorBoundaryProps {
+  children: ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  errorMsg: string;
+}
+
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false, errorMsg: '' };
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, errorMsg: error?.message || 'Application encountered an unexpected error.' };
+  }
+
+  componentDidCatch(error: Error, errorInfo: any) {
+    console.error('React Root ErrorBoundary caught exception:', error, errorInfo);
+  }
+
+  handleReload = () => {
+    localStorage.removeItem('lk_session');
+    window.location.reload();
+  };
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-center">
+          <div className="max-w-md w-full bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-2xl space-y-4">
+            <div className="w-14 h-14 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-full flex items-center justify-center mx-auto text-2xl">
+              <i className="fa-solid fa-triangle-exclamation"></i>
+            </div>
+            <h1 className="text-xl font-bold text-white tracking-tight">LK Hardware ERP</h1>
+            <p className="text-sm text-slate-400">Application recovered from a session sync issue.</p>
+            <div className="p-3 bg-slate-800/60 rounded-lg text-xs text-slate-300 font-mono text-left overflow-auto max-h-24">
+              {this.state.errorMsg}
+            </div>
+            <button
+              onClick={this.handleReload}
+              className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold rounded-xl shadow-lg transition active:scale-95 cursor-pointer text-sm"
+            >
+              <i className="fa-solid fa-rotate-right mr-2"></i> Reload & Reset Session
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// Global UX Improvement: Throughout the web app, when user focuses/clicks any numeric input or field containing default '0', auto-select all text
 window.addEventListener('focusin', (e) => {
   const target = e.target as HTMLInputElement;
   if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
@@ -28,17 +83,19 @@ window.addEventListener('click', (e) => {
   }
 }, true);
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>
-);
-
-// Register Service Worker for Offline PWA Support
+// Clean up any stale service workers to prevent cached stale HTML/JS on Vercel deployment
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js')
-      .then((reg) => console.log('PWA Service Worker registered:', reg.scope))
-      .catch((err) => console.error('PWA Service Worker registration failed:', err));
+  navigator.serviceWorker.getRegistrations().then((registrations) => {
+    for (let registration of registrations) {
+      registration.unregister();
+    }
   });
 }
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
+  </StrictMode>
+);
