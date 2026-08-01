@@ -94,13 +94,17 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
 
   // 2. Calculate Financial stats based on filtered data
   const stats = useMemo(() => {
-    const totalSales = filteredData.sales.reduce((acc, s) => acc + Number(s.total_amount || 0), 0);
-    const rawPurchases = filteredData.purchases.reduce((acc, p) => acc + Number(p.total_amount || 0), 0);
-    const totalExpenses = filteredData.expenses.reduce((acc, e) => acc + Number(e.amount || 0), 0);
+    const totalSales = filteredData.sales.reduce((acc, s) => acc + Number(s.total_amount || (s as any).amount || (s as any).grand_total || 0), 0);
+    const rawPurchases = filteredData.purchases.reduce((acc, p) => acc + Number(p.total_amount || (p as any).amount || (p as any).grand_total || 0), 0);
+    const totalExpenses = filteredData.expenses.reduce((acc, e) => acc + Number(e.amount || (e as any).total_amount || 0), 0);
     
     // Total Inventory Valuation (Current Unsold Physical Stock Value)
     const stockValuation = products.reduce(
-      (acc, p) => acc + Number(p.purchase_price || 0) * (p.current_stock || 0),
+      (acc, p) => {
+        const price = Number(p.purchase_price || (p as any).cost_price || p.selling_price || (p as any).price || 0);
+        const stock = Number(p.current_stock || (p as any).stock || 0);
+        return acc + (price * stock);
+      },
       0
     );
 
@@ -110,7 +114,7 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
       const billCogs = items.reduce((iAcc: number, item: any) => {
         const qty = Number(item.qty || 1);
         const prod = products.find(p => p.id === (item.product_id || item.product?.id));
-        const costPrice = Number(prod?.purchase_price || item.purchase_price || 0);
+        const costPrice = Number(prod?.purchase_price || prod?.selling_price || item.purchase_price || item.rate || 0);
         return iAcc + (qty * costPrice);
       }, 0);
       return acc + billCogs;
@@ -124,8 +128,13 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
     const cogs = itemizedCOGS > 0 ? itemizedCOGS : Math.max(0, syncedPurchases - stockValuation);
     const netProfit = totalSales - cogs - totalExpenses;
 
-    const vendorPending = suppliers.reduce((acc, s) => acc + Number(s.outstanding || 0), 0);
-    const customerPending = customers.reduce((acc, c) => acc + Number(c.outstanding || 0), 0);
+    const supplierDues = suppliers.reduce((acc, s) => acc + Number(s.outstanding || (s as any).due_amount || (s as any).balance || 0), 0);
+    const purchaseDues = filteredData.purchases.reduce((acc, p) => acc + Number(p.due_amount || (p as any).pending_amount || 0), 0);
+    const vendorPending = supplierDues > 0 ? supplierDues : purchaseDues;
+
+    const customerDues = customers.reduce((acc, c) => acc + Number(c.outstanding || (c as any).due_amount || (c as any).balance || 0), 0);
+    const salesDues = filteredData.sales.reduce((acc, s) => acc + Number(s.due_amount || (s as any).pending_amount || 0), 0);
+    const customerPending = customerDues > 0 ? customerDues : salesDues;
 
     return {
       sales: totalSales,

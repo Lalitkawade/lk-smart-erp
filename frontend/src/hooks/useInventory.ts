@@ -2,6 +2,93 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../api/supabase';
 import type { Product } from '../types/erp.types';
 
+const DEFAULT_HARDWARE_PRODUCTS: Product[] = [
+  {
+    id: 'prod-seed-1',
+    tenant_id: 'default-hardware-erp',
+    product_name: 'ULTRATECH CEMENT BAG (50KG)',
+    hsn: '2523',
+    purchase_price: 340,
+    selling_price: 390,
+    current_stock: 120,
+    min_stock_level: 25,
+    unit: 'Bags',
+    p_unit: 'Bags',
+    s_unit: 'Bags',
+    warehouse_location: 'Godown A - Rack 1'
+  },
+  {
+    id: 'prod-seed-2',
+    tenant_id: 'default-hardware-erp',
+    product_name: 'STAINLESS STEEL DOOR HINGES (4 INCH)',
+    hsn: '8302',
+    purchase_price: 45,
+    selling_price: 75,
+    current_stock: 350,
+    min_stock_level: 50,
+    unit: 'Pairs',
+    p_unit: 'Box',
+    s_unit: 'Pairs',
+    warehouse_location: 'Shelf 3B'
+  },
+  {
+    id: 'prod-seed-3',
+    tenant_id: 'default-hardware-erp',
+    product_name: 'SUPREME PVC PIPE 110MM (6 METER)',
+    hsn: '3917',
+    purchase_price: 420,
+    selling_price: 540,
+    current_stock: 45,
+    min_stock_level: 10,
+    unit: 'Pcs',
+    p_unit: 'Bundle',
+    s_unit: 'Pcs',
+    warehouse_location: 'Outside Pipe Yard'
+  },
+  {
+    id: 'prod-seed-4',
+    tenant_id: 'default-hardware-erp',
+    product_name: 'GALVANIZED IRON WIRE NAILS (2 INCH)',
+    hsn: '7317',
+    purchase_price: 65,
+    selling_price: 90,
+    current_stock: 80,
+    min_stock_level: 15,
+    unit: 'Kg',
+    p_unit: 'Box (20kg)',
+    s_unit: 'Kg',
+    warehouse_location: 'Counter Drawer 1'
+  },
+  {
+    id: 'prod-seed-5',
+    tenant_id: 'default-hardware-erp',
+    product_name: 'ASIAN PAINTS TRACTOR EMULSION (20 LITRE)',
+    hsn: '3209',
+    purchase_price: 2100,
+    selling_price: 2650,
+    current_stock: 18,
+    min_stock_level: 5,
+    unit: 'Buckets',
+    p_unit: 'Buckets',
+    s_unit: 'Buckets',
+    warehouse_location: 'Paint Section Shelf A'
+  },
+  {
+    id: 'prod-seed-6',
+    tenant_id: 'default-hardware-erp',
+    product_name: 'ANCHOR ROMA 6A 1-WAY MODULAR SWITCH',
+    hsn: '8536',
+    purchase_price: 22,
+    selling_price: 38,
+    current_stock: 200,
+    min_stock_level: 30,
+    unit: 'Pcs',
+    p_unit: 'Box (20pcs)',
+    s_unit: 'Pcs',
+    warehouse_location: 'Electrical Rack 2'
+  }
+];
+
 export function useInventory(tenantId: string, businessType?: string) {
   // 1. Instant local initial state load (0ms latency)
   const [products, setProducts] = useState<Product[]>(() => {
@@ -12,10 +99,10 @@ export function useInventory(tenantId: string, businessType?: string) {
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
     } catch (e) {}
-    return [];
+    return DEFAULT_HARDWARE_PRODUCTS;
   });
 
-  const [isLoading, setIsLoading] = useState<boolean>(() => products.length === 0);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
   const isUuid = (id: string) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
@@ -36,7 +123,9 @@ export function useInventory(tenantId: string, businessType?: string) {
         remoteProducts.forEach(p => { if (p && p.id) prodMap.set(p.id, p); });
         localList.forEach(p => { if (p && p.id && !prodMap.has(p.id)) prodMap.set(p.id, p); });
 
-        const combined = Array.from(prodMap.values());
+        let combined = Array.from(prodMap.values());
+        if (combined.length === 0) combined = DEFAULT_HARDWARE_PRODUCTS;
+
         setProducts(combined);
         try { localStorage.setItem('lk_products', JSON.stringify(combined)); } catch (e) {}
       }
