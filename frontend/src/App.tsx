@@ -73,6 +73,7 @@ export default function App() {
   // Auth form states
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [role, setRole] = useState('Owner');
   const [authLoading, setAuthLoading] = useState(false);
 
@@ -328,8 +329,24 @@ export default function App() {
 
             <div>
               <label className="block text-xs font-semibold text-slate-400 mb-1">Password</label>
-              <input type="password" className="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                placeholder="••••••••" required value={password} onChange={(e) => setPassword(e.target.value)} />
+              <div className="relative">
+                <input 
+                  type={showPassword ? "text" : "password"} 
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 pr-10 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  placeholder="••••••••" 
+                  required 
+                  value={password} 
+                  onChange={(e) => setPassword(e.target.value)} 
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition p-1"
+                  title={showPassword ? "Hide password" : "Show password"}
+                >
+                  <i className={`fa-solid ${showPassword ? 'fa-eye-slash' : 'fa-eye'} text-sm`}></i>
+                </button>
+              </div>
             </div>
 
             <button type="submit" disabled={authLoading} className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold p-3 rounded-lg text-sm transition">
