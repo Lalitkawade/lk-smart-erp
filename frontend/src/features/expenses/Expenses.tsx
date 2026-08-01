@@ -167,12 +167,12 @@ export default function Expenses({ autoOpenModal, onModalClosed }: ExpensesProps
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex justify-between items-center mb-6 bg-secondary border border-border p-6 rounded-xl shadow-md flex-wrap gap-4">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 mb-6 bg-secondary border border-border p-4 sm:p-6 rounded-xl shadow-md">
         <div>
           <h2 className="text-xl font-bold text-foreground">Expenses Ledger</h2>
           <p className="text-xs text-textMuted mt-1">Audit daily store operational costs and administrative cash outflows</p>
         </div>
-        <button className="px-4 py-2 bg-emerald-500 text-slate-950 font-bold rounded-lg text-sm hover:bg-emerald-400" onClick={handleOpenAdd}>
+        <button className="w-full sm:w-auto px-4 py-2 bg-emerald-500 text-slate-950 font-bold rounded-lg text-sm hover:bg-emerald-400 text-center shrink-0" onClick={handleOpenAdd}>
           Log Store Expense
         </button>
       </div>

@@ -376,14 +376,14 @@ export default function ExcelExport() {
   return (
     <div className="space-y-6 animate-fade-in max-w-6xl mx-auto">
       {/* Header section */}
-      <div className="flex justify-between items-center mb-6 bg-secondary border border-border p-6 rounded-xl shadow-md">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 mb-6 bg-secondary border border-border p-4 sm:p-6 rounded-xl shadow-md">
         <div>
           <h2 className="text-xl font-bold text-foreground">Spreadsheet Data Export Hub</h2>
           <p className="text-xs text-textMuted mt-1">
             Export structured business datasets from local store ledger tables into high-compatibility Microsoft Excel workbooks
           </p>
         </div>
-        <div className="text-[10px] font-bold text-emerald-455 border border-emerald-900 bg-emerald-955 px-3 py-1 rounded-full uppercase tracking-wider">
+        <div className="text-[10px] font-bold text-emerald-455 border border-emerald-900 bg-emerald-955 px-3 py-1 rounded-full uppercase tracking-wider shrink-0">
           Format: .xlsx (Excel)
         </div>
       </div>

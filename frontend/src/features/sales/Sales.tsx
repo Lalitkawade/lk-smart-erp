@@ -404,13 +404,13 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
   }, [saleLines, searchQuery]);
 
   return (
-    <div className="bg-secondary border border-border rounded-xl p-6">
-      <div className="flex justify-between items-center mb-6">
+    <div className="bg-secondary border border-border rounded-xl p-4 sm:p-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 mb-6">
         <div>
           <h2 className="text-xl font-bold text-foreground">Sales</h2>
           <p className="text-xs text-textMuted mt-1">Audit customer material sales and POS receipts</p>
         </div>
-        <button className="px-4 py-2 bg-emerald-500 text-slate-950 font-bold rounded-lg text-sm hover:bg-emerald-400" onClick={() => setBillingModal(true)}>
+        <button className="w-full sm:w-auto px-4 py-2 bg-emerald-500 text-slate-950 font-bold rounded-lg text-sm hover:bg-emerald-400 text-center shrink-0" onClick={() => setBillingModal(true)}>
           New Invoice Billing
         </button>
       </div>
