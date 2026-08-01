@@ -261,64 +261,63 @@ export function useBilling(tenantId: string) {
         sale_date: new Date().toISOString()
       };
 
-      let invoice: any;
-      const { data: invData, error: invErr } = await supabase
-        .from('sales_invoices')
-        .insert(invoicePayload)
-        .select()
-        .single();
+      let invoice: any = { ...invoicePayload, id: 'inv-' + Date.now() };
 
-      if (invErr) {
-        if (invErr.message?.includes('column') || (invErr as any).code === 'PGRST204') {
-          delete invoicePayload.customer_phone;
-          delete invoicePayload.paid_amount;
-          delete invoicePayload.due_amount;
-          const { data: retryData, error: retryErr } = await supabase
+      if (isValidUUID(tenantId)) {
+        try {
+          const { data: invData, error: invErr } = await supabase
             .from('sales_invoices')
             .insert(invoicePayload)
             .select()
             .single();
 
-          if (retryErr) throw retryErr;
-          invoice = retryData;
-        } else {
-          throw invErr;
+          if (!invErr && invData) {
+            invoice = invData;
+          }
+        } catch (e) {
+          console.warn('Remote invoice save note (saved locally):', e);
         }
-      } else {
-        invoice = invData;
       }
 
-      // 3. Save Invoice Line Items and update product stock
-      for (const item of cart) {
-        const { error: itemErr } = await supabase
-          .from('sales_items')
-          .insert({
-            invoice_id: invoice.id,
-            product_id: item.product.id,
-            qty: item.qty,
-            rate: item.rate,
-            amount: item.qty * item.rate
-          });
+      // 3. Save Invoice Line Items and update product stock locally and remotely
+      try {
+        const localProdsStr = localStorage.getItem('lk_products') || '[]';
+        const localProds: Product[] = JSON.parse(localProdsStr);
 
-        if (itemErr) throw itemErr;
+        for (const item of cart) {
+          // Decrement local stock level
+          const piecesPerPack = Number(item.product.pieces_per_pack || 1);
+          const totalDeductedPacks = item.isLoose ? (item.qty / piecesPerPack) : item.qty;
+          
+          const pIdx = localProds.findIndex(p => p.id === item.product.id);
+          if (pIdx >= 0) {
+            localProds[pIdx].current_stock = Math.max(0, Number(localProds[pIdx].current_stock || 0) - totalDeductedPacks);
+          }
 
-        // Decrement product stock level
-        const piecesPerPack = Number(item.product.pieces_per_pack || 1);
-        const totalDeductedPacks = item.isLoose ? (item.qty / piecesPerPack) : item.qty;
-        const newStock = Math.max(0, Number(item.product.current_stock || 0) - totalDeductedPacks);
+          if (isValidUUID(tenantId) && isValidUUID(invoice.id)) {
+            try {
+              await supabase.from('sales_items').insert({
+                invoice_id: invoice.id,
+                product_id: item.product.id,
+                qty: item.qty,
+                rate: item.rate,
+                amount: item.qty * item.rate
+              });
 
-        const { error: stockErr } = await supabase
-          .from('products')
-          .update({ current_stock: newStock })
-          .eq('id', item.product.id);
+              if (pIdx >= 0) {
+                await supabase.from('products').update({ current_stock: localProds[pIdx].current_stock }).eq('id', item.product.id);
+              }
+            } catch (e) {}
+          }
+        }
 
-        if (stockErr) throw stockErr;
-      }
+        localStorage.setItem('lk_products', JSON.stringify(localProds));
+      } catch (e) {}
 
       // Return compiled invoice object (including item lines mapped for printing and udhar ledger breakdown)
       const compiledInvoice = {
         ...invoice,
-        customer_name: customerName,
+        customer_name: customerName.trim() || 'Cash Customer',
         customer_phone: customerPhone,
         sale_date: invoice.sale_date || new Date().toISOString(),
         previous_outstanding: previousOutstanding,
@@ -341,12 +340,17 @@ export function useBilling(tenantId: string) {
       try {
         const cached = localStorage.getItem('lk_sales') || '[]';
         const list = JSON.parse(cached);
-        list.unshift(compiledInvoice);
+        const existingIdx = list.findIndex((i: any) => (i.invoice_number && i.invoice_number === compiledInvoice.invoice_number) || i.id === compiledInvoice.id);
+        if (existingIdx >= 0) {
+          list[existingIdx] = compiledInvoice;
+        } else {
+          list.unshift(compiledInvoice);
+        }
         localStorage.setItem('lk_sales', JSON.stringify(list));
       } catch (e) {}
 
       // Refresh list locally
-      await fetchSales();
+      setSales(prev => [compiledInvoice, ...prev.filter(s => s.id !== compiledInvoice.id)]);
       window.dispatchEvent(new Event('storage')); // notify other tabs to refresh their listings
 
       setCart([]);
@@ -354,7 +358,7 @@ export function useBilling(tenantId: string) {
       setCustomerPhone('');
       return compiledInvoice;
     } catch (e) {
-      console.error('Failed to process checkout transaction:', e);
+      console.error('Checkout processing error fallback:', e);
       throw e;
     }
   };

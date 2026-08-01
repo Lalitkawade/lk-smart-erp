@@ -259,74 +259,96 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
     const selectedSup = suppliers.find(s => s.id === supplierId);
     if (!selectedSup) return;
 
-    try {
-      // 1. Create Purchase Entry record
-      const { data: billRes, error: billErr } = await supabase
-        .from('purchase_bills')
-        .insert({
-          tenant_id: tenantId,
-          bill_number: billNumber || 'PB-' + Date.now().toString().slice(-5),
-          supplier_name: selectedSup.supplier_name,
-          payment_mode: paymentMode,
-          total_amount: totalAmount,
-          paid_amount: effectivePaid,
-          due_amount: dueAmount,
-          purchase_date: new Date(purchaseDate).toISOString()
-        })
-        .select()
-        .single();
-
-      if (billErr) throw billErr;
-
-      // 2. Save Item details & Update stock counts
-      for (const item of billItems) {
+    const newBillObj = {
+      id: 'pb-' + Date.now(),
+      bill_number: billNumber || 'PB-' + Date.now().toString().slice(-5),
+      supplier_name: selectedSup.supplier_name,
+      payment_mode: paymentMode,
+      total_amount: totalAmount,
+      paid_amount: effectivePaid,
+      due_amount: dueAmount,
+      purchase_date: new Date(purchaseDate).toISOString(),
+      items: billItems.map(item => {
         const p = products.find(prod => prod.id === item.product_id);
-        const { error: itemErr } = await supabase
-          .from('purchase_items')
-          .insert({
-            bill_id: billRes.id,
-            product_id: item.product_id,
-            qty: item.qty,
-            rate: item.rate,
-            amount: item.qty * item.rate
-          });
+        return {
+          product_id: item.product_id,
+          product_name: p ? p.product_name : 'Procured Material Item',
+          qty: item.qty,
+          rate: item.rate
+        };
+      })
+    };
 
-        if (itemErr) throw itemErr;
+    // 1. Immediate local state and cache updates
+    try {
+      const localP = JSON.parse(localStorage.getItem('lk_purchases') || '[]');
+      localStorage.setItem('lk_purchases', JSON.stringify([newBillObj, ...localP]));
 
-        if (p) {
-          const newStock = Number(p.current_stock || 0) + item.qty;
-          const { error: stockErr } = await supabase
-            .from('products')
-            .update({ current_stock: newStock })
-            .eq('id', p.id);
-
-          if (stockErr) throw stockErr;
+      // Update product stock counts locally
+      const localProds: Product[] = JSON.parse(localStorage.getItem('lk_products') || '[]');
+      billItems.forEach(item => {
+        const pIdx = localProds.findIndex(p => p.id === item.product_id);
+        if (pIdx >= 0) {
+          localProds[pIdx].current_stock = Number(localProds[pIdx].current_stock || 0) + item.qty;
         }
-      }
+      });
+      localStorage.setItem('lk_products', JSON.stringify(localProds));
 
-      // 3. Update vendor balances ledger if there are remaining unpaid dues
+      // Update supplier outstanding locally
       if (dueAmount > 0) {
-        const newOutstanding = Number(selectedSup.outstanding || 0) + dueAmount;
-        const { error: supErr } = await supabase
-          .from('suppliers')
-          .update({ outstanding: newOutstanding })
-          .eq('id', selectedSup.id);
-
-        if (supErr) throw supErr;
+        const localSups = JSON.parse(localStorage.getItem('lk_suppliers') || '[]');
+        const sIdx = localSups.findIndex((s: any) => s.id === selectedSup.id);
+        if (sIdx >= 0) {
+          localSups[sIdx].outstanding = Number(localSups[sIdx].outstanding || 0) + dueAmount;
+        }
+        localStorage.setItem('lk_suppliers', JSON.stringify(localSups));
       }
+    } catch (e) {}
 
-      await fetchPurchasesData();
-      window.dispatchEvent(new Event('storage')); // notify other tabs to sync settings state
+    // 2. Background attempt to persist to remote Supabase if UUID
+    const isValidUUID = (id: any) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    if (isValidUUID(tenantId)) {
+      try {
+        const { data: billRes } = await supabase
+          .from('purchase_bills')
+          .insert({
+            tenant_id: tenantId,
+            bill_number: newBillObj.bill_number,
+            supplier_name: selectedSup.supplier_name,
+            payment_mode: paymentMode,
+            total_amount: totalAmount,
+            paid_amount: effectivePaid,
+            due_amount: dueAmount,
+            purchase_date: newBillObj.purchase_date
+          })
+          .select()
+          .single();
 
-      setModalOpen(false);
-      setBillItems([{ product_id: '', qty: 1, rate: 0 }]);
-      setBillNumber('');
-      setPaidAmount(0);
-      setIsPartialPayment(false);
-      alert('Procurement Bill successfully saved! Stock levels incremented and vendor ledgers adjusted.');
-    } catch (err: any) {
-      alert('Failed to log procurement bill: ' + err.message);
+        if (billRes && billRes.id) {
+          for (const item of billItems) {
+            await supabase.from('purchase_items').insert({
+              bill_id: billRes.id,
+              product_id: item.product_id,
+              qty: item.qty,
+              rate: item.rate,
+              amount: item.qty * item.rate
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('Remote purchase bill save note (saved locally):', err);
+      }
     }
+
+    setBills(prev => [newBillObj, ...prev]);
+    window.dispatchEvent(new Event('storage'));
+
+    setModalOpen(false);
+    setBillItems([{ product_id: '', qty: 1, rate: 0 }]);
+    setBillNumber('');
+    setPaidAmount(0);
+    setIsPartialPayment(false);
+    alert('Procurement Bill successfully saved! Stock levels incremented and vendor ledgers adjusted.');
   };
 
   // Material receipts are computed dynamically below

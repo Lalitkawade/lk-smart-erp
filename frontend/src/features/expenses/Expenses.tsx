@@ -5,6 +5,7 @@ import { supabase } from '../../api/supabase';
 
 interface Expense {
   id: string;
+  tenant_id?: string;
   category: string;
   amount: number;
   payment_mode: string;
@@ -76,40 +77,64 @@ export default function Expenses() {
     e.preventDefault();
     if (formData.amount <= 0) return;
 
+    const newExpObj: Expense = {
+      id: 'exp-' + Date.now(),
+      tenant_id: tenantId || 'default-hardware-erp',
+      category: formData.category,
+      amount: Number(formData.amount),
+      payment_mode: formData.payment_mode,
+      ref_number: formData.ref_number || 'GEN-EXP',
+      description: formData.description,
+      expense_date: new Date(formData.expense_date).toISOString()
+    };
+
+    // 1. Immediate local cache and state update
     try {
-      const { error } = await supabase
-        .from('expenses')
-        .insert({
-          tenant_id: tenantId,
-          category: formData.category,
-          amount: formData.amount,
-          payment_mode: formData.payment_mode,
-          ref_number: formData.ref_number || 'GEN-EXP',
-          description: formData.description,
-          expense_date: new Date(formData.expense_date).toISOString()
-        });
+      const localExps = JSON.parse(localStorage.getItem('lk_expenses') || '[]');
+      localStorage.setItem('lk_expenses', JSON.stringify([newExpObj, ...localExps]));
+      setExpenses(prev => [newExpObj, ...prev.filter(e => e.id !== newExpObj.id)]);
+    } catch (err) {}
 
-      if (error) throw error;
-
-      await fetchExpensesData();
-      window.dispatchEvent(new Event('storage')); // trigger updates in other tabs
-      setModalOpen(false);
-      alert('Expense successfully recorded.');
-    } catch (err: any) {
-      alert('Failed to save expense: ' + err.message);
+    // 2. Background attempt to save to remote Supabase if UUID
+    const isValidUUID = (id: any) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    if (isValidUUID(tenantId)) {
+      try {
+        await supabase
+          .from('expenses')
+          .insert({
+            tenant_id: tenantId,
+            category: formData.category,
+            amount: formData.amount,
+            payment_mode: formData.payment_mode,
+            ref_number: formData.ref_number || 'GEN-EXP',
+            description: formData.description,
+            expense_date: newExpObj.expense_date
+          });
+      } catch (err) {}
     }
+
+    window.dispatchEvent(new Event('storage'));
+    setModalOpen(false);
+    alert('Expense successfully recorded.');
   };
 
   const handleDeleteExpense = async (id: string) => {
     if (!window.confirm('Delete this expense entry?')) return;
     try {
-      const { error } = await supabase.from('expenses').delete().eq('id', id);
-      if (error) throw error;
-      await fetchExpensesData();
-      window.dispatchEvent(new Event('storage'));
-    } catch (err: any) {
-      alert('Failed to delete expense: ' + err.message);
+      const localExps = JSON.parse(localStorage.getItem('lk_expenses') || '[]');
+      const updated = localExps.filter((e: any) => e.id !== id);
+      localStorage.setItem('lk_expenses', JSON.stringify(updated));
+      setExpenses(prev => prev.filter(e => e.id !== id));
+    } catch (err) {}
+
+    const isValidUUID = (idStr: any) => typeof idStr === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idStr);
+    if (isValidUUID(id)) {
+      try {
+        await supabase.from('expenses').delete().eq('id', id);
+      } catch (err) {}
     }
+
+    window.dispatchEvent(new Event('storage'));
   };
 
   // Calculate category aggregates

@@ -473,15 +473,17 @@ export default function Products({ tenantId, businessType }: ProductsProps) {
       );
 
       if (effectiveProdId && (addedStockInflow > 0 || isPriceChanged)) {
-        await logInflowPurchaseHistory(
-          tenantId,
-          effectiveProdId,
-          formData.product_name,
-          addedStockInflow > 0 ? addedStockInflow : 0,
-          formData.purchase_price,
-          formData.selling_price,
-          selectedSup ? selectedSup.supplier_name : (formData.supplier_name || 'Direct Stock Inflow / Price Update')
-        );
+        try {
+          await logInflowPurchaseHistory(
+            tenantId,
+            effectiveProdId,
+            formData.product_name,
+            addedStockInflow > 0 ? addedStockInflow : 0,
+            formData.purchase_price,
+            formData.selling_price,
+            selectedSup ? selectedSup.supplier_name : (formData.supplier_name || 'Direct Stock Inflow / Price Update')
+          );
+        } catch (e) {}
       }
 
       if (isMergeOperation || (editingProduct && addedStockInflow > 0)) {

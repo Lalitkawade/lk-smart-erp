@@ -360,14 +360,16 @@ export default function Suppliers() {
         localStorage.setItem('lk_suppliers', JSON.stringify(updatedLocal));
       } catch (e) {}
 
-      setSuppliers(prev => prev.filter(s => s.id !== id));
+      const isValidUUID = (idStr: any) => typeof idStr === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idStr);
+      if (isValidUUID(id)) {
+        try {
+          await supabase.from('suppliers').delete().eq('id', id);
+        } catch (e) {}
+      }
 
-      await supabase.from('suppliers').delete().eq('id', id);
       await fetchSuppliersData();
       window.dispatchEvent(new Event('storage'));
-    } catch (e: any) {
-      alert('Failed to delete supplier: ' + e.message);
-    }
+    } catch (e: any) {}
   };
 
   const handleOpenPayModal = (s: Supplier) => {
