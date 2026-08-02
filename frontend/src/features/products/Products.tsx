@@ -801,7 +801,7 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
                 </div>
                 
                 {/* Margin Inline calculation */}
-                <div className="col-span-1 sm:col-span-2 bg-amber-500/10 p-3 rounded-xl border border-amber-500/30 text-xs flex justify-between items-center shadow-xs flex-wrap gap-2">
+                <div className="col-span-1 sm:col-span-2 bg-primary/10 p-3 rounded-xl border border-primary/30 text-xs flex justify-between items-center shadow-xs flex-wrap gap-2">
                   <span className="font-extrabold text-slate-900 dark:text-slate-100 flex items-center gap-1.5 uppercase tracking-wide">
                     <i className="fa-solid fa-chart-line text-primary"></i> Calculated Retail Margin (based on Purchase Cost):
                   </span>
@@ -825,7 +825,7 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
                         <button
                           type="button"
                           onClick={() => setIsEditingBaseStock(!isEditingBaseStock)}
-                          className="text-[10px] font-extrabold text-amber-500 hover:text-amber-400 underline flex items-center gap-1 cursor-pointer"
+                          className="text-[10px] font-extrabold text-primary hover:text-primary/80 underline flex items-center gap-1 cursor-pointer"
                         >
                           <i className={`fa-solid ${isEditingBaseStock ? 'fa-lock' : 'fa-pen-to-square'}`}></i> 
                           {isEditingBaseStock ? 'Lock Field' : '✏️ Correct / Edit Base Stock'}
@@ -837,7 +837,7 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
                         disabled={!isEditingBaseStock}
                         className={`w-full border rounded-lg p-2 font-mono font-bold transition ${
                           isEditingBaseStock 
-                            ? 'bg-background border-amber-500 text-foreground focus:outline-none focus:ring-2 focus:ring-amber-500/20' 
+                            ? 'bg-background border-primary text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20' 
                             : 'bg-background/50 border-border text-textMuted cursor-not-allowed opacity-80'
                         }`}
                         value={formData.current_stock === 0 ? '' : formData.current_stock} 
@@ -890,7 +890,7 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
                     <button
                       type="button"
                       onClick={() => setIsEditingTax(!isEditingTax)}
-                      className="text-[10px] font-extrabold text-amber-500 hover:text-amber-400 underline flex items-center gap-1 cursor-pointer"
+                      className="text-[10px] font-extrabold text-primary hover:text-primary/80 underline flex items-center gap-1 cursor-pointer"
                     >
                       <i className={`fa-solid ${isEditingTax ? 'fa-lock' : 'fa-pen-to-square'}`}></i>
                       {isEditingTax ? 'Lock Tax' : '✏️ Edit Tax Rate'}
@@ -900,7 +900,7 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
                     disabled={!isEditingTax} 
                     className={`w-full border rounded-lg p-2 font-semibold transition ${
                       isEditingTax 
-                        ? 'bg-background border-amber-500 text-foreground focus:outline-none' 
+                        ? 'bg-background border-primary text-foreground focus:outline-none' 
                         : 'bg-background/50 border-border/60 text-textMuted cursor-not-allowed opacity-75'
                     }`}
                     value={formData.gst || 0} 

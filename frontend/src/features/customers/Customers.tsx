@@ -477,10 +477,10 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
         </button>
         <button
           onClick={() => setFilterTab('outstanding')}
-          className={`py-2 px-3.5 rounded-t-lg transition flex items-center gap-1.5 ${filterTab === 'outstanding' ? 'bg-secondary border-t-2 border-x border-amber-600 text-amber-700 dark:text-amber-300 font-bold' : 'text-textMuted hover:text-foreground'}`}
+          className={`py-2 px-3.5 rounded-t-lg transition flex items-center gap-1.5 ${filterTab === 'outstanding' ? 'bg-secondary border-t-2 border-x border-primary text-primary font-bold' : 'text-textMuted hover:text-foreground'}`}
         >
           <span>⚠️ Pending Outstanding</span>
-          <span className="bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold">
+          <span className="bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold">
             {customers.filter(c => Number(c.outstanding || 0) > 0).length}
           </span>
         </button>
@@ -542,7 +542,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                     ₹{stats.totalPurchases.toFixed(2)}
                   </td>
                   <td className="py-3.5 text-right font-mono font-bold">
-                    <span className={hasUdhar ? 'text-amber-400 text-sm' : 'text-textMuted'}>
+                    <span className={hasUdhar ? 'text-primary font-bold text-sm' : 'text-textMuted'}>
                       ₹{Number(c.outstanding || 0).toFixed(2)}
                     </span>
                     <div className="text-[10px] text-textMuted font-mono">Limit: ₹{Number(c.credit_limit || 0).toLocaleString()}</div>
@@ -554,7 +554,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                     {stats.lastPaymentDate ? new Date(stats.lastPaymentDate).toLocaleDateString() : '-'}
                   </td>
                   <td className="py-3.5 text-center">
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase inline-block ${hasUdhar ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-primary/10 text-primary border border-primary/30'}`}>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase inline-block ${hasUdhar ? 'bg-primary/10 text-primary border border-primary/30' : 'bg-secondary border border-border text-textMuted'}`}>
                       {hasUdhar ? '⚠️ Pending' : '✓ No Due'}
                     </span>
                   </td>
@@ -811,7 +811,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                 </div>
                 <div>
                   <div className="text-textMuted text-[10px] uppercase font-bold">Active Udhar Dues</div>
-                  <div className="text-amber-400 font-bold font-mono text-sm print:text-black">₹{Number(statementCustomer.outstanding || 0).toFixed(2)}</div>
+                  <div className="text-primary font-bold font-mono text-sm print:text-black">₹{Number(statementCustomer.outstanding || 0).toFixed(2)}</div>
                   <div className="text-textMuted text-[10px]">Credit limit: ₹{Number(statementCustomer.credit_limit || 0).toLocaleString()}</div>
                 </div>
                 <div>

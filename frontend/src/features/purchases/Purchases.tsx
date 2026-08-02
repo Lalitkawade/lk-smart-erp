@@ -578,7 +578,7 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
                                 setVendorSearchQuery(s.supplier_name);
                                 setVendorDropdownOpen(false);
                               }}
-                              className={`p-2.5 hover:bg-background/80 cursor-pointer flex justify-between items-center transition ${supplierId === s.id ? 'bg-amber-500/10 font-black text-amber-400' : 'text-foreground'}`}
+                              className={`p-2.5 hover:bg-background/80 cursor-pointer flex justify-between items-center transition ${supplierId === s.id ? 'bg-primary/10 font-black text-primary' : 'text-foreground'}`}
                             >
                               <div className="space-y-0.5">
                                 <div className="text-xs font-bold uppercase">{s.supplier_name}</div>

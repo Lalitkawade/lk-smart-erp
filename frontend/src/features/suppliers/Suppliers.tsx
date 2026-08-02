@@ -755,7 +755,7 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
                 </div>
                 <div>
                   <div className="text-textMuted text-[10px] uppercase font-bold">Accounts Payable Balance</div>
-                  <div className="text-amber-500 font-bold font-mono text-sm print:text-black">₹{statementSupplier.outstanding.toLocaleString()}</div>
+                  <div className="text-primary font-bold font-mono text-sm print:text-black">₹{statementSupplier.outstanding.toLocaleString()}</div>
                   <div className="text-textMuted">Contact: {statementSupplier.phone}</div>
                   {statementSupplier.dob && (
                     <div className="text-[11px] text-pink-400 font-mono mt-0.5">🎂 Birthday: {new Date(statementSupplier.dob).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
@@ -789,7 +789,7 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
                               <td className="py-3 font-mono">{new Date(row.date).toLocaleDateString()}</td>
                               <td className="py-3 font-semibold text-foreground print:text-black">{row.type}</td>
                               <td className="py-3 font-mono">{row.ref}</td>
-                              <td className="py-3 text-right font-mono font-semibold text-amber-550 print:text-black">
+                              <td className="py-3 text-right font-mono font-semibold text-primary print:text-black">
                                 {!row.isCredit ? `₹${row.amount.toLocaleString()}` : '-'}
                               </td>
                               <td className="py-3 text-right font-mono font-semibold text-primary print:text-black">
