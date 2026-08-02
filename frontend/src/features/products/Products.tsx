@@ -545,8 +545,8 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
     <div className="bg-secondary border border-border rounded-xl p-4 sm:p-6 relative">
       {/* Non-blocking Floating Toast Banner Notification */}
       {toastMessage && (
-        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 bg-emerald-500 text-slate-950 px-5 py-2.5 rounded-full font-extrabold text-xs shadow-2xl flex items-center gap-2 border border-emerald-300 animate-bounce">
-          <i className="fa-solid fa-bolt text-sm"></i>
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 bg-primary text-white px-5 py-2.5 rounded-full font-extrabold text-xs shadow-2xl flex items-center gap-2 border border-primary/30 animate-bounce">
+          <i className="fa-solid fa-bolt text-sm text-amber-300"></i>
           <span>{toastMessage}</span>
         </div>
       )}
@@ -555,13 +555,13 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
           <h2 className="text-xl font-bold text-foreground">Products</h2>
           <p className="text-xs text-textMuted mt-1">Configure and manage standard product parameters</p>
         </div>
-        <button className="w-full sm:w-auto px-4 py-2 bg-emerald-500 text-slate-950 font-bold rounded-lg text-sm hover:bg-emerald-400 text-center shrink-0" onClick={handleOpenAdd}>
+        <button className="w-full sm:w-auto px-4 py-2 bg-primary hover:bg-primary/90 text-white font-bold rounded-lg text-sm text-center shrink-0 shadow-md transition active:scale-95 cursor-pointer" onClick={handleOpenAdd}>
           Add Product Item
         </button>
       </div>
 
       <div className="mb-4">
-        <input type="text" className="w-full bg-background border border-border text-foreground rounded-lg p-3 text-sm focus:outline-none focus:border-emerald-500 font-semibold" placeholder="Search products..."
+        <input type="text" className="w-full bg-background border border-border text-foreground rounded-lg p-3 text-sm focus:outline-none focus:border-primary font-semibold" placeholder="Search products..."
           value={search} onChange={(e) => setSearch(e.target.value)} />
       </div>
 

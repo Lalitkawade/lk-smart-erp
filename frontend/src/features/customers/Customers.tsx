@@ -451,8 +451,8 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
     <div className="space-y-6 animate-fade-in relative">
       {/* Floating Toast Notification Banner */}
       {toastMessage && (
-        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 bg-emerald-500 text-slate-950 px-5 py-2.5 rounded-full font-extrabold text-xs shadow-2xl flex items-center gap-2 border border-emerald-300 animate-bounce">
-          <i className="fa-solid fa-bolt text-sm"></i>
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 bg-primary text-white px-5 py-2.5 rounded-full font-extrabold text-xs shadow-2xl flex items-center gap-2 border border-primary/30 animate-bounce">
+          <i className="fa-solid fa-bolt text-sm text-amber-300"></i>
           <span>{toastMessage}</span>
         </div>
       )}
@@ -461,7 +461,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
           <h2 className="text-xl font-bold text-foreground">Customer Details & Account History</h2>
           <p className="text-xs text-textMuted mt-1">Manage customer profiles, purchase history, and outstanding ledgers</p>
         </div>
-        <button className="w-full sm:w-auto px-4 py-2 bg-emerald-500 text-slate-950 font-bold rounded-lg text-sm hover:bg-emerald-400 text-center shrink-0" onClick={handleOpenAdd}>
+        <button className="w-full sm:w-auto px-4 py-2 bg-primary hover:bg-primary/90 text-white font-bold rounded-lg text-sm text-center shrink-0 shadow-md transition active:scale-95 cursor-pointer" onClick={handleOpenAdd}>
           Register Customer
         </button>
       </div>
@@ -470,7 +470,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
       <div className="flex border-b border-border text-xs font-bold gap-2 overflow-x-auto pb-1">
         <button
           onClick={() => setFilterTab('all')}
-          className={`py-2 px-3.5 rounded-t-lg transition flex items-center gap-1.5 ${filterTab === 'all' ? 'bg-secondary border-t-2 border-x border-emerald-500 text-emerald-400' : 'text-textMuted hover:text-foreground'}`}
+          className={`py-2 px-3.5 rounded-t-lg transition flex items-center gap-1.5 ${filterTab === 'all' ? 'bg-secondary border-t-2 border-x border-primary text-primary' : 'text-textMuted hover:text-foreground'}`}
         >
           <span>👥 All Customers</span>
           <span className="bg-background px-1.5 py-0.5 rounded text-[10px] text-foreground font-mono">{customers.length}</span>

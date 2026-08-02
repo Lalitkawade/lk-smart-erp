@@ -172,7 +172,7 @@ export default function Expenses({ autoOpenModal, onModalClosed }: ExpensesProps
           <h2 className="text-xl font-bold text-foreground">Expenses Ledger</h2>
           <p className="text-xs text-textMuted mt-1">Audit daily store operational costs and administrative cash outflows</p>
         </div>
-        <button className="w-full sm:w-auto px-4 py-2 bg-emerald-500 text-slate-950 font-bold rounded-lg text-sm hover:bg-emerald-400 text-center shrink-0" onClick={handleOpenAdd}>
+        <button className="w-full sm:w-auto px-4 py-2 bg-primary hover:bg-primary/90 text-white font-bold rounded-lg text-sm text-center shrink-0 shadow-md transition active:scale-95 cursor-pointer" onClick={handleOpenAdd}>
           Log Store Expense
         </button>
       </div>
@@ -182,7 +182,7 @@ export default function Expenses({ autoOpenModal, onModalClosed }: ExpensesProps
         {/* Expenses List */}
         <div className="lg:col-span-2 space-y-4">
           <div className="mb-2">
-            <input type="text" className="w-full bg-secondary border border-border text-foreground rounded-lg p-3 text-sm focus:outline-none focus:border-emerald-500 font-semibold"
+            <input type="text" className="w-full bg-secondary border border-border text-foreground rounded-lg p-3 text-sm focus:outline-none focus:border-primary font-semibold"
               placeholder="Search expenses by category or description..."
               value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>

@@ -413,13 +413,13 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
           <h2 className="text-xl font-bold text-foreground">Sales</h2>
           <p className="text-xs text-textMuted mt-1">Audit customer material sales and POS receipts</p>
         </div>
-        <button className="w-full sm:w-auto px-4 py-2 bg-emerald-500 text-slate-950 font-bold rounded-lg text-sm hover:bg-emerald-400 text-center shrink-0" onClick={() => setBillingModal(true)}>
+        <button className="w-full sm:w-auto px-4 py-2 bg-primary hover:bg-primary/90 text-white font-bold rounded-lg text-sm text-center shrink-0 shadow-md transition active:scale-95 cursor-pointer" onClick={() => setBillingModal(true)}>
           New Invoice Billing
         </button>
       </div>
 
       <div className="mb-4">
-        <input type="text" className="w-full bg-background border border-border text-foreground rounded-lg p-3 text-sm focus:outline-none focus:border-emerald-500 font-semibold"
+        <input type="text" className="w-full bg-background border border-border text-foreground rounded-lg p-3 text-sm focus:outline-none focus:border-primary font-semibold"
           placeholder="Search sales by product name, HSN, or Customer Name..."
           value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
       </div>

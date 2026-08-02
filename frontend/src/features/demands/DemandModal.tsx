@@ -167,7 +167,7 @@ export default function DemandModal({ tenantId, isOpen, onClose, onNavigateToPro
                           onClose();
                           onNavigateToProducts(item.item_name);
                         }}
-                        className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-xs font-bold transition flex items-center gap-1 shadow-xs"
+                        className="px-2.5 py-1.5 bg-primary hover:bg-primary/90 text-white rounded text-xs font-bold transition flex items-center gap-1 shadow-xs cursor-pointer"
                         title="Add to product catalog"
                       >
                         <i className="fa-solid fa-box-open text-[10px]"></i> Add Product
