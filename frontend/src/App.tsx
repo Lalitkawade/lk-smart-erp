@@ -698,10 +698,10 @@ export default function App() {
 
           <div className="flex items-center gap-3 text-xs font-semibold">
             {/* Live Monospace Date & Time Widget */}
-            <div className="hidden lg:flex items-center gap-2 bg-slate-900 border border-slate-700 px-3 py-1.5 rounded-lg text-emerald-400 text-[11px] font-extrabold tracking-wide uppercase font-mono shadow-inner">
-              <i className="fa-regular fa-clock text-emerald-500 text-xs"></i>
+            <div className="hidden lg:flex items-center gap-2 bg-background border border-border px-3 py-1.5 rounded-lg text-textSecondary text-[11px] font-bold tracking-wide uppercase font-mono">
+              <i className="fa-regular fa-clock text-textMuted text-xs"></i>
               <span>{currentTime.toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}</span>
-              <span className="text-slate-600">|</span>
+              <span className="text-textMuted">|</span>
               <span>{currentTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}</span>
             </div>
 
