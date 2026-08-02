@@ -81,7 +81,32 @@ export function useDemandTracker(tenantId?: string) {
 
   useEffect(() => {
     fetchDemands();
+    
+    const handleSync = () => {
+      const cached = localStorage.getItem('lk_unstocked_demands');
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed)) {
+            setDemands(parsed);
+          }
+        } catch (e) {}
+      } else {
+        setDemands([]);
+      }
+    };
+
+    window.addEventListener('storage', handleSync);
+    window.addEventListener('lk_demand_updated', handleSync);
+    return () => {
+      window.removeEventListener('storage', handleSync);
+      window.removeEventListener('lk_demand_updated', handleSync);
+    };
   }, [tenantId]);
+
+  const notifySync = () => {
+    window.dispatchEvent(new Event('lk_demand_updated'));
+  };
 
   // Log or increment a requested item (0ms instant optimistic update)
   const logDemand = (rawItemName: string) => {
@@ -120,6 +145,7 @@ export function useDemandTracker(tenantId?: string) {
     // Update state & local storage immediately for instant rendering
     setDemands(updatedDemands);
     localStorage.setItem('lk_unstocked_demands', JSON.stringify(updatedDemands));
+    notifySync();
 
     // Non-blocking async background sync to Supabase
     if (tenantId) {
@@ -151,6 +177,7 @@ export function useDemandTracker(tenantId?: string) {
             if (data) {
               newDemandItem.id = data.id;
               localStorage.setItem('lk_unstocked_demands', JSON.stringify(updatedDemands));
+              notifySync();
             }
           }
         })(),
@@ -165,7 +192,7 @@ export function useDemandTracker(tenantId?: string) {
   const incrementDemand = async (id: string) => {
     const item = demands.find(d => d.id === id);
     if (!item) return;
-    await logDemand(item.item_name);
+    logDemand(item.item_name);
   };
 
   // Update min alert threshold for an individual item
@@ -174,6 +201,7 @@ export function useDemandTracker(tenantId?: string) {
     const updated = demands.map(d => d.id === id ? { ...d, min_alert_qty: val } : d);
     setDemands(updated);
     localStorage.setItem('lk_unstocked_demands', JSON.stringify(updated));
+    notifySync();
 
     if (tenantId) {
       try {
@@ -185,7 +213,6 @@ export function useDemandTracker(tenantId?: string) {
         console.warn('Supabase update notice for min_alert_qty:', e);
       }
     }
-    window.dispatchEvent(new Event('storage'));
   };
 
   // Remove/Dismiss demand item
@@ -193,6 +220,7 @@ export function useDemandTracker(tenantId?: string) {
     const updated = demands.filter(d => d.id !== id);
     setDemands(updated);
     localStorage.setItem('lk_unstocked_demands', JSON.stringify(updated));
+    notifySync();
 
     if (tenantId) {
       try {
@@ -204,7 +232,6 @@ export function useDemandTracker(tenantId?: string) {
         console.warn('Supabase delete notice:', e);
       }
     }
-    window.dispatchEvent(new Event('storage'));
   };
 
   // High demand warnings (count >= item.min_alert_qty || alertThreshold)
