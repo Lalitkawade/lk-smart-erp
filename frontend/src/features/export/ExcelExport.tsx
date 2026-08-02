@@ -329,7 +329,7 @@ export default function ExcelExport() {
       desc: 'Ledger of all sales receipts, checkout modes, client tags, and pending invoice dues.',
       icon: 'fa-file-invoice-dollar',
       count: dataState.sales.length,
-      bg: 'bg-emerald-955 text-emerald-400 border-emerald-900/30'
+      bg: 'bg-blue-955 text-blue-400 border-blue-900/30'
     },
     {
       key: 'purchases',
@@ -337,7 +337,7 @@ export default function ExcelExport() {
       desc: 'Records of supplier procurement vouchers, bill net values, and credit balances.',
       icon: 'fa-cart-shopping',
       count: dataState.purchases.length,
-      bg: 'bg-blue-955 text-blue-400 border-blue-900/30'
+      bg: 'bg-indigo-955 text-indigo-400 border-indigo-900/30'
     },
     {
       key: 'customers',
@@ -383,25 +383,25 @@ export default function ExcelExport() {
             Export structured business datasets from local store ledger tables into high-compatibility Microsoft Excel workbooks
           </p>
         </div>
-        <div className="text-[10px] font-bold text-emerald-455 border border-emerald-900 bg-emerald-955 px-3 py-1 rounded-full uppercase tracking-wider shrink-0">
+        <div className="text-[10px] font-bold text-primary border border-primary/40 bg-primary/10 px-3 py-1 rounded-full uppercase tracking-wider shrink-0">
           Format: .xlsx (Excel)
         </div>
       </div>
 
       {/* Unified Workbook Export Card */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-emerald-600 via-teal-600 to-green-600 rounded-2xl p-6 md:p-8 text-slate-950 shadow-xl flex flex-col md:flex-row items-center justify-between gap-6 hover:shadow-2xl hover:scale-[1.005] transition-all duration-300">
+      <div className="relative overflow-hidden bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 rounded-2xl p-6 md:p-8 text-white shadow-xl flex flex-col md:flex-row items-center justify-between gap-6 hover:shadow-2xl hover:scale-[1.005] transition-all duration-300">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-white/10 via-transparent to-transparent pointer-events-none"></div>
         <div className="space-y-2 flex-1 z-10">
           <div className="flex items-center space-x-3 text-white">
             <div className="p-2.5 bg-white/20 rounded-xl">
-              <i className="fa-solid fa-file-excel text-3xl text-emerald-100"></i>
+              <i className="fa-solid fa-file-excel text-3xl text-blue-100"></i>
             </div>
             <div>
               <h3 className="text-lg md:text-xl font-black tracking-tight text-white uppercase">Export Unified Business Workbook</h3>
-              <p className="text-[10px] text-emerald-200 font-bold uppercase tracking-widest mt-0.5">Recommended Action</p>
+              <p className="text-[10px] text-blue-200 font-bold uppercase tracking-widest mt-0.5">Recommended Action</p>
             </div>
           </div>
-          <p className="text-emerald-50 text-xs max-w-2xl leading-relaxed font-semibold">
+          <p className="text-blue-50 text-xs max-w-2xl leading-relaxed font-semibold">
             Generates a multi-sheet spreadsheet containing separate tabs for the Executive Summary, Products Catalog, Sales Invoices, Purchase Bills, Customer Directory, Supplier Registry, Expenses Ledger, and Payment vouchers.
           </p>
         </div>
@@ -409,11 +409,11 @@ export default function ExcelExport() {
           <button
             onClick={handleExportAll}
             disabled={exporting}
-            className="w-full md:w-auto bg-slate-950 hover:bg-slate-900 text-emerald-400 font-black px-8 py-4 rounded-xl flex items-center justify-center space-x-3 shadow-lg hover:scale-[1.03] active:scale-[0.97] transition-all duration-150 border border-emerald-900"
+            className="w-full md:w-auto bg-slate-950 hover:bg-slate-900 text-white font-black px-8 py-4 rounded-xl flex items-center justify-center space-x-3 shadow-lg hover:scale-[1.03] active:scale-[0.97] transition-all duration-150 border border-primary/40 cursor-pointer"
           >
             {exporting ? (
               <>
-                <div className="w-4 h-4 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin"></div>
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                 <span className="text-xs uppercase tracking-wider">Packaging Data ({exportProgress}%)</span>
               </>
             ) : (

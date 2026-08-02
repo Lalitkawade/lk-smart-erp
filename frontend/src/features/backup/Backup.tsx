@@ -78,7 +78,7 @@ export default function Backup() {
         {/* Export Card */}
         <div className="bg-secondary border border-border p-6 rounded-xl shadow-lg flex flex-col justify-between space-y-6 hover:border-slate-350 dark:hover:border-slate-700 transition">
           <div>
-            <div className="w-12 h-12 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-xl mb-4">
+            <div className="w-12 h-12 rounded-lg bg-primary/10 text-primary flex items-center justify-center text-xl mb-4">
               <i className="fa-solid fa-file-export"></i>
             </div>
             <h3 className="text-sm font-bold text-foreground">Generate Full System Backup</h3>
@@ -86,7 +86,7 @@ export default function Backup() {
               Downloads a compressed snapshot of your entire shop ledger, including products, prices, billing invoices, customer outstanding balances, and expense trackers. Store this file securely.
             </p>
           </div>
-          <button className="w-full py-3 bg-emerald-500 text-slate-950 font-bold rounded-lg text-xs hover:bg-emerald-400 transition" onClick={handleExportBackup}>
+          <button className="w-full py-3 bg-primary hover:bg-primary/90 text-white font-bold rounded-lg text-xs transition shadow-md cursor-pointer" onClick={handleExportBackup}>
             Export Database (JSON)
           </button>
         </div>

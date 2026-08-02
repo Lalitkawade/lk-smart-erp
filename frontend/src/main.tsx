@@ -46,7 +46,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
             </div>
             <button
               onClick={this.handleReload}
-              className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold rounded-xl shadow-lg transition active:scale-95 cursor-pointer text-sm"
+              className="w-full py-3 bg-primary hover:bg-primary/90 text-white font-bold rounded-xl shadow-lg transition active:scale-95 cursor-pointer text-sm"
             >
               <i className="fa-solid fa-rotate-right mr-2"></i> Reload & Reset Session
             </button>

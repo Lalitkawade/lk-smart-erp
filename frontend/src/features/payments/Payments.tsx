@@ -95,12 +95,12 @@ export default function Payments() {
         {/* Toggle Selector tabs */}
         <div className="flex bg-background p-1 border border-border rounded-lg">
           <button onClick={() => { setActiveTab('customers'); setSearch(''); }}
-            className={`px-4 py-2 rounded-md text-xs font-semibold transition ${activeTab === 'customers' ? 'bg-emerald-500 text-slate-950 font-bold' : 'text-textSecondary hover:text-foreground'
+            className={`px-4 py-2 rounded-md text-xs font-semibold transition cursor-pointer ${activeTab === 'customers' ? 'bg-primary text-white font-bold' : 'text-textSecondary hover:text-foreground'
               }`}>
             👤 Customer Collections
           </button>
           <button onClick={() => { setActiveTab('suppliers'); setSearch(''); }}
-            className={`px-4 py-2 rounded-md text-xs font-semibold transition ${activeTab === 'suppliers' ? 'bg-emerald-500 text-slate-950 font-bold' : 'text-textSecondary hover:text-foreground'
+            className={`px-4 py-2 rounded-md text-xs font-semibold transition cursor-pointer ${activeTab === 'suppliers' ? 'bg-primary text-white font-bold' : 'text-textSecondary hover:text-foreground'
               }`}>
             🏢 Supplier Payouts
           </button>
@@ -108,7 +108,7 @@ export default function Payments() {
       </div>
 
       <div className="mb-4">
-        <input type="text" className="w-full bg-secondary border border-border text-foreground rounded-lg p-3 text-sm focus:outline-none focus:border-emerald-500 font-semibold"
+        <input type="text" className="w-full bg-secondary border border-border text-foreground rounded-lg p-3 text-sm focus:outline-none focus:border-primary font-semibold"
           placeholder={activeTab === 'customers' ? "Search collections by customer name, ref..." : "Search payouts by supplier name, ref..."}
           value={search} onChange={(e) => setSearch(e.target.value)} />
       </div>
@@ -138,7 +138,7 @@ export default function Payments() {
                   <div className="font-semibold text-textSecondary">{p.payment_mode}</div>
                   <div className="text-[10px] text-textMuted font-mono">Ref: {p.ref_number}</div>
                 </td>
-                <td className={`py-4 text-right font-mono font-bold text-base ${activeTab === 'customers' ? 'text-emerald-400' : 'text-rose-455'}`}>
+                <td className={`py-4 text-right font-mono font-bold text-base ${activeTab === 'customers' ? 'text-primary' : 'text-rose-455'}`}>
                   {activeTab === 'customers' ? '+' : '-'}₹{p.amount.toLocaleString()}
                 </td>
               </tr>

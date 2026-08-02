@@ -73,10 +73,10 @@ export default function Reports({ tenantId, sales, purchases }: ReportsProps) {
                   <div className="flex gap-2 items-end justify-center h-32 w-full">
                     {/* Sales Bar */}
                     <div 
-                      className="w-5 bg-emerald-500 rounded-t-sm hover:bg-emerald-450 transition relative group"
+                      className="w-5 bg-indigo-500 rounded-t-sm hover:bg-indigo-400 transition relative group"
                       style={{ height: `${Math.max(2, salesHeightPercent)}%` }}
                     >
-                      <div className="hidden group-hover:block absolute bottom-full left-1/2 -translate-x-1/2 bg-slate-950 border border-emerald-900 text-emerald-400 font-mono text-[9px] px-1.5 py-0.5 rounded shadow z-10 whitespace-nowrap">
+                      <div className="hidden group-hover:block absolute bottom-full left-1/2 -translate-x-1/2 bg-slate-950 border border-indigo-900 text-indigo-300 font-mono text-[9px] px-1.5 py-0.5 rounded shadow z-10 whitespace-nowrap">
                         Sales: ₹{m.sales.toLocaleString()}
                       </div>
                     </div>
@@ -97,7 +97,7 @@ export default function Reports({ tenantId, sales, purchases }: ReportsProps) {
           </div>
         )}
         <div className="flex justify-end gap-4 text-[10px] font-bold border-t border-border/40 pt-2.5">
-          <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 bg-emerald-500 rounded-sm inline-block"></span> Material Selling (Sales)</span>
+          <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 bg-indigo-500 rounded-sm inline-block"></span> Material Selling (Sales)</span>
           <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 bg-blue-500 rounded-sm inline-block"></span> Material Purchasing (Purchases)</span>
         </div>
       </div>
@@ -116,9 +116,9 @@ export default function Reports({ tenantId, sales, purchases }: ReportsProps) {
             {monthlyTotals.map((m, idx) => (
               <tr key={idx} className="border-b border-border hover:bg-slate-100/10 dark:hover:bg-slate-800/10">
                 <td className="py-3.5 font-bold text-foreground">{m.monthName}</td>
-                <td className="py-3.5 font-mono text-emerald-450 font-bold">₹{m.sales.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                <td className="py-3.5 font-mono text-foreground font-bold">₹{m.sales.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                 <td className="py-3.5 font-mono text-textSecondary font-semibold">₹{m.purchases.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                <td className={`py-3.5 text-right font-mono font-bold ${m.netValue >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                <td className={`py-3.5 text-right font-mono font-bold ${m.netValue >= 0 ? 'text-primary' : 'text-rose-400'}`}>
                   {m.netValue >= 0 ? '+' : ''}₹{m.netValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </td>
               </tr>

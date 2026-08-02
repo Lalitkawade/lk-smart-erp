@@ -447,14 +447,14 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
               </tr>
             ) : filteredSaleLines.map((line, idx) => (
               <tr key={idx} className="border-b border-border hover:bg-slate-100/10 dark:hover:bg-slate-800/10">
-                <td className="py-4 font-mono text-emerald-450 font-semibold">{line.hsn}</td>
+                <td className="py-4 font-mono text-foreground font-semibold">{line.hsn}</td>
                 <td className="py-4 font-semibold text-foreground uppercase">{line.product_name}</td>
                 <td className="py-4 font-black uppercase text-slate-900 dark:text-slate-100 text-xs tracking-wide">
                   {line.customer_name}
                 </td>
                 <td className="py-4 text-xs">
                   <div className="font-semibold text-slate-800 dark:text-slate-200">{new Date(line.date).toLocaleDateString()}</div>
-                  <div className="text-[10.5px] font-mono text-emerald-600 dark:text-emerald-400 font-extrabold mt-0.5">
+                  <div className="text-[10.5px] font-mono text-primary font-extrabold mt-0.5">
                     {new Date(line.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </div>
                 </td>
@@ -462,7 +462,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                 <td className="py-4 text-right font-mono">₹{line.price.toFixed(2)}</td>
                 <td className="py-4 text-right font-mono font-bold text-foreground">₹{line.amount.toFixed(2)}</td>
                 <td className="py-4 text-right">
-                  <button className="text-xs bg-background hover:bg-slate-100 dark:hover:bg-slate-800 border border-border px-2.5 py-1 rounded text-emerald-450 hover:text-emerald-500 font-semibold transition"
+                  <button className="text-xs bg-background hover:bg-slate-100 dark:hover:bg-slate-800 border border-border px-2.5 py-1 rounded text-primary hover:text-primary/80 font-semibold transition"
                     onClick={() => setPrintInvoice(line.rawSaleObj)}>
                     🖨️ Print
                   </button>
@@ -481,7 +481,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
             {/* Header */}
             <div className="flex justify-between items-center pb-3 border-b border-border shrink-0">
               <div>
-                <span className="text-[10px] font-bold text-emerald-450 uppercase tracking-widest">POS Billing & Cash Desk</span>
+                <span className="text-[10px] font-bold text-primary uppercase tracking-widest">POS Billing & Cash Desk</span>
                 <h3 className="text-lg font-black text-foreground uppercase mt-0.5">New Customer Sale Billing</h3>
               </div>
               <button 
@@ -503,7 +503,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                 </div>
                 
                 {/* Search bar / Barcode scanner input */}
-                <input type="text" className="w-full bg-background border border-border text-foreground rounded-lg p-2.5 text-xs focus:outline-none focus:border-emerald-500 mb-4 font-semibold"
+                <input type="text" className="w-full bg-background border border-border text-foreground rounded-lg p-2.5 text-xs focus:outline-none focus:border-primary mb-4 font-semibold"
                   placeholder="🔍 Search items by name, SKU, or scan barcode..."
                   value={posSearch} onChange={(e) => setPosSearch(e.target.value)} onKeyDown={handlePOSSearchKeyDown} />
 
@@ -534,21 +534,21 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                       const stockVal = Number(p.current_stock || 0);
                       const unitLabel = p.s_unit || p.unit || 'Pcs';
                       return (
-                        <div key={p.id} className="p-3 bg-background/40 border border-border rounded-lg flex justify-between items-center transition gap-2 hover:border-emerald-500/40">
+                        <div key={p.id} className="p-3 bg-background/40 border border-border rounded-lg flex justify-between items-center transition gap-2 hover:border-primary/40">
                           <div>
                             <div className="text-xs font-bold text-foreground uppercase truncate max-w-[180px]" title={p.product_name}>{p.product_name}</div>
                             <div className="flex gap-2 items-center text-[10px] text-textMuted font-semibold mt-0.5">
                               <span>Stock: <span className="font-bold text-foreground">{stockVal.toFixed(2).replace(/\.00$/, '')}</span> {unitLabel}</span>
                             </div>
                             <div className="flex gap-2 text-xs font-extrabold mt-1">
-                              <span className="text-emerald-400">Pack: ₹{Number(p.selling_price).toFixed(2)}</span>
+                              <span className="text-primary">Pack: ₹{Number(p.selling_price).toFixed(2)}</span>
                               {hasLoose && (
                                 <span className="text-blue-400 text-[10px]">Pce: ₹{Number((p as any).piece_selling_price || 0).toFixed(2)}</span>
                               )}
                             </div>
                           </div>
                           <div className="flex gap-1.5">
-                            <button type="button" className="py-1 px-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold rounded-lg text-[10px] uppercase transition shadow-sm active:scale-95"
+                            <button type="button" className="py-1 px-2.5 bg-primary hover:bg-primary/90 text-white font-extrabold rounded-lg text-[10px] uppercase transition shadow-sm active:scale-95 cursor-pointer"
                               onClick={() => handleCartAdd(p, false)}>
                               + Pack
                             </button>
@@ -587,12 +587,12 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                             <div className="flex gap-3 items-center text-[10px] text-textSecondary mt-0.5 font-semibold">
                               <span>₹{item.rate.toFixed(2)} / {unitLabel}</span>
                               <span className="font-mono text-[9px] text-textMuted">HSN: {item.product.hsn || '-'}</span>
-                              <span className="text-emerald-400 font-bold">Total: ₹{(item.rate * item.qty).toFixed(2)}</span>
+                              <span className="text-primary font-bold">Total: ₹{(item.rate * item.qty).toFixed(2)}</span>
                             </div>
                           </div>
                           <div className="flex items-center gap-1.5">
                             <span className="text-[10px] font-extrabold text-slate-900 dark:text-slate-100 uppercase">Qty:</span>
-                            <input type="number" className="w-14 bg-background border border-border rounded text-center text-xs text-foreground p-1 font-mono font-bold focus:outline-none focus:border-emerald-500"
+                            <input type="number" className="w-14 bg-background border border-border rounded text-center text-xs text-foreground p-1 font-mono font-bold focus:outline-none focus:border-primary"
                               value={item.qty} onChange={(e) => handleQtyChange(item.product.id, parseInt(e.target.value) || 1, !!item.isLoose)} title="Quantity" />
                             <button type="button" className="text-rose-500 hover:text-rose-400 text-sm font-bold px-1" onClick={() => removeFromCart(item.product.id, !!item.isLoose)} title="Remove item">&times;</button>
                           </div>
@@ -623,7 +623,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                           });
                           setQuickCustModalOpen(true);
                         }}
-                        className="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 hover:bg-emerald-500/20 px-2 py-0.5 rounded border border-emerald-500/30 transition flex items-center gap-1 active:scale-95"
+                        className="text-[10px] text-primary font-bold bg-primary/10 hover:bg-primary/20 px-2 py-0.5 rounded border border-primary/30 transition flex items-center gap-1 active:scale-95 cursor-pointer"
                       >
                         ➕ Register New Customer
                       </button>
@@ -642,7 +642,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                   <div className="relative">
                     <input 
                       type="text" 
-                      className="w-full bg-background border border-border rounded-lg p-2.5 text-xs text-foreground font-semibold focus:border-emerald-500 focus:outline-none uppercase pr-8"
+                      className="w-full bg-background border border-border rounded-lg p-2.5 text-xs text-foreground font-semibold focus:border-primary focus:outline-none uppercase pr-8"
                       value={custSearchQuery || customerName} 
                       onFocus={() => setCustDropdownOpen(true)}
                       onChange={(e) => {
@@ -682,7 +682,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                           className="p-2.5 text-xs font-bold text-textMuted hover:bg-background/80 cursor-pointer flex justify-between items-center"
                         >
                           <span>🛒 Walk-in Cash Customer (Default)</span>
-                          <span className="text-[10px] text-emerald-400">No profile required</span>
+                          <span className="text-[10px] text-textMuted">No profile required</span>
                         </div>
 
                         {filteredSearchableCustomers.length === 0 ? (
@@ -699,13 +699,13 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                                 setCustSearchQuery(c.customer_name);
                                 setCustDropdownOpen(false);
                               }}
-                              className="p-2.5 hover:bg-emerald-500/10 cursor-pointer flex justify-between items-center text-xs transition"
+                              className="p-2.5 hover:bg-primary/10 cursor-pointer flex justify-between items-center text-xs transition"
                             >
                               <div>
                                 <div className="font-extrabold text-foreground uppercase flex items-center gap-1.5">
                                   {c.customer_name}
                                   {c.isRegistered ? (
-                                    <span className="text-[9px] bg-emerald-500/20 text-emerald-300 font-bold px-1.5 py-0.2 rounded border border-emerald-500/30">✓ Registered</span>
+                                    <span className="text-[9px] bg-primary/20 text-primary font-bold px-1.5 py-0.2 rounded border border-primary/30">✓ Registered</span>
                                   ) : (
                                     <span className="text-[9px] bg-blue-500/20 text-blue-300 font-bold px-1.5 py-0.2 rounded border border-blue-500/30">📜 Past Buyer</span>
                                   )}
@@ -721,7 +721,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                                     ₹{c.outstanding.toFixed(2)} Udhar
                                   </span>
                                 ) : (
-                                  <span className="text-emerald-400 font-bold text-[10px]">
+                                  <span className="text-primary font-bold text-[10px]">
                                     ✓ No Dues
                                   </span>
                                 )}
@@ -747,10 +747,10 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                               setCustDropdownOpen(false);
                               setQuickCustModalOpen(true);
                             }}
-                            className="p-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 font-extrabold text-xs cursor-pointer flex items-center justify-between border-t border-emerald-500/30 transition"
+                            className="p-2.5 bg-primary/10 hover:bg-primary/20 text-primary font-extrabold text-xs cursor-pointer flex items-center justify-between border-t border-primary/30 transition"
                           >
                             <span>➕ Register New Customer Profile for "{custSearchQuery.toUpperCase()}"</span>
-                            <span className="text-[10px] bg-emerald-500 text-slate-950 px-2 py-0.5 rounded font-black">Register Now &rarr;</span>
+                            <span className="text-[10px] bg-primary text-white px-2 py-0.5 rounded font-black">Register Now &rarr;</span>
                           </div>
                         )}
                       </div>
@@ -766,12 +766,12 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
 
                 {/* Outstanding Balance Display Card */}
                 {matchedCustomer && (
-                  <div className={`border-2 rounded-xl p-3.5 text-xs space-y-2.5 shadow-sm ${previousOutstanding > 0 ? 'bg-amber-500/15 border-amber-500/50 text-slate-900 dark:text-slate-100' : 'bg-emerald-500/15 border-emerald-500/50 text-slate-900 dark:text-slate-100'}`}>
+                  <div className={`border-2 rounded-xl p-3.5 text-xs space-y-2.5 shadow-sm ${previousOutstanding > 0 ? 'bg-amber-500/15 border-amber-500/50 text-slate-900 dark:text-slate-100' : 'bg-primary/10 border-primary/30 text-slate-900 dark:text-slate-100'}`}>
                     <div className="flex justify-between items-center font-bold">
                       <span className="flex items-center gap-1.5 uppercase text-[11px] font-black tracking-wider text-amber-950 dark:text-amber-300">
                         {previousOutstanding > 0 ? '📌 Udhar Account Status:' : '✓ Customer Account Status:'}
                       </span>
-                      <span className={`px-2.5 py-0.5 rounded text-[10px] font-black uppercase ${previousOutstanding > 0 ? 'bg-amber-500 text-slate-950 border border-amber-600' : 'bg-emerald-500 text-slate-950 border border-emerald-600'}`}>
+                      <span className={`px-2.5 py-0.5 rounded text-[10px] font-black uppercase ${previousOutstanding > 0 ? 'bg-amber-500 text-slate-950 border border-amber-600' : 'bg-primary text-white border border-primary/40'}`}>
                         {previousOutstanding > 0 ? '⚠️ Pending Dues' : '✓ No Dues'}
                       </span>
                     </div>
@@ -848,7 +848,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                       type="number"
                       step="any"
                       min="0"
-                      className="w-full bg-background border border-border rounded p-2 text-xs text-foreground font-mono font-bold focus:border-emerald-500 focus:outline-none"
+                      className="w-full bg-background border border-border rounded p-2 text-xs text-foreground font-mono font-bold focus:border-primary focus:outline-none"
                       value={amountCollectedInput}
                       onChange={(e) => setAmountCollectedInput(e.target.value)}
                       placeholder={`₹${totalAmount.toFixed(2)} (Default full)`}
@@ -858,16 +858,16 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
 
                 {/* Transaction ID / UTR Input for GPay, Credit Card, Bank Transfer, etc. */}
                 {(paymentMode === 'UPI' || paymentMode === 'Card' || paymentMode === 'Bank' || (paymentMode !== 'Cash' && paymentMode !== 'Credit')) && (
-                  <div className="animate-fade-in bg-slate-900/60 p-3 rounded-xl border border-emerald-500/40 space-y-1">
-                    <label className="block text-xs text-emerald-400 font-extrabold flex items-center justify-between">
+                  <div className="animate-fade-in bg-slate-900/60 p-3 rounded-xl border border-primary/40 space-y-1">
+                    <label className="block text-xs text-primary font-extrabold flex items-center justify-between">
                       <span className="flex items-center gap-1.5 uppercase tracking-wide">
-                        <i className="fa-solid fa-receipt text-emerald-400"></i> Transaction ID / UTR / Ref No.
+                        <i className="fa-solid fa-receipt text-primary"></i> Transaction ID / UTR / Ref No.
                       </span>
-                      <span className="text-[10px] text-emerald-500 font-bold uppercase">(GPay / Card / Bank Ref)</span>
+                      <span className="text-[10px] text-primary font-bold uppercase">(GPay / Card / Bank Ref)</span>
                     </label>
                     <input 
                       type="text"
-                      className="w-full bg-background border border-emerald-500/60 rounded-lg p-2.5 text-xs text-foreground font-mono font-bold focus:border-emerald-400 focus:outline-none uppercase"
+                      className="w-full bg-background border border-primary/60 rounded-lg p-2.5 text-xs text-foreground font-mono font-bold focus:border-primary focus:outline-none uppercase"
                       value={transactionId}
                       onChange={(e) => setTransactionId(e.target.value)}
                       placeholder="e.g. UPI-981240192849 / CARD-492019 / GPay Ref ID"
@@ -902,7 +902,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
 
                       <div className="flex justify-between text-textSecondary font-semibold">
                         <span>Today's Bill Collected:</span>
-                        <span className="font-mono font-bold text-emerald-400">₹{currentCollected.toFixed(2)}</span>
+                        <span className="font-mono font-bold text-primary">₹{currentCollected.toFixed(2)}</span>
                       </div>
 
                       {explicitRepay > 0 && (
@@ -914,19 +914,19 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
 
                       <div className="flex justify-between text-foreground font-extrabold border-t border-border/40 pt-1">
                         <span>TOTAL CASH / PAYMENT COLLECTED:</span>
-                        <span className="font-mono text-emerald-400 text-xs font-black">₹{grandTotalCollected.toFixed(2)}</span>
+                        <span className="font-mono text-primary text-xs font-black">₹{grandTotalCollected.toFixed(2)}</span>
                       </div>
 
                       <div className="pt-1.5 border-t border-border/60 space-y-1 text-[11px]">
                         <div className="flex justify-between text-foreground font-bold">
                           <span>Current Bill Payment Status:</span>
-                          <span className={unpaidCurrentBill === 0 ? 'text-emerald-400 font-extrabold' : (appliedToBill > 0 ? 'text-amber-400 font-extrabold' : 'text-rose-400 font-extrabold')}>
+                          <span className={unpaidCurrentBill === 0 ? 'text-primary font-extrabold' : (appliedToBill > 0 ? 'text-amber-400 font-extrabold' : 'text-rose-400 font-extrabold')}>
                             {unpaidCurrentBill === 0 ? '✓ PAID' : (appliedToBill > 0 ? `PARTIAL (₹${unpaidCurrentBill.toFixed(2)} Unpaid)` : 'UNPAID (Udhar)')}
                           </span>
                         </div>
 
                         {totalUdharRepaid > 0 && (
-                          <div className="flex justify-between text-emerald-400 font-bold">
+                          <div className="flex justify-between text-primary font-bold">
                             <span>Applied to Previous Udhar:</span>
                             <span className="font-mono">-₹{totalUdharRepaid.toFixed(2)}</span>
                           </div>
@@ -1004,7 +1004,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
             {/* Action Bar (Hidden during print) */}
             <div className="flex justify-between items-center pb-4 mb-4 border-b border-slate-200 print:hidden">
               <div className="flex items-center gap-2">
-                <span className="bg-emerald-100 text-emerald-800 text-xs font-black px-2.5 py-1 rounded-full uppercase">
+                <span className="bg-primary/10 text-primary text-xs font-black px-2.5 py-1 rounded-full uppercase">
                   A4 Print Invoice (2 Copies)
                 </span>
                 <span className="text-xs text-slate-500 font-medium">Customer Copy + Shop Copy</span>
@@ -1018,7 +1018,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                 </button>
                 <button 
                   onClick={() => window.print()}
-                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold rounded-lg text-xs shadow-md transition flex items-center gap-2"
+                  className="px-5 py-2 bg-primary hover:bg-primary/90 text-white font-extrabold rounded-lg text-xs shadow-md transition flex items-center gap-2 cursor-pointer"
                 >
                   <i className="fa-solid fa-print"></i>
                   <span>Print Invoice (Ctrl+P)</span>
@@ -1060,7 +1060,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                         <div className="flex"><span className="w-24 text-slate-500 font-semibold">Date & Time:</span> <span className="font-semibold">{new Date(printInvoice.sale_date).toLocaleString()}</span></div>
                         <div className="flex">
                           <span className="w-24 text-slate-500 font-semibold">Payment Mode:</span> 
-                          <span className="font-bold uppercase text-emerald-700">
+                          <span className="font-bold uppercase text-primary">
                             {printInvoice.payment_mode || 'Cash'}
                             {(printInvoice.transaction_id || printInvoice.ref_number) ? ` (Txn ID: ${printInvoice.transaction_id || printInvoice.ref_number})` : ''}
                           </span>
@@ -1139,7 +1139,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                           </div>
                           <div className="flex justify-between border-t-2 border-slate-900 pt-1 text-xs font-black">
                             <span>CURRENT BILL TOTAL:</span>
-                            <span className="font-mono text-emerald-800">₹{totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                            <span className="font-mono text-primary">₹{totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                           </div>
 
                           {/* Customer Account Udhar & Payment Ledger Summary Box */}
@@ -1196,9 +1196,9 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                                 </div>
 
                                 {/* 2. Paid Today From Previous Udhar */}
-                                <div className="flex justify-between text-emerald-800 font-bold">
+                                <div className="flex justify-between text-primary font-bold">
                                   <span>2. Paid Today From Previous Udhar:</span>
-                                  <span className="font-mono text-emerald-700">
+                                  <span className="font-mono text-primary">
                                     {appliedUdhar > 0 ? `-₹${appliedUdhar.toFixed(2)} (REPAID)` : '₹0.00'}
                                   </span>
                                 </div>
@@ -1206,7 +1206,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                                 {/* 3. Paid Today For Current Bill */}
                                 <div className="flex justify-between text-slate-700">
                                   <span>3. Paid Today For Current Bill:</span>
-                                  <span className="font-mono font-bold text-emerald-700">₹{currentBillPaid.toFixed(2)}</span>
+                                  <span className="font-mono font-bold text-primary">₹{currentBillPaid.toFixed(2)}</span>
                                 </div>
 
                                 {/* 4. Unpaid Bill Added to Udhar */}
@@ -1220,7 +1220,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                                 {/* 5. Net Remaining Outstanding */}
                                 <div className="flex justify-between font-black text-slate-900 border-t-2 border-slate-400 pt-1 mt-1 text-[9.5px]">
                                   <span>NET REMAINING OUTSTANDING UDHAR:</span>
-                                  <span className={remUdhar > 0 ? "font-mono text-rose-900 font-black text-[10px]" : "font-mono text-emerald-800 font-bold"}>
+                                  <span className={remUdhar > 0 ? "font-mono text-rose-900 font-black text-[10px]" : "font-mono text-primary font-bold"}>
                                     ₹{remUdhar.toFixed(2)} {remUdhar > 0 ? '(PENDING)' : '(CLEARED)'}
                                   </span>
                                 </div>
@@ -1264,7 +1264,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
             {/* Modal Header */}
             <div className="flex justify-between items-center pb-3 border-b border-slate-700 shrink-0">
               <div>
-                <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">Customer Profile & Invoice Audit</span>
+                <span className="text-[10px] font-bold text-primary uppercase tracking-widest">Customer Profile & Invoice Audit</span>
                 <h3 className="text-lg font-black text-white uppercase mt-0.5">{matchedCustomer.customer_name} — Purchase History</h3>
               </div>
               <button 
@@ -1288,7 +1288,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
               </div>
               <div>
                 <div className="text-[10px] text-slate-400 uppercase font-bold tracking-wide">Total Orders Count</div>
-                <div className="font-extrabold font-mono text-emerald-400 text-sm mt-0.5">{matchedCustomerInvoices.length} Invoices</div>
+                <div className="font-extrabold font-mono text-primary text-sm mt-0.5">{matchedCustomerInvoices.length} Invoices</div>
               </div>
             </div>
 
@@ -1343,7 +1343,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                               </span>
                             </div>
                           ) : (
-                            <div className="inline-flex items-center gap-1 bg-emerald-500/20 border border-emerald-500/40 px-2.5 py-1 rounded-lg text-emerald-300 text-xs font-extrabold">
+                            <div className="inline-flex items-center gap-1 bg-primary/10 border border-primary/30 px-2.5 py-1 rounded-lg text-primary text-xs font-extrabold">
                               ✓ Fully Paid
                             </div>
                           )}
@@ -1358,7 +1358,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                         </div>
                         <div>
                           <span className="text-[10px] text-slate-400 block uppercase font-bold">Amount Paid</span>
-                          <span className="font-mono font-extrabold text-emerald-400">₹{collectedAmt.toFixed(2)}</span>
+                          <span className="font-mono font-extrabold text-primary">₹{collectedAmt.toFixed(2)}</span>
                         </div>
                         <div>
                           <span className="text-[10px] text-slate-400 block uppercase font-bold">Udhar Pending</span>
@@ -1382,7 +1382,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                               return (
                                 <div key={i} className="flex justify-between items-center text-xs bg-slate-900 p-2 rounded-lg border border-slate-800">
                                   <span className="text-slate-200 font-bold uppercase truncate max-w-[280px]">{name} x {qty}</span>
-                                  <span className="font-mono text-emerald-400 font-bold">₹{(qty * rate).toFixed(2)} <span className="text-slate-400 text-[10px] font-normal">(₹{rate}/unit)</span></span>
+                                  <span className="font-mono text-primary font-bold">₹{(qty * rate).toFixed(2)} <span className="text-slate-400 text-[10px] font-normal">(₹{rate}/unit)</span></span>
                                 </div>
                               );
                             })}
@@ -1407,7 +1407,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
             
             <div className="flex justify-between items-center pb-3 border-b border-border">
               <div>
-                <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">In-POS Quick Registration</span>
+                <span className="text-[10px] font-bold text-primary uppercase tracking-widest">In-POS Quick Registration</span>
                 <h3 className="text-base font-black text-foreground uppercase mt-0.5">Register New Customer</h3>
               </div>
               <button 
@@ -1424,7 +1424,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                 <label className="block text-xs font-semibold text-textSecondary mb-1">Customer Full Name *</label>
                 <input 
                   type="text" 
-                  className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground uppercase font-bold focus:border-emerald-500 focus:outline-none"
+                  className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground uppercase font-bold focus:border-primary focus:outline-none"
                   value={quickCustFormData.customer_name} 
                   onChange={(e) => setQuickCustFormData({ ...quickCustFormData, customer_name: e.target.value })} 
                   placeholder="e.g. RAMESH KUMAR" 
@@ -1436,7 +1436,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                 <label className="block text-xs font-semibold text-textSecondary mb-1">Mobile Phone Number *</label>
                 <input 
                   type="tel" 
-                  className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground font-semibold focus:border-emerald-500 focus:outline-none"
+                  className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground font-semibold focus:border-primary focus:outline-none"
                   value={quickCustFormData.phone} 
                   onChange={(e) => setQuickCustFormData({ ...quickCustFormData, phone: e.target.value })} 
                   placeholder="e.g. 9876543210" 
@@ -1448,7 +1448,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                 <label className="block text-xs font-semibold text-textSecondary mb-1">Date of Birth (Birthday)</label>
                 <input 
                   type="date" 
-                  className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground font-mono font-semibold focus:border-emerald-500 focus:outline-none"
+                  className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground font-mono font-semibold focus:border-primary focus:outline-none"
                   value={quickCustFormData.dob} 
                   onChange={(e) => setQuickCustFormData({ ...quickCustFormData, dob: e.target.value })} 
                 />
@@ -1487,7 +1487,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                 </button>
                 <button 
                   type="submit" 
-                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold rounded-lg text-xs transition shadow-sm"
+                  className="px-4 py-2 bg-primary hover:bg-primary/90 text-white font-bold rounded-lg text-xs transition shadow-md cursor-pointer"
                 >
                   Save & Auto-Select
                 </button>

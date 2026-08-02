@@ -472,7 +472,7 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
               </tr>
             ) : filteredLines.map((line: any, idx: number) => (
               <tr key={idx} className="border-b border-border hover:bg-slate-100/10 dark:hover:bg-slate-800/10">
-                <td className="py-4 font-mono font-bold text-emerald-450">{line.hsn}</td>
+                <td className="py-4 font-mono font-bold text-foreground">{line.hsn}</td>
                 <td className="py-4 font-semibold text-foreground uppercase">{line.product_name}</td>
                 <td className="py-4 font-bold text-foreground uppercase">{line.vendor_name}</td>
                 <td className="py-4">{new Date(line.date).toLocaleDateString()}</td>
@@ -493,7 +493,7 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
             {/* Sticky Header */}
             <div className="flex justify-between items-center pb-3 border-b border-border shrink-0">
               <div>
-                <span className="text-[10px] font-bold text-emerald-450 uppercase tracking-widest">Procurement Desk</span>
+                <span className="text-[10px] font-bold text-primary uppercase tracking-widest">Procurement Desk</span>
                 <h3 className="text-lg font-black text-foreground uppercase mt-0.5">Log Material Procurement Bill</h3>
               </div>
               <button 
@@ -516,7 +516,7 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
                     <button 
                       type="button" 
                       onClick={() => setQuickVendorModalOpen(true)}
-                      className="text-[11px] text-emerald-400 hover:text-emerald-350 font-bold flex items-center gap-1 active:scale-95 cursor-pointer"
+                      className="text-[11px] text-primary hover:text-primary/80 font-bold flex items-center gap-1 active:scale-95 cursor-pointer"
                     >
                       ➕ Quick Register Vendor
                     </button>
@@ -525,7 +525,7 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
                   <div className="relative">
                     <input 
                       type="text" 
-                      className="w-full bg-background border border-border rounded-lg p-2.5 text-xs text-foreground font-bold uppercase focus:border-emerald-500 focus:outline-none pr-8"
+                      className="w-full bg-background border border-border rounded-lg p-2.5 text-xs text-foreground font-bold uppercase focus:border-primary focus:outline-none pr-8"
                       value={vendorSearchQuery || selectedSup?.supplier_name || ''} 
                       onFocus={() => setVendorDropdownOpen(true)}
                       onChange={(e) => {
@@ -564,7 +564,7 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
                                 setVendorDropdownOpen(false);
                                 setQuickVendorModalOpen(true);
                               }}
-                              className="px-3 py-1.5 bg-emerald-500/20 text-emerald-400 font-extrabold text-xs rounded-lg border border-emerald-500/30 transition hover:bg-emerald-500/30 cursor-pointer"
+                              className="px-3 py-1.5 bg-primary/20 text-primary font-extrabold text-xs rounded-lg border border-primary/30 transition hover:bg-primary/30 cursor-pointer"
                             >
                               ➕ Register "{vendorSearchQuery.toUpperCase()}" as New Vendor
                             </button>
@@ -584,7 +584,7 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
                                 <div className="text-xs font-bold uppercase">{s.supplier_name}</div>
                                 <div className="text-[10px] text-textMuted">Phone: {s.phone || 'N/A'} {s.outstanding ? `| Outstanding Dues: ₹${Number(s.outstanding).toFixed(2)}` : ''}</div>
                               </div>
-                              {supplierId === s.id && <span className="text-emerald-400 font-bold text-xs">✓ Selected</span>}
+                              {supplierId === s.id && <span className="text-primary font-bold text-xs">✓ Selected</span>}
                             </div>
                           ))
                         )}
@@ -615,16 +615,16 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
 
                 {/* Transaction ID / UTR Input for GPay, Credit Card, Bank Transfer */}
                 {paymentMode !== 'Cash' && (
-                  <div className="col-span-1 md:col-span-4 animate-fade-in bg-slate-900/60 p-3 rounded-xl border border-emerald-500/40 space-y-1">
-                    <label className="block text-xs text-emerald-400 font-extrabold flex items-center justify-between">
+                  <div className="col-span-1 md:col-span-4 animate-fade-in bg-slate-900/60 p-3 rounded-xl border border-primary/40 space-y-1">
+                    <label className="block text-xs text-primary font-extrabold flex items-center justify-between">
                       <span className="flex items-center gap-1.5 uppercase tracking-wide">
-                        <i className="fa-solid fa-receipt text-emerald-400"></i> Transaction ID / UTR / Reference No.
+                        <i className="fa-solid fa-receipt text-primary"></i> Transaction ID / UTR / Reference No.
                       </span>
-                      <span className="text-[10px] text-emerald-500 font-bold uppercase">(GPay / Card / Bank Ref)</span>
+                      <span className="text-[10px] text-primary font-bold uppercase">(GPay / Card / Bank Ref)</span>
                     </label>
                     <input 
                       type="text"
-                      className="w-full bg-background border border-emerald-500/60 rounded-lg p-2.5 text-xs text-foreground font-mono font-bold focus:border-emerald-400 focus:outline-none uppercase"
+                      className="w-full bg-background border border-primary/60 rounded-lg p-2.5 text-xs text-foreground font-mono font-bold focus:border-primary focus:outline-none uppercase"
                       value={transactionId}
                       onChange={(e) => setTransactionId(e.target.value)}
                       placeholder="e.g. UPI-981240192849 / CARD-492019 / GPay Ref ID"
@@ -638,7 +638,7 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
                   <h4 className="text-xs font-bold text-textSecondary uppercase tracking-wider">Product Inventory Procured</h4>
-                  <button type="button" className="text-xs text-emerald-400 hover:text-emerald-350 font-bold" onClick={handleAddItemRow}>
+                  <button type="button" className="text-xs text-primary hover:text-primary/80 font-bold cursor-pointer" onClick={handleAddItemRow}>
                     + Add Product Line
                   </button>
                 </div>
@@ -668,7 +668,7 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
                           <div className="relative">
                             <input
                               type="text"
-                              className="w-full bg-background border border-border rounded p-2 text-xs text-foreground font-bold uppercase focus:border-emerald-500 focus:outline-none pr-7"
+                              className="w-full bg-background border border-border rounded p-2 text-xs text-foreground font-bold uppercase focus:border-primary focus:outline-none pr-7"
                               value={productRowSearch[idx] !== undefined ? productRowSearch[idx] : (selectedProd?.product_name || '')}
                               onFocus={() => setOpenProductRowDropdown(idx)}
                               onChange={(e) => {
@@ -714,7 +714,7 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
                                       setProductRowSearch(prev => ({ ...prev, [idx]: p.product_name }));
                                       setOpenProductRowDropdown(null);
                                     }}
-                                    className={`p-2.5 hover:bg-background/80 cursor-pointer flex justify-between items-center transition ${item.product_id === p.id ? 'bg-emerald-500/10 text-emerald-400 font-bold' : 'text-foreground'}`}
+                                    className={`p-2.5 hover:bg-background/80 cursor-pointer flex justify-between items-center transition ${item.product_id === p.id ? 'bg-primary/10 text-primary font-bold' : 'text-foreground'}`}
                                   >
                                     <div>
                                       <div className="text-xs font-bold uppercase">{p.product_name}</div>
@@ -722,7 +722,7 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
                                         Stock: <span className="font-bold text-foreground">{p.current_stock}</span> {p.s_unit || p.unit || 'Pcs'} | Cost: ₹{Number(p.purchase_price || 0).toFixed(2)}
                                       </div>
                                     </div>
-                                    {item.product_id === p.id && <span className="text-emerald-400 text-xs font-bold">✓ Selected</span>}
+                                    {item.product_id === p.id && <span className="text-primary text-xs font-bold">✓ Selected</span>}
                                   </div>
                                 ))
                               )}
@@ -762,7 +762,7 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
                         setPaidAmount(totalAmount);
                       }
                     }}
-                    className="w-4 h-4 rounded accent-emerald-500 cursor-pointer"
+                    className="w-4 h-4 rounded accent-primary cursor-pointer"
                   />
                   <span>Record Partial Payment / Remaining Vendor Dues</span>
                 </label>
@@ -770,11 +770,11 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
                 {isPartialPayment && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-background p-3.5 rounded-xl border border-border/80 mt-2.5 animate-fade-in">
                     <div>
-                      <label className="block text-xs font-bold text-emerald-400 uppercase mb-1">Amount Paid Now (₹)</label>
+                      <label className="block text-xs font-bold text-primary uppercase mb-1">Amount Paid Now (₹)</label>
                       <input 
                         type="number"
                         step="any"
-                        className="w-full bg-background border border-border rounded-lg p-2.5 text-sm font-mono font-bold text-foreground focus:border-emerald-500"
+                        className="w-full bg-background border border-border rounded-lg p-2.5 text-sm font-mono font-bold text-foreground focus:border-primary"
                         value={paidAmount}
                         onChange={(e) => setPaidAmount(parseFloat(e.target.value) || 0)}
                         placeholder="Enter amount paid"
@@ -796,7 +796,7 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
               <div className="border-t border-border pt-4 mt-4 flex flex-col sm:flex-row justify-between items-center gap-4 bg-background p-4 rounded-xl">
                 <div>
                   <span className="text-xs text-textMuted uppercase font-bold block">Total Purchase Amount</span>
-                  <span className="text-xl font-mono font-black text-emerald-400">
+                  <span className="text-xl font-mono font-black text-primary">
                     ₹{totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
@@ -826,7 +826,7 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
             
             <div className="flex justify-between items-center pb-3 border-b border-border">
               <div>
-                <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">Procurement Quick Registration</span>
+                <span className="text-[10px] font-bold text-primary uppercase tracking-widest">Procurement Quick Registration</span>
                 <h3 className="text-base font-black text-foreground uppercase mt-0.5">Register New Vendor</h3>
               </div>
               <button 
@@ -843,7 +843,7 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
                 <label className="block text-xs font-semibold text-textSecondary mb-1">Supplier / Distributor Name *</label>
                 <input 
                   type="text" 
-                  className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground uppercase font-bold focus:border-emerald-500 focus:outline-none"
+                  className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground uppercase font-bold focus:border-primary focus:outline-none"
                   value={quickVendorFormData.supplier_name} 
                   onChange={(e) => setQuickVendorFormData({ ...quickVendorFormData, supplier_name: e.target.value })} 
                   placeholder="e.g. BALAJI TRADERS" 
@@ -856,7 +856,7 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
                   <label className="block text-xs font-semibold text-textSecondary mb-1">Mobile Phone Number</label>
                   <input 
                     type="tel" 
-                    className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground font-semibold focus:border-emerald-500 focus:outline-none"
+                    className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground font-semibold focus:border-primary focus:outline-none"
                     value={quickVendorFormData.phone} 
                     onChange={(e) => setQuickVendorFormData({ ...quickVendorFormData, phone: e.target.value })} 
                     placeholder="e.g. 9876543210" 
@@ -866,7 +866,7 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
                   <label className="block text-xs font-semibold text-textSecondary mb-1">Email ID</label>
                   <input 
                     type="email" 
-                    className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground font-semibold focus:border-emerald-500 focus:outline-none"
+                    className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground font-semibold focus:border-primary focus:outline-none"
                     value={quickVendorFormData.email} 
                     onChange={(e) => setQuickVendorFormData({ ...quickVendorFormData, email: e.target.value })} 
                     placeholder="vendor@example.com" 
@@ -879,7 +879,7 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
                   <label className="block text-xs font-semibold text-textSecondary mb-1">Owner / Contact Birthday</label>
                   <input 
                     type="date" 
-                    className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground font-mono font-semibold focus:border-emerald-500 focus:outline-none"
+                    className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground font-mono font-semibold focus:border-primary focus:outline-none"
                     value={quickVendorFormData.dob} 
                     onChange={(e) => setQuickVendorFormData({ ...quickVendorFormData, dob: e.target.value })} 
                   />
@@ -888,7 +888,7 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
                   <label className="block text-xs font-semibold text-textSecondary mb-1">Establishment Date</label>
                   <input 
                     type="date" 
-                    className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground font-mono font-semibold focus:border-emerald-500 focus:outline-none"
+                    className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground font-mono font-semibold focus:border-primary focus:outline-none"
                     value={quickVendorFormData.establishment_date} 
                     onChange={(e) => setQuickVendorFormData({ ...quickVendorFormData, establishment_date: e.target.value })} 
                   />
@@ -898,7 +898,7 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
               <div>
                 <label className="block text-xs font-semibold text-textSecondary mb-1">Office / Godown Address</label>
                 <textarea 
-                  className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:border-emerald-500 focus:outline-none" 
+                  className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground focus:border-primary focus:outline-none" 
                   rows={2}
                   value={quickVendorFormData.address} 
                   onChange={(e) => setQuickVendorFormData({ ...quickVendorFormData, address: e.target.value })} 
@@ -916,7 +916,7 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
                 </button>
                 <button 
                   type="submit" 
-                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold rounded-lg text-xs transition shadow-sm"
+                  className="px-4 py-2 bg-primary hover:bg-primary/90 text-white font-bold rounded-lg text-xs transition shadow-md cursor-pointer"
                 >
                   Save & Auto-Select
                 </button>

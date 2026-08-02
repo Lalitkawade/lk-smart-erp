@@ -409,11 +409,11 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
             <div>
               <span className="text-[10px] font-bold text-textMuted uppercase tracking-wider">Total Sales</span>
               <div className="text-xl font-black text-foreground font-mono mt-1">₹{stats.sales.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
-              <span className="text-[10px] text-emerald-500 font-bold mt-1 inline-flex items-center gap-1">
+              <span className="text-[10px] text-primary font-bold mt-1 inline-flex items-center gap-1">
                 <i className="fa-solid fa-arrow-up-right"></i> {filteredData.sales.length} Invoices
               </span>
             </div>
-            <div className="p-3 bg-emerald-500/10 text-emerald-500 rounded-xl border border-emerald-500/20 group-hover:scale-110 transition duration-300">
+            <div className="p-3 bg-primary/10 text-primary rounded-xl border border-primary/20 group-hover:scale-110 transition duration-300">
               <i className="fa-solid fa-file-invoice-dollar text-lg"></i>
             </div>
           </div>
@@ -461,7 +461,7 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
               </div>
               <span className="text-[10px] text-textMuted font-semibold mt-1 block">Revenue - COGS - Expenses</span>
             </div>
-            <div className={`p-3 rounded-xl border group-hover:scale-110 transition duration-300 ${stats.netProfit >= 0 ? 'bg-emerald-500/10 text-primary border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border-rose-500/20'}`}>
+            <div className={`p-3 rounded-xl border group-hover:scale-110 transition duration-300 ${stats.netProfit >= 0 ? 'bg-primary/10 text-primary border-primary/20' : 'bg-rose-500/10 text-rose-400 border-rose-500/20'}`}>
               <i className="fa-solid fa-sack-dollar text-lg"></i>
             </div>
           </div>
@@ -547,20 +547,20 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
                       {/* Interactive Tooltip on hover */}
                       <div className="absolute -top-12 z-30 hidden group-hover:flex flex-col items-center bg-slate-900 text-white text-[10px] font-bold p-1.5 rounded-lg shadow-xl border border-slate-700 whitespace-nowrap pointer-events-none animate-fade-in">
                         <span>{item.label}</span>
-                        <span className="text-emerald-400">Sales: ₹{item.sales.toLocaleString('en-IN')}</span>
+                        <span className="text-primary">Sales: ₹{item.sales.toLocaleString('en-IN')}</span>
                         <span className="text-purple-400">Purchases: ₹{item.purchases.toLocaleString('en-IN')}</span>
                       </div>
 
                       {/* Bar Group */}
                       <div className="w-full flex justify-center items-end gap-1.5 flex-1 border-b border-border/60 pb-1">
-                        {/* Sales Bar (Emerald) */}
+                        {/* Sales Bar (Primary Indigo/Blue) */}
                         <div 
-                          className="w-1/2 bg-gradient-to-t from-emerald-600 to-emerald-400 hover:from-emerald-500 hover:to-emerald-300 rounded-t-sm transition-all duration-300 relative group/bar"
+                          className="w-1/2 bg-gradient-to-t from-blue-600 to-indigo-500 hover:from-blue-500 hover:to-indigo-400 rounded-t-sm transition-all duration-300 relative group/bar"
                           style={{ height: `${salesHeightPct}%` }}
                           title={`${item.label} Sales: ₹${item.sales}`}
                         >
                           {item.sales > 0 && (
-                            <span className="absolute -top-4 left-1/2 -translate-x-1/2 text-[8px] font-mono font-bold text-emerald-400 opacity-0 group-hover/bar:opacity-100 transition">
+                            <span className="absolute -top-4 left-1/2 -translate-x-1/2 text-[8px] font-mono font-bold text-primary opacity-0 group-hover/bar:opacity-100 transition">
                               ₹{item.sales >= 1000 ? `${(item.sales / 1000).toFixed(1)}k` : item.sales}
                             </span>
                           )}
@@ -649,12 +649,12 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
           <div className="space-y-2">
             <div className="flex justify-between text-[10px] text-textSecondary font-bold">
               <span>Total Catalog: {totalProductsCount} items</span>
-              <span className="text-emerald-500">{inStockCount} In Stock</span>
+              <span className="text-primary">{inStockCount} In Stock</span>
               <span className="text-amber-500">{lowStockCount} Low</span>
               <span className="text-rose-500">{outOfStockCount} Out</span>
             </div>
             <div className="w-full h-2 rounded-full overflow-hidden flex bg-slate-100 dark:bg-slate-800 border border-border">
-              <div className="bg-emerald-500 h-full" style={{ width: `${inStockPercent}%` }} title="In Stock"></div>
+              <div className="bg-primary h-full" style={{ width: `${inStockPercent}%` }} title="In Stock"></div>
               <div className="bg-amber-500 h-full" style={{ width: `${lowStockPercent}%` }} title="Low Stock"></div>
               <div className="bg-rose-500 h-full" style={{ width: `${outOfStockPercent}%` }} title="Out of Stock"></div>
             </div>
@@ -684,7 +684,7 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
                       <td className="p-2.5 text-center font-mono text-textMuted">{p.min_stock_level}</td>
                       <td className="p-2.5 truncate max-w-[100px] text-textSecondary uppercase font-medium">{p.vendorName}</td>
                       <td className="p-2.5 text-right">
-                        <a href={`tel:${p.vendorPhone}`} className="px-2.5 py-1 bg-emerald-500 hover:bg-emerald-400 text-white font-bold rounded text-[10px] uppercase transition shadow-sm inline-flex items-center gap-1">
+                        <a href={`tel:${p.vendorPhone}`} className="px-2.5 py-1 bg-primary hover:bg-primary/90 text-white font-bold rounded text-[10px] uppercase transition shadow-md inline-flex items-center gap-1 cursor-pointer">
                           <i className="fa-solid fa-phone"></i> Call
                         </a>
                       </td>
@@ -814,14 +814,14 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
                     </td>
                     <td className="p-2 font-semibold text-foreground truncate max-w-[150px] uppercase text-xs">{tx.party_name}</td>
                     <td className="p-2">
-                      <span className={`px-2 py-0.5 rounded-md text-[9px] font-extrabold uppercase tracking-wider ${tx.type === 'Sale' ? 'bg-emerald-500/10 text-primary border border-emerald-500/20' : 'bg-purple-500/10 text-purple-400 border border-purple-500/20'}`}>
+                      <span className={`px-2 py-0.5 rounded-md text-[9px] font-extrabold uppercase tracking-wider ${tx.type === 'Sale' ? 'bg-primary/10 text-primary border border-primary/20' : 'bg-purple-500/10 text-purple-400 border border-purple-500/20'}`}>
                         {tx.type}
                       </span>
                     </td>
                     <td className="p-2 text-xs text-textSecondary">{new Date(tx.date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}</td>
                     <td className="p-2 text-right font-mono font-extrabold text-foreground text-xs">₹{tx.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                     <td className="p-2 text-center">
-                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${tx.status === 'Paid' ? 'bg-emerald-500/10 text-primary border border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'}`}>
+                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${tx.status === 'Paid' ? 'bg-primary/10 text-primary border border-primary/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'}`}>
                         {tx.status}
                       </span>
                     </td>
@@ -869,7 +869,7 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
               <div>
                 <div className="flex items-center gap-2">
                   <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider ${
-                    selectedTxDetail.type === 'Sale' ? 'bg-emerald-500/15 text-primary border border-emerald-500/30' : 'bg-purple-500/15 text-purple-400 border border-purple-500/30'
+                    selectedTxDetail.type === 'Sale' ? 'bg-primary/10 text-primary border border-primary/30' : 'bg-purple-500/15 text-purple-400 border border-purple-500/30'
                   }`}>
                     {selectedTxDetail.type} Invoice
                   </span>

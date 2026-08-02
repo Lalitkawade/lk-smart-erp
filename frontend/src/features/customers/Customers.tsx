@@ -532,13 +532,13 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                     {c.phone ? (
                       <div className="flex items-center gap-1.5">
                         <span>{c.phone}</span>
-                        <a href={`tel:${c.phone}`} className="px-1.5 py-0.5 bg-emerald-500/15 text-primary border border-emerald-500/30 hover:bg-emerald-500/30 rounded text-[9px] font-black uppercase inline-flex items-center gap-1" title="Call Customer">
+                        <a href={`tel:${c.phone}`} className="px-1.5 py-0.5 bg-primary/10 text-primary border border-primary/30 hover:bg-primary/20 rounded text-[9px] font-black uppercase inline-flex items-center gap-1" title="Call Customer">
                           <i className="fa-solid fa-phone text-[8px]"></i> Call
                         </a>
                       </div>
                     ) : '-'}
                   </td>
-                  <td className="py-3.5 text-right font-mono font-bold text-emerald-400">
+                  <td className="py-3.5 text-right font-mono font-bold text-foreground">
                     ₹{stats.totalPurchases.toFixed(2)}
                   </td>
                   <td className="py-3.5 text-right font-mono font-bold">
@@ -554,14 +554,14 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                     {stats.lastPaymentDate ? new Date(stats.lastPaymentDate).toLocaleDateString() : '-'}
                   </td>
                   <td className="py-3.5 text-center">
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase inline-block ${hasUdhar ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'}`}>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase inline-block ${hasUdhar ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-primary/10 text-primary border border-primary/30'}`}>
                       {hasUdhar ? '⚠️ Pending' : '✓ No Due'}
                     </span>
                   </td>
                   <td className="py-3.5 text-right">
                     <div className="flex gap-1.5 justify-end">
                       <button 
-                        className="text-xs bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 px-2 py-1 rounded text-emerald-400 font-bold transition flex items-center gap-1 active:scale-95"
+                        className="text-xs bg-primary/10 hover:bg-primary/20 border border-primary/30 px-2 py-1 rounded text-primary font-bold transition flex items-center gap-1 active:scale-95 cursor-pointer"
                         onClick={() => onNewInvoice && onNewInvoice(c.customer_name)}
                         title="Create new sales bill for this customer"
                       >
@@ -595,7 +595,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
             {/* Sticky Header */}
             <div className="flex justify-between items-center pb-3 border-b border-border shrink-0">
               <div>
-                <span className="text-[10px] font-bold text-emerald-450 uppercase tracking-widest">Customer Accounts</span>
+                <span className="text-[10px] font-bold text-primary uppercase tracking-widest">Customer Accounts</span>
                 <h3 className="text-lg font-black text-foreground uppercase mt-0.5">{editingCustomer ? 'Edit Customer Profile' : 'Register New Customer'}</h3>
               </div>
               <button 
@@ -693,7 +693,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
             {/* Sticky Header */}
             <div className="flex justify-between items-center pb-3 border-b border-border shrink-0">
               <div>
-                <span className="text-[10px] font-bold text-emerald-450 uppercase tracking-widest">Accounts Receivable</span>
+                <span className="text-[10px] font-bold text-primary uppercase tracking-widest">Accounts Receivable</span>
                 <h3 className="text-lg font-black text-foreground uppercase mt-0.5">Record Outstanding Collection</h3>
               </div>
               <button 
@@ -734,7 +734,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
               {/* Sticky Action Footer */}
               <div className="shrink-0 flex gap-3 justify-end pt-3 border-t border-border mt-4">
                 <button type="button" className="px-5 py-2.5 border border-border text-textSecondary rounded-lg text-xs font-bold hover:bg-background transition" onClick={() => setPayModalOpen(false)}>Cancel</button>
-                <button type="submit" className="px-5 py-2.5 bg-emerald-500 text-slate-950 font-extrabold rounded-lg text-xs hover:bg-emerald-400 transition shadow-sm">Save Receipt</button>
+                <button type="submit" className="px-5 py-2.5 bg-primary hover:bg-primary/90 text-white font-bold rounded-lg text-xs transition shadow-md cursor-pointer">Save Receipt</button>
               </div>
             </form>
           </div>
@@ -772,7 +772,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
               {/* Header */}
               <div className="flex justify-between items-center pb-3 border-b border-border print:border-slate-300">
                 <div>
-                  <span className="text-[10px] font-bold text-emerald-450 uppercase tracking-widest print:hidden">Customer History & Ledger Hub</span>
+                  <span className="text-[10px] font-bold text-primary uppercase tracking-widest print:hidden">Customer History & Ledger Hub</span>
                   <h3 className="text-lg font-black text-foreground print:text-black uppercase mt-0.5">{statementCustomer.customer_name} — Account Profile</h3>
                 </div>
                 <div className="flex gap-2 print:hidden">
@@ -782,7 +782,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                       setStatementCustomer(null);
                       if (onNewInvoice) onNewInvoice(name);
                     }}
-                    className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold rounded-lg text-xs transition shadow-sm flex items-center gap-1 active:scale-95"
+                    className="px-3.5 py-1.5 bg-primary hover:bg-primary/90 text-white font-bold rounded-lg text-xs transition shadow-md flex items-center gap-1 active:scale-95 cursor-pointer"
                   >
                     🛒 Create New Invoice
                   </button>
@@ -816,7 +816,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                 </div>
                 <div>
                   <div className="text-textMuted text-[10px] uppercase font-bold">Total Invoices Billed</div>
-                  <div className="text-emerald-400 font-bold font-mono text-sm print:text-black">{rawCustomerInvoices.length} Bills</div>
+                  <div className="text-primary font-bold font-mono text-sm print:text-black">{rawCustomerInvoices.length} Bills</div>
                   <div className="text-textMuted text-[10px]">
                     Lifetime Spent: ₹{rawCustomerInvoices.reduce((acc, curr) => acc + Number(curr.total_amount || 0), 0).toFixed(2)}
                   </div>
@@ -827,19 +827,19 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
               <div className="flex border-b border-border text-xs font-bold gap-2 print:hidden">
                 <button
                   onClick={() => setStatementTab('ledger')}
-                  className={`py-2 px-3 border-b-2 transition ${statementTab === 'ledger' ? 'border-emerald-500 text-emerald-400' : 'border-transparent text-textMuted hover:text-foreground'}`}
+                  className={`py-2 px-3 border-b-2 transition ${statementTab === 'ledger' ? 'border-primary text-primary' : 'border-transparent text-textMuted hover:text-foreground'}`}
                 >
                   📜 Ledger Timeline ({statementLedger.length})
                 </button>
                 <button
                   onClick={() => setStatementTab('invoices')}
-                  className={`py-2 px-3 border-b-2 transition ${statementTab === 'invoices' ? 'border-emerald-500 text-emerald-400' : 'border-transparent text-textMuted hover:text-foreground'}`}
+                  className={`py-2 px-3 border-b-2 transition ${statementTab === 'invoices' ? 'border-primary text-primary' : 'border-transparent text-textMuted hover:text-foreground'}`}
                 >
                   🧾 Itemized Past Invoices ({rawCustomerInvoices.length})
                 </button>
                 <button
                   onClick={() => setStatementTab('products')}
-                  className={`py-2 px-3 border-b-2 transition ${statementTab === 'products' ? 'border-emerald-500 text-emerald-400' : 'border-transparent text-textMuted hover:text-foreground'}`}
+                  className={`py-2 px-3 border-b-2 transition ${statementTab === 'products' ? 'border-primary text-primary' : 'border-transparent text-textMuted hover:text-foreground'}`}
                 >
                   📦 Products Bought ({purchasedProductsHistory.length})
                 </button>
@@ -869,11 +869,11 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                             <tr key={idx} className="border-b border-border print:border-slate-200">
                               <td className="py-3 font-mono">{new Date(row.date).toLocaleDateString()}</td>
                               <td className="py-3 font-semibold text-foreground print:text-black">{row.type}</td>
-                              <td className="py-3 font-mono font-bold text-emerald-400">{row.ref}</td>
+                              <td className="py-3 font-mono font-bold text-primary">{row.ref}</td>
                               <td className="py-3 text-right font-mono font-semibold text-rose-455 print:text-black">
                                 {!row.isCredit ? `₹${row.amount.toLocaleString()}` : '-'}
                               </td>
-                              <td className="py-3 text-right font-mono font-semibold text-emerald-450 print:text-black">
+                              <td className="py-3 text-right font-mono font-semibold text-primary print:text-black">
                                 {row.isCredit ? `₹${row.amount.toLocaleString()}` : '-'}
                               </td>
                             </tr>
@@ -917,7 +917,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                                   <span className="font-mono font-black text-xs text-rose-400">⚠️ ₹{unpaidUdharAmt.toFixed(2)} Udhar Pending</span>
                                 </div>
                               ) : (
-                                <div className="inline-flex items-center gap-1 bg-emerald-500/20 border border-emerald-500/40 px-2.5 py-1 rounded-lg text-emerald-400 text-xs font-bold">
+                                <div className="inline-flex items-center gap-1 bg-primary/10 border border-primary/30 px-2.5 py-1 rounded-lg text-primary text-xs font-bold">
                                   ✓ Fully Paid
                                 </div>
                               )}
@@ -932,7 +932,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                             </div>
                             <div>
                               <span className="text-[10px] text-textMuted block uppercase font-bold">Amount Paid</span>
-                              <span className="font-mono font-extrabold text-emerald-400">₹{collectedAmt.toFixed(2)}</span>
+                              <span className="font-mono font-extrabold text-primary">₹{collectedAmt.toFixed(2)}</span>
                             </div>
                             <div>
                               <span className="text-[10px] text-textMuted block uppercase font-bold">Udhar Pending</span>
@@ -956,7 +956,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                                   return (
                                     <div key={i} className="flex justify-between items-center text-xs bg-background/80 p-2 rounded-lg border border-border font-semibold">
                                       <span className="text-foreground uppercase truncate max-w-[180px]">{name} x {qty}</span>
-                                      <span className="font-mono text-emerald-400 font-bold">₹{(qty * rate).toFixed(2)}</span>
+                                      <span className="font-mono text-primary font-bold">₹{(qty * rate).toFixed(2)}</span>
                                     </div>
                                   );
                                 })}
@@ -993,7 +993,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                             <tr key={idx} className="border-b border-border hover:bg-background/40">
                               <td className="py-3 font-bold text-foreground uppercase">{p.name}</td>
                               <td className="py-3 text-center font-mono font-bold text-foreground">{p.totalQty}</td>
-                              <td className="py-3 text-right font-mono font-bold text-emerald-400">₹{p.totalSpent.toFixed(2)}</td>
+                              <td className="py-3 text-right font-mono font-bold text-primary">₹{p.totalSpent.toFixed(2)}</td>
                               <td className="py-3 text-right font-mono text-textMuted text-[11px]">{new Date(p.lastDate).toLocaleDateString()}</td>
                             </tr>
                           ))
@@ -1012,7 +1012,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                 onClick={() => setStatementCustomer(null)}>
                 Close Statement
               </button>
-              <button className="flex-1 px-4 py-2 bg-emerald-500 text-slate-950 font-extrabold rounded-lg text-xs hover:bg-emerald-400 transition flex items-center justify-center gap-2"
+              <button className="flex-1 px-4 py-2 bg-primary hover:bg-primary/90 text-white font-bold rounded-lg text-xs transition shadow-md flex items-center justify-center gap-2 cursor-pointer"
                 onClick={() => window.print()}>
                 🖨️ Print Ledger Statement
               </button>

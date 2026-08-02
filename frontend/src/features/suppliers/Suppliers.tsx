@@ -530,7 +530,7 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
             ) : filteredSuppliers.map((s, idx) => {
               return (
                 <tr key={s.id} className="border-b border-border hover:bg-slate-100/10 dark:hover:bg-slate-800/10">
-                  <td className="py-4 font-mono text-emerald-450 font-extrabold">{getVendorCode(s, idx)}</td>
+                  <td className="py-4 font-mono text-foreground font-extrabold">{getVendorCode(s, idx)}</td>
                   <td className="py-4">
                     <div className="font-bold text-foreground uppercase flex items-center gap-1.5 flex-wrap">
                       {s.supplier_name}
@@ -550,7 +550,7 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
                     <div className="font-semibold text-foreground flex items-center gap-1.5">
                       <span>{s.phone || '-'}</span>
                       {s.phone && (
-                        <a href={`tel:${s.phone}`} className="px-1.5 py-0.5 bg-emerald-500/15 text-primary border border-emerald-500/30 hover:bg-emerald-500/30 rounded text-[9px] font-black uppercase inline-flex items-center gap-1" title="Call Vendor">
+                        <a href={`tel:${s.phone}`} className="px-1.5 py-0.5 bg-primary/10 text-primary border border-primary/30 hover:bg-primary/20 rounded text-[9px] font-black uppercase inline-flex items-center gap-1" title="Call Vendor">
                           <i className="fa-solid fa-phone text-[8px]"></i> Call
                         </a>
                       )}
@@ -568,7 +568,7 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
                         🧾 Statement
                       </button>
                       {s.outstanding > 0 && (
-                        <button className="text-xs bg-emerald-950 border border-emerald-900 text-emerald-450 hover:bg-emerald-900/50 px-2.5 py-1 rounded font-semibold transition"
+                        <button className="text-xs bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20 px-2.5 py-1 rounded font-semibold transition"
                           onClick={() => handleOpenPayModal(s)}>
                           💸 Pay
                         </button>
@@ -598,7 +598,7 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
             {/* Sticky Header */}
             <div className="flex justify-between items-center pb-3 border-b border-border shrink-0">
               <div>
-                <span className="text-[10px] font-bold text-emerald-450 uppercase tracking-widest">Vendor Management</span>
+                <span className="text-[10px] font-bold text-primary uppercase tracking-widest">Vendor Management</span>
                 <h3 className="text-lg font-black text-foreground uppercase mt-0.5">{editingSupplier ? 'Edit Supplier Profile' : 'Register New Supplier'}</h3>
               </div>
               <button 
@@ -664,7 +664,7 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
             {/* Sticky Header */}
             <div className="flex justify-between items-center pb-3 border-b border-border shrink-0">
               <div>
-                <span className="text-[10px] font-bold text-emerald-450 uppercase tracking-widest">Accounts Payable</span>
+                <span className="text-[10px] font-bold text-primary uppercase tracking-widest">Accounts Payable</span>
                 <h3 className="text-lg font-black text-foreground uppercase mt-0.5">Record Supplier Settlement</h3>
               </div>
               <button 
@@ -792,7 +792,7 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
                               <td className="py-3 text-right font-mono font-semibold text-amber-550 print:text-black">
                                 {!row.isCredit ? `₹${row.amount.toLocaleString()}` : '-'}
                               </td>
-                              <td className="py-3 text-right font-mono font-semibold text-emerald-450 print:text-black">
+                              <td className="py-3 text-right font-mono font-semibold text-primary print:text-black">
                                 {row.isCredit ? `₹${row.amount.toLocaleString()}` : '-'}
                               </td>
                             </tr>
@@ -811,7 +811,7 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
                 onClick={() => setStatementSupplier(null)}>
                 Close Statement
               </button>
-              <button className="flex-1 px-4 py-2 bg-emerald-500 text-slate-950 font-bold rounded-lg text-xs hover:bg-emerald-400 transition"
+              <button className="flex-1 px-4 py-2 bg-primary hover:bg-primary/90 text-white font-bold rounded-lg text-xs transition shadow-md cursor-pointer"
                 onClick={() => window.print()}>
                 🖨️ Print Statement
               </button>

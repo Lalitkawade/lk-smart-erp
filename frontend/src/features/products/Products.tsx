@@ -653,7 +653,7 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
                             </div>
                           )}
                           {lastSale && (
-                            <div className="text-emerald-550 dark:text-emerald-450 flex items-center gap-1 flex-wrap">
+                            <div className="text-primary flex items-center gap-1 flex-wrap">
                               <span>📤 Last Sell:</span>
                               <span className="font-mono font-bold">₹{lastSale.rate.toFixed(2)}</span>
                             </div>
@@ -664,10 +664,10 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
                   </td>
                   <td className="py-4 font-mono">₹{purchasePrice.toFixed(2)}</td>
                   <td className="py-4">
-                    <div className="font-mono text-xs text-emerald-400 font-bold">₹{marginAmount.toFixed(2)}</div>
+                    <div className="font-mono text-xs text-primary font-bold">₹{marginAmount.toFixed(2)}</div>
                     <div className="text-[10px] text-textMuted">({marginPercent.toFixed(1)}%)</div>
                   </td>
-                  <td className="py-4 font-semibold text-emerald-450 font-bold">₹{sellingPrice.toFixed(2)}</td>
+                  <td className="py-4 font-semibold text-foreground font-bold">₹{sellingPrice.toFixed(2)}</td>
                   <td className="py-4">
                     <div className="flex flex-col">
                       <div className="flex items-center gap-1.5">
@@ -711,7 +711,7 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
             {/* Sticky Header */}
             <div className="flex justify-between items-center pb-3 border-b border-border shrink-0">
               <div>
-                <span className="text-[10px] font-bold text-emerald-450 uppercase tracking-widest">Inventory Management</span>
+                <span className="text-[10px] font-bold text-primary uppercase tracking-widest">Inventory Management</span>
                 <h3 className="text-lg font-black text-foreground uppercase mt-0.5">{editingProduct ? 'Edit Inventory Product' : 'Add New Inventory Product'}</h3>
               </div>
               <button type="button" onClick={() => setModalOpen(false)} className="text-textSecondary hover:text-foreground text-xs font-bold bg-background/50 hover:bg-background border border-border px-3 py-1.5 rounded-lg transition">
@@ -724,7 +724,7 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="col-span-1 sm:col-span-2 relative">
                   <label className="block text-xs font-semibold text-textSecondary mb-1">Product Name *</label>
-                  <input type="text" className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none focus:border-emerald-500 font-semibold uppercase" required
+                  <input type="text" className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none focus:border-primary font-semibold uppercase" required
                     value={formData.product_name} onChange={(e) => setFormData({ ...formData, product_name: e.target.value })} />
                 </div>
 
@@ -758,7 +758,7 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
                           </div>
 
                           <div className="flex items-center gap-2 shrink-0">
-                            <span className="text-[10px] font-extrabold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 px-2 py-1 rounded-md">
+                            <span className="text-[10px] font-extrabold bg-primary/10 text-primary border border-primary/30 px-2 py-1 rounded-md">
                               Stock: {p.current_stock} {p.s_unit || p.unit || 'Pcs'}
                             </span>
                             <button
@@ -793,7 +793,7 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-textSecondary mb-1">Selling Price *</label>
-                  <input type="number" step="any" className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none font-bold text-emerald-450" required
+                  <input type="number" step="any" className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none font-bold" required
                     value={formData.selling_price === 0 ? '' : formData.selling_price} 
                     placeholder="0"
                     onFocus={(e) => e.target.select()}
@@ -803,11 +803,11 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
                 {/* Margin Inline calculation */}
                 <div className="col-span-1 sm:col-span-2 bg-amber-500/10 p-3 rounded-xl border border-amber-500/30 text-xs flex justify-between items-center shadow-xs flex-wrap gap-2">
                   <span className="font-extrabold text-slate-900 dark:text-slate-100 flex items-center gap-1.5 uppercase tracking-wide">
-                    <i className="fa-solid fa-chart-line text-emerald-500"></i> Calculated Retail Margin (based on Purchase Cost):
+                    <i className="fa-solid fa-chart-line text-primary"></i> Calculated Retail Margin (based on Purchase Cost):
                   </span>
-                  <span className="font-mono font-black text-emerald-600 dark:text-emerald-400 text-sm">
+                  <span className="font-mono font-black text-primary text-sm">
                     ₹{(formData.selling_price - formData.purchase_price).toFixed(2)} 
-                    <span className="ml-1 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                    <span className="ml-1 text-xs font-bold text-primary">
                       ({formData.purchase_price > 0 
                         ? (((formData.selling_price - formData.purchase_price) / formData.purchase_price) * 100).toFixed(1)
                         : '0.0'}%)
@@ -847,14 +847,14 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-extrabold text-emerald-400 mb-1">➕ Add New Inflow Stock</label>
-                      <input type="number" step="any" min="0" className="w-full bg-background border border-emerald-500/50 rounded-lg p-2 text-emerald-400 focus:outline-none font-mono font-extrabold"
+                      <label className="block text-xs font-extrabold text-primary mb-1">➕ Add New Inflow Stock</label>
+                      <input type="number" step="any" min="0" className="w-full bg-background border border-primary/50 rounded-lg p-2 text-foreground focus:outline-none font-mono font-extrabold"
                         placeholder="Enter qty to add (e.g. 20)..."
                         value={formData.additional_stock === 0 ? '' : formData.additional_stock} 
                         onFocus={(e) => e.target.select()}
                         onChange={(e) => setFormData({ ...formData, additional_stock: e.target.value === '' ? 0 : Number(e.target.value) })} />
                     </div>
-                    <div className="col-span-1 sm:col-span-2 bg-emerald-500/10 border border-emerald-500/30 p-2.5 rounded-lg text-xs font-bold text-emerald-400 flex justify-between items-center flex-wrap gap-2">
+                    <div className="col-span-1 sm:col-span-2 bg-primary/10 border border-primary/30 p-2.5 rounded-lg text-xs font-bold text-primary flex justify-between items-center flex-wrap gap-2">
                       <span>Updated Total Stock after saving:</span>
                       <span className="font-mono text-sm font-black">
                         {formData.current_stock || 0} + {formData.additional_stock || 0} = {Number(formData.current_stock || 0) + Number(formData.additional_stock || 0)} {formData.s_unit || 'Pcs'}
@@ -932,7 +932,7 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
 
               {/* Units & Stock Location Logistics */}
               <div className="bg-background/40 p-4 border border-border rounded-lg space-y-4">
-                <h4 className="text-xs font-bold text-emerald-450 uppercase tracking-wide">Logistics & Units</h4>
+                <h4 className="text-xs font-bold text-primary uppercase tracking-wide">Logistics & Units</h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-semibold text-textSecondary mb-1">Purchase Unit (P. Unit)</label>
@@ -1031,12 +1031,12 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
             
             <div className="flex justify-between items-start border-b border-border pb-3">
               <div>
-                <span className="text-[10px] font-bold text-emerald-450 uppercase tracking-widest">Product Card Report</span>
+                <span className="text-[10px] font-bold text-primary uppercase tracking-widest">Product Card Report</span>
                 <h3 className="text-lg font-black text-foreground uppercase mt-1">
                   {selectedHistoryProduct.product_name}
                 </h3>
                 <p className="text-xs text-textSecondary mt-0.5">
-                  HSN: {selectedHistoryProduct.hsn || 'N/A'} | Current Stock: <strong className="text-emerald-400 font-mono">{selectedHistoryProduct.current_stock} {selectedHistoryProduct.s_unit || 'Pcs'}</strong> | Cost: <span className="font-mono font-bold">₹{Number(selectedHistoryProduct.purchase_price || 0).toFixed(2)}</span> | Sell: <span className="font-mono font-bold text-emerald-400">₹{Number(selectedHistoryProduct.selling_price || 0).toFixed(2)}</span>
+                  HSN: {selectedHistoryProduct.hsn || 'N/A'} | Current Stock: <strong className="text-primary font-mono">{selectedHistoryProduct.current_stock} {selectedHistoryProduct.s_unit || 'Pcs'}</strong> | Cost: <span className="font-mono font-bold">₹{Number(selectedHistoryProduct.purchase_price || 0).toFixed(2)}</span> | Sell: <span className="font-mono font-bold text-primary">₹{Number(selectedHistoryProduct.selling_price || 0).toFixed(2)}</span>
                 </p>
               </div>
               <button className="text-textSecondary hover:text-foreground text-xs font-bold bg-background/50 hover:bg-background border border-border px-3 py-1.5 rounded-lg transition"
@@ -1052,7 +1052,7 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
                 onClick={() => setHistoryTab('purchases')}
                 className={`px-3.5 py-1.5 rounded-lg text-xs font-extrabold uppercase transition flex items-center gap-2 ${
                   historyTab === 'purchases'
-                    ? 'bg-emerald-500 text-slate-950 shadow-sm'
+                    ? 'bg-primary text-white shadow-sm'
                     : 'bg-background/40 text-textMuted hover:text-foreground border border-border/50'
                 }`}
               >
@@ -1097,9 +1097,9 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
                           <td className="p-3 font-mono font-bold text-foreground">{i + 1}</td>
                           <td className="p-3">{new Date(h.date).toLocaleString()}</td>
                           <td className="p-3 font-mono text-[11px] text-textMuted">{h.bill_number}</td>
-                          <td className="p-3 font-mono font-extrabold text-emerald-400">+{h.qty} {selectedHistoryProduct.s_unit || 'Pcs'}</td>
+                          <td className="p-3 font-mono font-extrabold text-primary">+{h.qty} {selectedHistoryProduct.s_unit || 'Pcs'}</td>
                           <td className="p-3 font-mono font-bold text-foreground">₹{Number(h.rate || 0).toFixed(2)}</td>
-                          <td className="p-3 font-mono font-bold text-emerald-400">₹{Number(h.selling_price || selectedHistoryProduct.selling_price).toFixed(2)}</td>
+                          <td className="p-3 font-mono font-bold text-primary">₹{Number(h.selling_price || selectedHistoryProduct.selling_price).toFixed(2)}</td>
                           <td className="p-3 font-semibold uppercase text-foreground">{h.supplier_name}</td>
                         </tr>
                       ))
@@ -1133,7 +1133,7 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
                           <td className="p-3 font-semibold text-foreground uppercase">{s.customer_name}</td>
                           <td className="p-3 font-mono font-bold text-blue-400">-{s.qty} {selectedHistoryProduct.s_unit || 'Pcs'}</td>
                           <td className="p-3 font-mono font-bold text-foreground">₹{Number(s.rate || 0).toFixed(2)}</td>
-                          <td className="p-3 font-mono font-extrabold text-emerald-400">₹{Number(s.amount || 0).toFixed(2)}</td>
+                          <td className="p-3 font-mono font-extrabold text-primary">₹{Number(s.amount || 0).toFixed(2)}</td>
                         </tr>
                       ))
                     )}

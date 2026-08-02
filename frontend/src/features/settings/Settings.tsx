@@ -213,7 +213,7 @@ export default function Settings({ tenantId, onSettingsSaved }: SettingsProps) {
     return (
       <div className="max-w-md mx-auto mt-16 bg-secondary border border-border p-8 rounded-2xl shadow-xl space-y-6 animate-fade-in">
         <div className="text-center space-y-2">
-          <div className="w-12 h-12 bg-emerald-500/10 text-emerald-400 rounded-full flex items-center justify-center text-xl mx-auto mb-2">
+          <div className="w-12 h-12 bg-primary/10 text-primary rounded-full flex items-center justify-center text-xl mx-auto mb-2">
             <i className="fa-solid fa-lock"></i>
           </div>
           <h2 className="text-lg font-bold text-foreground">Admin Settings Security Lock</h2>
@@ -223,7 +223,7 @@ export default function Settings({ tenantId, onSettingsSaved }: SettingsProps) {
         <form onSubmit={handleUnlock} className="space-y-4">
           <div>
             <label className="block text-xs font-semibold text-textSecondary mb-1">Enter Admin PIN (Default: 9999)</label>
-            <input type="password" maxLength={6} className="w-full bg-background border border-border rounded-lg p-3 text-center text-lg text-foreground font-mono tracking-widest focus:ring-2 focus:ring-emerald-500 outline-none"
+            <input type="password" maxLength={6} className="w-full bg-background border border-border rounded-lg p-3 text-center text-lg text-foreground font-mono tracking-widest focus:ring-2 focus:ring-primary outline-none"
               placeholder="••••" value={pinInput} onChange={(e) => setPinInput(e.target.value)} required />
           </div>
 
@@ -231,7 +231,7 @@ export default function Settings({ tenantId, onSettingsSaved }: SettingsProps) {
             <div className="text-xs text-rose-500 text-center font-bold">{pinError}</div>
           )}
 
-          <button type="submit" className="w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg text-sm transition">
+          <button type="submit" className="w-full py-3 bg-primary hover:bg-primary/90 text-white font-bold rounded-lg text-sm transition shadow-md cursor-pointer">
             Unlock Settings
           </button>
         </form>
@@ -246,14 +246,14 @@ export default function Settings({ tenantId, onSettingsSaved }: SettingsProps) {
         {/* Company Settings Form */}
         <div className="lg:col-span-2 bg-secondary border border-border rounded-xl p-6 shadow-lg">
           <h3 className="text-md font-bold text-foreground mb-6 flex items-center gap-2">
-            <i className="fa-solid fa-store text-emerald-400"></i> Store & Company Profile Setup
+            <i className="fa-solid fa-store text-primary"></i> Store & Company Profile Setup
           </h3>
 
           <form onSubmit={handleSaveCompanyConfig} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-textSecondary mb-1">Company Name</label>
-                <input type="text" className="w-full bg-background border border-border rounded-lg p-2.5 text-sm text-foreground focus:outline-none focus:border-emerald-500 font-semibold"
+                <input type="text" className="w-full bg-background border border-border rounded-lg p-2.5 text-sm text-foreground focus:outline-none focus:border-primary font-semibold"
                   value={companyName} onChange={(e) => setCompanyName(e.target.value)} required />
               </div>
               
@@ -289,7 +289,7 @@ export default function Settings({ tenantId, onSettingsSaved }: SettingsProps) {
             </div>
 
             <div className="flex justify-end pt-4">
-              <button type="submit" className="px-5 py-2.5 bg-emerald-500 text-slate-950 font-bold rounded-lg text-sm hover:bg-emerald-400">
+              <button type="submit" className="px-5 py-2.5 bg-primary hover:bg-primary/90 text-white font-bold rounded-lg text-sm transition shadow-md cursor-pointer">
                 Save Configurations
               </button>
             </div>
@@ -301,9 +301,9 @@ export default function Settings({ tenantId, onSettingsSaved }: SettingsProps) {
           <div>
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-md font-bold text-foreground flex items-center gap-2">
-                <i className="fa-solid fa-user-shield text-emerald-400"></i> Staff Operators
+                <i className="fa-solid fa-user-shield text-primary"></i> Staff Operators
               </h3>
-              <button className="text-xs text-emerald-400 hover:text-emerald-300 font-bold" onClick={() => setShowUserModal(true)}>
+              <button className="text-xs text-primary hover:text-primary/80 font-bold cursor-pointer" onClick={() => setShowUserModal(true)}>
                 + Add User
               </button>
             </div>
@@ -369,7 +369,7 @@ export default function Settings({ tenantId, onSettingsSaved }: SettingsProps) {
 
               <div className="flex gap-2 pt-2">
                 <button type="button" className="flex-1 py-2 border border-border text-textSecondary rounded text-xs" onClick={() => setShowUserModal(false)}>Cancel</button>
-                <button type="submit" className="flex-1 py-2 bg-emerald-500 text-slate-950 font-bold rounded text-xs hover:bg-emerald-400">Register</button>
+                <button type="submit" className="flex-1 py-2 bg-primary hover:bg-primary/90 text-white font-bold rounded text-xs transition cursor-pointer">Register</button>
               </div>
             </form>
           </div>

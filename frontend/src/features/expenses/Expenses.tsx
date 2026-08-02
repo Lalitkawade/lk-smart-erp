@@ -258,7 +258,7 @@ export default function Expenses({ autoOpenModal, onModalClosed }: ExpensesProps
             {/* Sticky Header */}
             <div className="flex justify-between items-center pb-3 border-b border-border shrink-0">
               <div>
-                <span className="text-[10px] font-bold text-emerald-450 uppercase tracking-widest">Financial Outflows</span>
+                <span className="text-[10px] font-bold text-primary uppercase tracking-widest">Financial Outflows</span>
                 <h3 className="text-lg font-black text-foreground uppercase mt-0.5">Log Store Expense</h3>
               </div>
               <button 
