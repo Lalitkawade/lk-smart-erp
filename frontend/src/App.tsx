@@ -671,7 +671,7 @@ export default function App() {
               title={sidebarCollapsed ? "Expand Sidebar Menu" : "Collapse Sidebar Menu"}
             >
               <i className={`fa-solid ${sidebarCollapsed ? 'fa-outdent text-amber-500' : 'fa-indent text-emerald-500'} text-sm`}></i>
-              <span className="text-[11px] uppercase tracking-wider">{sidebarCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}</span>
+              <span className="text-[11px] uppercase tracking-wider">{sidebarCollapsed ? 'Expand' : 'Collapse'}</span>
             </button>
 
             {/* Mobile Hamburger Drawer Toggle */}
@@ -684,19 +684,35 @@ export default function App() {
               <i className="fa-solid fa-bars text-sm"></i>
             </button>
             <div className="min-w-0">
-              <div className="text-[10px] text-textMuted font-bold uppercase tracking-widest truncate">{getBreadcrumb()}</div>
+              <div className="text-[10px] text-emerald-500 font-black uppercase tracking-widest truncate flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span>{companyName}</span>
+                <span className="text-textMuted">•</span>
+                <span className="text-textMuted font-mono">{getBreadcrumb()}</span>
+              </div>
               <div className="text-xs sm:text-sm font-black text-textPrimary tracking-tight mt-0.5 flex items-center gap-1.5 truncate">
-                {getGreeting()} <span className="font-semibold text-textSecondary text-xs hidden md:inline">| Here's your hardware retail health report.</span>
+                {getGreeting()} <span className="font-semibold text-textSecondary text-xs hidden md:inline">| Live Hardware Store Dashboard</span>
               </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-4 text-xs font-semibold">
-            {/* Calendar & Time Widget */}
-            <span className="hidden md:inline text-textSecondary bg-background border border-border px-3 py-1.5 rounded-lg text-[10px] font-bold tracking-wide uppercase font-mono">
-              <i className="fa-regular fa-calendar mr-1.5 text-textMuted"></i>
-              {currentTime.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} | {currentTime.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}
-            </span>
+          <div className="flex items-center gap-3 text-xs font-semibold">
+            {/* Live Monospace Date & Time Widget */}
+            <div className="hidden lg:flex items-center gap-2 bg-slate-900 border border-slate-700 px-3 py-1.5 rounded-lg text-emerald-400 text-[11px] font-extrabold tracking-wide uppercase font-mono shadow-inner">
+              <i className="fa-regular fa-clock text-emerald-500 text-xs"></i>
+              <span>{currentTime.toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}</span>
+              <span className="text-slate-600">|</span>
+              <span>{currentTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}</span>
+            </div>
+
+            {/* Theme Toggle Button */}
+            <button
+              onClick={toggleTheme}
+              className="p-2 text-textSecondary hover:text-textPrimary bg-background border border-border rounded-lg transition active:scale-95 cursor-pointer flex items-center justify-center"
+              title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Theme`}
+            >
+              <i className={`fa-solid ${theme === 'dark' ? 'fa-sun text-amber-400' : 'fa-moon text-indigo-400'} text-xs`}></i>
+            </button>
             
             {/* Unstocked Demand Log quick button */}
             <button 

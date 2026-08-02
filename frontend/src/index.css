@@ -238,6 +238,34 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* ==========================================================================
+   GLOBAL TABLE GRIDLINES & CELL BORDERS
+   ========================================================================== */
+table {
+  border-collapse: collapse !important;
+  width: 100%;
+  border: 1px solid var(--border-color, #334155) !important;
+}
+
+table th {
+  border: 1px solid var(--border-color, #334155) !important;
+  padding: 10px 12px !important;
+  font-weight: 800 !important;
+}
+
+table td {
+  border: 1px solid var(--border-color, #334155) !important;
+  padding: 10px 12px !important;
+}
+
+table tbody tr:nth-child(even) {
+  background-color: rgba(15, 23, 42, 0.25);
+}
+
+table tbody tr:hover {
+  background-color: rgba(30, 41, 59, 0.5) !important;
+}
+
+/* ==========================================================================
    TOAST NOTIFICATIONS
    ========================================================================== */
 .toast-container {
