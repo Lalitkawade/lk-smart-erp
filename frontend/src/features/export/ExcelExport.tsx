@@ -456,9 +456,9 @@ export default function ExcelExport() {
 
               <button
                 onClick={() => handleExportIndividual(cat.key, cat.name)}
-                className="w-full flex items-center justify-center space-x-2 py-2.5 bg-background hover:bg-slate-100 dark:hover:bg-slate-800 border border-border text-textSecondary hover:text-foreground rounded-lg text-[10px] font-black uppercase tracking-wider transition-all duration-150 cursor-pointer"
+                className="group w-full flex items-center justify-center space-x-2 py-2.5 bg-secondary hover:bg-primary border border-border hover:border-primary text-foreground hover:text-white rounded-lg text-[10px] font-black uppercase tracking-wider shadow-sm transition-all duration-200 cursor-pointer active:scale-95"
               >
-                <i className="fa-solid fa-download text-xs text-amber-500"></i>
+                <i className="fa-solid fa-download text-xs text-amber-500 group-hover:text-amber-200 transition-colors"></i>
                 <span>Download Sheet</span>
               </button>
             </div>
