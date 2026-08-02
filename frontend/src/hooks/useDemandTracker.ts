@@ -39,11 +39,15 @@ export function useDemandTracker(tenantId?: string) {
       setThresholdState(Math.max(1, parseInt(savedThreshold) || 5));
     }
 
-    // First read local cache for instant UI rendering
+    // Read local cache first for instant UI rendering
+    let localDemands: UnstockedDemand[] = [];
     const cached = localStorage.getItem('lk_unstocked_demands');
     if (cached) {
       try {
-        setDemands(JSON.parse(cached));
+        localDemands = JSON.parse(cached);
+        if (Array.isArray(localDemands)) {
+          setDemands(localDemands);
+        }
       } catch (e) {}
     }
 
@@ -55,7 +59,15 @@ export function useDemandTracker(tenantId?: string) {
           .eq('tenant_id', activeTenantId)
           .order('request_count', { ascending: false });
 
-        if (!error && data) {
+        if (!error && Array.isArray(data) && data.length > 0) {
+          // Merge Supabase items with any local items
+          const dbMap = new Map(data.map(d => [d.item_name.toLowerCase(), d]));
+          localDemands.forEach(localItem => {
+            if (!dbMap.has(localItem.item_name.toLowerCase())) {
+              data.unshift(localItem);
+            }
+          });
+
           setDemands(data as UnstockedDemand[]);
           localStorage.setItem('lk_unstocked_demands', JSON.stringify(data));
         }
@@ -69,8 +81,6 @@ export function useDemandTracker(tenantId?: string) {
 
   useEffect(() => {
     fetchDemands();
-    window.addEventListener('storage', fetchDemands);
-    return () => window.removeEventListener('storage', fetchDemands);
   }, [tenantId]);
 
   // Log or increment a requested item (0ms instant optimistic update)
@@ -104,7 +114,7 @@ export function useDemandTracker(tenantId?: string) {
         status: 'Pending',
         last_requested_at: new Date().toISOString()
       };
-      updatedDemands.unshift(newDemandItem);
+      updatedDemands = [newDemandItem, ...demands];
     }
 
     // Update state & local storage immediately for instant rendering
@@ -149,8 +159,6 @@ export function useDemandTracker(tenantId?: string) {
         console.warn('Supabase sync notice for unstocked_item_demands:', err);
       });
     }
-
-    window.dispatchEvent(new Event('storage'));
   };
 
   // Increment demand count directly by ID

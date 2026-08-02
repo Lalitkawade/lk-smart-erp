@@ -76,10 +76,10 @@ export default function DemandModal({ tenantId, isOpen, onClose, onNavigateToPro
           />
           <button 
             type="submit"
-            disabled={isSubmitting || !newItemName.trim()}
+            disabled={!newItemName.trim()}
             className="bg-primary hover:bg-primary/90 text-white font-bold px-4 py-2 rounded-lg text-xs flex items-center gap-1.5 transition shrink-0 disabled:opacity-50 shadow-xs"
           >
-            <i className="fa-solid fa-plus text-xs"></i> {isSubmitting ? 'Saving...' : 'Log Request'}
+            <i className="fa-solid fa-plus text-xs"></i> Log Request
           </button>
         </form>
 
