@@ -717,10 +717,10 @@ export default function App() {
             {/* Unstocked Demand Log quick button */}
             <button 
               onClick={() => setShowDemandModal(true)} 
-              className="px-3 py-1.5 text-xs font-bold text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-lg transition flex items-center gap-1.5" 
+              className="px-3 py-1.5 text-xs font-bold text-foreground bg-background hover:bg-slate-100 dark:hover:bg-slate-800 border border-border rounded-lg transition flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95" 
               title="Log Unstocked Item Requested by Customer"
             >
-              <i className="fa-solid fa-clipboard-list text-xs"></i>
+              <i className="fa-solid fa-clipboard-list text-primary text-xs"></i>
               <span className="hidden sm:inline">Demand Log</span>
               {highDemandAlerts.length > 0 && (
                 <span className="bg-rose-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full animate-pulse">
@@ -784,14 +784,14 @@ export default function App() {
                         )}
                       </div>
                     ))}
-                    {/* High Customer Demand Alert (5+ Requests) */}
+                    {/* High Customer Demand Alert */}
                     {highDemandAlerts.length > 0 && (
-                      <div onClick={() => { setShowDemandModal(true); setShowNotifications(false); }} className="p-2 rounded bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 cursor-pointer text-xs flex gap-2">
-                        <i className="fa-solid fa-fire text-amber-400 mt-0.5 animate-bounce"></i>
+                      <div onClick={() => { setShowDemandModal(true); setShowNotifications(false); }} className="p-2 rounded bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 cursor-pointer text-xs flex gap-2">
+                        <i className="fa-solid fa-triangle-exclamation text-rose-500 mt-0.5 animate-bounce"></i>
                         <div>
-                          <div className="font-extrabold text-amber-400 uppercase tracking-wide">High Customer Demand Alert</div>
+                          <div className="font-extrabold text-rose-600 dark:text-rose-400 uppercase tracking-wide">High Customer Demand Alert</div>
                           <div className="text-[10px] text-textSecondary mt-0.5">
-                            {highDemandAlerts.length} unstocked item{highDemandAlerts.length > 1 ? 's' : ''} requested 5+ times ({highDemandAlerts.map(d => `"${d.item_name}"`).join(', ')}). Click to order stock.
+                            {highDemandAlerts.length} unstocked item{highDemandAlerts.length > 1 ? 's' : ''} reached target threshold ({highDemandAlerts.map(d => `"${d.item_name}"`).join(', ')}). Click to view details.
                           </div>
                         </div>
                       </div>
