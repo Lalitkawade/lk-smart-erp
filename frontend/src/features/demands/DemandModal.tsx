@@ -66,8 +66,8 @@ export default function DemandModal({ tenantId, isOpen, onClose, onNavigateToPro
 
         {/* High Demand Warning Banner */}
         {highDemandAlerts.length > 0 && (
-          <div className="bg-amber-500/10 border-b border-amber-500/20 px-5 py-2.5 flex items-center gap-2.5 text-xs text-amber-400">
-            <i className="fa-solid fa-triangle-exclamation text-sm"></i>
+          <div className="bg-rose-500/10 border-b border-rose-500/20 px-5 py-2.5 flex items-center gap-2.5 text-xs text-rose-700 dark:text-rose-300 font-semibold">
+            <i className="fa-solid fa-triangle-exclamation text-sm text-rose-600 dark:text-rose-400"></i>
             <span><strong>{highDemandAlerts.length} High Demand Item{highDemandAlerts.length > 1 ? 's' : ''}</strong> reached target request thresholds.</span>
           </div>
         )}
@@ -76,7 +76,7 @@ export default function DemandModal({ tenantId, isOpen, onClose, onNavigateToPro
         <form onSubmit={handleSubmit} className="p-4 border-b border-border flex gap-2 bg-background/30">
           <input 
             type="text"
-            className="flex-grow bg-background border border-border rounded-lg px-3 py-2 text-xs text-foreground placeholder-textMuted font-medium focus:outline-none focus:border-amber-500"
+            className="flex-grow bg-background border border-border rounded-lg px-3 py-2 text-xs text-foreground placeholder-textMuted font-medium focus:outline-none focus:border-primary"
             placeholder="Enter unstocked item name (e.g. 12mm Asian Paint Brush)..."
             value={newItemName}
             onChange={(e) => setNewItemName(e.target.value)}
@@ -84,7 +84,7 @@ export default function DemandModal({ tenantId, isOpen, onClose, onNavigateToPro
           <button 
             type="submit"
             disabled={isSubmitting || !newItemName.trim()}
-            className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-4 py-2 rounded-lg text-xs flex items-center gap-1.5 transition shrink-0 disabled:opacity-50"
+            className="bg-primary hover:bg-primary/90 text-white font-bold px-4 py-2 rounded-lg text-xs flex items-center gap-1.5 transition shrink-0 disabled:opacity-50 shadow-xs"
           >
             <i className="fa-solid fa-plus text-xs"></i> {isSubmitting ? 'Saving...' : 'Log Request'}
           </button>
@@ -108,8 +108,8 @@ export default function DemandModal({ tenantId, isOpen, onClose, onNavigateToPro
                   key={item.id}
                   className={`p-3.5 rounded-lg border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 transition ${
                     isHighDemand 
-                      ? 'bg-amber-500/5 border-amber-500/30' 
-                      : 'bg-background/40 border-border hover:border-border/80'
+                      ? 'bg-rose-500/5 border-rose-500/30' 
+                      : 'bg-background/40 border-border hover:border-slate-300 dark:hover:border-slate-600'
                   }`}
                 >
                   <div className="space-y-1.5 flex-1">
@@ -118,7 +118,7 @@ export default function DemandModal({ tenantId, isOpen, onClose, onNavigateToPro
                         {item.item_name}
                       </span>
                       {isHighDemand ? (
-                        <span className="text-[10px] font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded font-mono">
+                        <span className="text-[10px] font-extrabold bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30 px-2 py-0.5 rounded font-mono">
                           🔥 High Demand ({item.request_count} / {targetThreshold})
                         </span>
                       ) : (
@@ -161,7 +161,7 @@ export default function DemandModal({ tenantId, isOpen, onClose, onNavigateToPro
                     <button
                       type="button"
                       onClick={() => incrementDemand(item.id)}
-                      className="px-2.5 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded text-xs font-bold transition flex items-center gap-1"
+                      className="px-2.5 py-1.5 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 rounded text-xs font-bold transition flex items-center gap-1"
                       title="Customer requested item again"
                     >
                       <i className="fa-solid fa-plus text-[10px]"></i> +1 ({item.request_count})
@@ -174,7 +174,7 @@ export default function DemandModal({ tenantId, isOpen, onClose, onNavigateToPro
                           onClose();
                           onNavigateToProducts(item.item_name);
                         }}
-                        className="px-2.5 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded text-xs font-bold transition flex items-center gap-1"
+                        className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-xs font-bold transition flex items-center gap-1 shadow-xs"
                         title="Add to product catalog"
                       >
                         <i className="fa-solid fa-box-open text-[10px]"></i> Add Product
