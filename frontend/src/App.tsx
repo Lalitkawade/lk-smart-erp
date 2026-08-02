@@ -533,11 +533,10 @@ export default function App() {
               <div className="flex items-center gap-1">
                 <button 
                   onClick={() => setSidebarCollapsed(true)} 
-                  className="hidden md:flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-extrabold text-xs border border-slate-700 shadow-sm transition active:scale-95 cursor-pointer" 
+                  className="hidden md:flex p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sidebar-text hover:text-white transition active:scale-95 cursor-pointer" 
                   title="Collapse sidebar menu"
                 >
-                  <i className="fa-solid fa-indent"></i>
-                  <span className="text-[10px] uppercase font-black tracking-wider">Collapse</span>
+                  <i className="fa-solid fa-indent text-sm"></i>
                 </button>
                 <button 
                   onClick={() => setMobileMenuOpen(false)} 
@@ -663,16 +662,6 @@ export default function App() {
         {/* Top Navbar */}
         <header className="bg-secondary border-b border-border h-16 px-4 md:px-6 flex justify-between items-center select-none shadow-sm sticky top-0 z-30">
           <div className="flex items-center gap-3 min-w-0">
-            {/* Desktop Sidebar Expand / Collapse Toggle Button */}
-            <button 
-              type="button"
-              onClick={() => setSidebarCollapsed(!sidebarCollapsed)} 
-              className="hidden md:flex items-center gap-2 px-3 py-1.5 text-xs text-foreground bg-background hover:bg-slate-100 dark:hover:bg-slate-800 border border-border rounded-lg transition font-extrabold shadow-xs active:scale-95 cursor-pointer shrink-0"
-              title={sidebarCollapsed ? "Expand Sidebar Menu" : "Collapse Sidebar Menu"}
-            >
-              <i className={`fa-solid ${sidebarCollapsed ? 'fa-outdent text-amber-500' : 'fa-indent text-primary'} text-sm`}></i>
-              <span className="text-[11px] uppercase tracking-wider">{sidebarCollapsed ? 'Expand' : 'Collapse'}</span>
-            </button>
 
             {/* Mobile Hamburger Drawer Toggle */}
             <button 
