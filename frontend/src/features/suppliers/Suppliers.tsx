@@ -648,7 +648,7 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
               {/* Sticky Action Footer */}
               <div className="shrink-0 flex gap-3 justify-end pt-3 border-t border-border mt-4">
                 <button type="button" className="px-5 py-2.5 border border-border text-textSecondary rounded-lg text-xs font-bold hover:bg-background transition" onClick={() => setModalOpen(false)}>Cancel</button>
-                <button type="submit" className="px-5 py-2.5 bg-emerald-500 text-slate-950 font-extrabold rounded-lg text-xs hover:bg-emerald-400 transition shadow-sm">Save Profile</button>
+                <button type="submit" className="px-5 py-2.5 bg-primary hover:bg-primary/90 text-white font-bold rounded-lg text-xs transition shadow-md cursor-pointer">Save Profile</button>
               </div>
             </form>
           </div>
@@ -702,7 +702,7 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
               {/* Sticky Action Footer */}
               <div className="shrink-0 flex gap-3 justify-end pt-3 border-t border-border mt-4">
                 <button type="button" className="px-5 py-2.5 border border-border text-textSecondary rounded-lg text-xs font-bold hover:bg-background transition" onClick={() => setPayModalOpen(false)}>Cancel</button>
-                <button type="submit" className="px-5 py-2.5 bg-emerald-500 text-slate-950 font-extrabold rounded-lg text-xs hover:bg-emerald-400 transition shadow-sm">Save Voucher</button>
+                <button type="submit" className="px-5 py-2.5 bg-primary hover:bg-primary/90 text-white font-bold rounded-lg text-xs transition shadow-md cursor-pointer">Save Voucher</button>
               </div>
             </form>
           </div>

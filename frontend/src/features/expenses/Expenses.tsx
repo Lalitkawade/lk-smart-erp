@@ -320,7 +320,7 @@ export default function Expenses({ autoOpenModal, onModalClosed }: ExpensesProps
               {/* Sticky Action Footer */}
               <div className="shrink-0 flex gap-3 pt-3 border-t border-border mt-4">
                 <button type="button" className="flex-1 py-2.5 border border-border text-textSecondary rounded-lg text-xs font-bold hover:bg-background transition" onClick={() => setModalOpen(false)}>Cancel</button>
-                <button type="submit" className="flex-1 py-2.5 bg-emerald-500 text-slate-950 font-extrabold rounded-lg text-xs hover:bg-emerald-400 transition shadow-sm">Save Expense</button>
+                <button type="submit" className="flex-1 py-2.5 bg-primary hover:bg-primary/90 text-white font-bold rounded-lg text-xs transition shadow-md cursor-pointer">Save Expense</button>
               </div>
             </form>
           </div>

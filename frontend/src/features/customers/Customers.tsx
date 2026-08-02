@@ -477,17 +477,17 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
         </button>
         <button
           onClick={() => setFilterTab('outstanding')}
-          className={`py-2 px-3.5 rounded-t-lg transition flex items-center gap-1.5 ${filterTab === 'outstanding' ? 'bg-secondary border-t-2 border-x border-amber-500 text-amber-300' : 'text-textMuted hover:text-foreground'}`}
+          className={`py-2 px-3.5 rounded-t-lg transition flex items-center gap-1.5 ${filterTab === 'outstanding' ? 'bg-secondary border-t-2 border-x border-amber-600 text-amber-700 dark:text-amber-300 font-bold' : 'text-textMuted hover:text-foreground'}`}
         >
           <span>⚠️ Pending Outstanding</span>
-          <span className="bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded text-[10px] font-mono">
+          <span className="bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold">
             {customers.filter(c => Number(c.outstanding || 0) > 0).length}
           </span>
         </button>
       </div>
 
       <div className="mb-4">
-        <input type="text" className="w-full bg-secondary border border-border text-foreground rounded-xl p-3 text-sm focus:outline-none focus:border-emerald-500 font-semibold shadow-inner"
+        <input type="text" className="w-full bg-secondary border border-border text-foreground rounded-xl p-3 text-sm focus:outline-none focus:border-primary font-semibold shadow-inner"
           placeholder="🔍 Search by customer name or mobile number..."
           value={search} onChange={(e) => setSearch(e.target.value)} />
       </div>
@@ -677,7 +677,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
               {/* Sticky Action Footer */}
               <div className="shrink-0 flex gap-3 justify-end pt-3 border-t border-border mt-4">
                 <button type="button" className="px-5 py-2.5 border border-border text-textSecondary rounded-lg text-xs font-bold hover:bg-background transition" onClick={() => setModalOpen(false)}>Cancel</button>
-                <button type="submit" className="px-5 py-2.5 bg-emerald-500 text-slate-950 font-extrabold rounded-lg text-xs hover:bg-emerald-400 transition shadow-sm">Save Profile</button>
+                <button type="submit" className="px-5 py-2.5 bg-primary hover:bg-primary/90 text-white font-bold rounded-lg text-xs transition shadow-md cursor-pointer">Save Profile</button>
               </div>
             </form>
           </div>

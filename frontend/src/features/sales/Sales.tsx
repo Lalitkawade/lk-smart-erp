@@ -952,7 +952,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
 
                 <div className="flex gap-2">
                   <button type="button" className="flex-grow px-3 py-2 border border-border text-textSecondary rounded text-xs" onClick={() => setBillingModal(false)}>Cancel</button>
-                  <button type="submit" className="flex-grow px-3 py-2 bg-emerald-500 text-slate-950 font-bold rounded text-xs hover:bg-emerald-400 transition">Checkout & Bill</button>
+                  <button type="submit" className="flex-grow px-3 py-2 bg-primary hover:bg-primary/90 text-white font-bold rounded text-xs transition shadow-md cursor-pointer">Checkout & Bill</button>
                 </div>
               </form>
 
