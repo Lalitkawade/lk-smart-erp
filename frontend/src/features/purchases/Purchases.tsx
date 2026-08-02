@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { supabase } from '../../api/supabase';
 import type { Product } from '../../types/erp.types';
+import { t } from '../../utils/i18n';
 
 interface Supplier {
   id: string;
@@ -438,11 +439,11 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 mb-6 bg-secondary border border-border p-4 sm:p-6 rounded-xl shadow-md">
         <div>
-          <h2 className="text-xl font-bold text-foreground">Purchase</h2>
+          <h2 className="text-xl font-bold text-foreground">{t('purchaseBills')}</h2>
           <p className="text-xs text-textMuted mt-1">Log supplier purchase bills and manage material receipts</p>
         </div>
         <button className="w-full sm:w-auto px-4 py-2 bg-primary hover:bg-primary/90 text-white font-bold rounded-lg text-sm text-center shrink-0 shadow-md transition active:scale-95 cursor-pointer" onClick={() => setModalOpen(true)}>
-          Log Procurement Bill
+          + {t('newPurchaseBill')}
         </button>
       </div>
 
@@ -452,33 +453,49 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
           value={search} onChange={(e) => setSearch(e.target.value)} />
       </div>
 
-      <div className="bg-secondary border border-border rounded-xl p-6 shadow-lg overflow-x-auto">
-        <table className="w-full text-left text-sm text-textSecondary">
+      <div className="bg-secondary border border-border/80 rounded-2xl shadow-sm overflow-x-auto">
+        <table className="w-full text-left text-sm text-textSecondary border-collapse">
           <thead>
-            <tr className="border-b border-border text-textPrimary font-extrabold uppercase tracking-wider text-xs">
-              <th className="py-3">HSN Code of Product</th>
-              <th className="py-3">Product Name</th>
-              <th className="py-3">Vendor Name</th>
-              <th className="py-3">Date</th>
-              <th className="py-3 text-center">Units</th>
-              <th className="py-3 text-right">Cost</th>
-              <th className="py-3 text-right">Amount</th>
+            <tr className="border-b border-border/80 bg-slate-100/70 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 font-extrabold uppercase tracking-wider text-[11px]">
+              <th className="py-3.5 px-4">HSN Code</th>
+              <th className="py-3.5 px-4">Product Name</th>
+              <th className="py-3.5 px-4">Vendor Supplier</th>
+              <th className="py-3.5 px-4">Purchase Date</th>
+              <th className="py-3.5 px-4 text-center">Units</th>
+              <th className="py-3.5 px-4 text-right">Unit Rate (₹)</th>
+              <th className="py-3.5 px-4 text-right">Total Amount (₹)</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-border/40">
             {filteredLines.length === 0 ? (
               <tr>
-                <td colSpan={7} className="py-6 text-center text-textMuted">No matching purchase records found.</td>
+                <td colSpan={7} className="py-8 text-center text-textMuted text-xs font-medium">
+                  <i className="fa-solid fa-cart-flatbed text-2xl text-slate-400 mb-2 block"></i>
+                  No matching purchase records found.
+                </td>
               </tr>
             ) : filteredLines.map((line: any, idx: number) => (
-              <tr key={idx} className="border-b border-border hover:bg-slate-100/10 dark:hover:bg-slate-800/10">
-                <td className="py-4 font-mono font-bold text-foreground">{line.hsn}</td>
-                <td className="py-4 font-semibold text-foreground uppercase">{line.product_name}</td>
-                <td className="py-4 font-bold text-foreground uppercase">{line.vendor_name}</td>
-                <td className="py-4">{new Date(line.date).toLocaleDateString()}</td>
-                <td className="py-4 text-center font-bold text-foreground">{line.qty}</td>
-                <td className="py-4 text-right font-mono">₹{line.rate.toFixed(2)}</td>
-                <td className="py-4 text-right font-mono font-bold text-foreground">₹{line.amount.toFixed(2)}</td>
+              <tr key={idx} className="hover:bg-slate-500/5 transition-colors group">
+                <td className="py-3.5 px-4 font-mono text-xs">
+                  <span className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded font-bold">
+                    {line.hsn}
+                  </span>
+                </td>
+                <td className="py-3.5 px-4 text-xs font-bold text-foreground uppercase">{line.product_name}</td>
+                <td className="py-3.5 px-4 text-xs">
+                  <span className="font-bold text-blue-600 dark:text-blue-400 uppercase flex items-center gap-1">
+                    <i className="fa-solid fa-building text-[10px] text-slate-400"></i>
+                    {line.vendor_name}
+                  </span>
+                </td>
+                <td className="py-3.5 px-4 text-xs font-mono text-textSecondary">
+                  {new Date(line.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                </td>
+                <td className="py-3.5 px-4 text-center text-xs font-mono font-bold text-foreground">{line.qty}</td>
+                <td className="py-3.5 px-4 text-right text-xs font-mono text-foreground">₹{line.rate.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                <td className="py-3.5 px-4 text-right text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                  ₹{line.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </td>
               </tr>
             ))}
           </tbody>

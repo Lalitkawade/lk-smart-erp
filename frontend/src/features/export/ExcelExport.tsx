@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import * as XLSX from 'xlsx';
+import { t } from '../../utils/i18n';
 
 export default function ExcelExport() {
   const { tenant } = useAuth();
@@ -378,7 +379,7 @@ export default function ExcelExport() {
       {/* Header section */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 mb-6 bg-secondary border border-border p-4 sm:p-6 rounded-xl shadow-md">
         <div>
-          <h2 className="text-xl font-bold text-foreground">Spreadsheet Data Export Hub</h2>
+          <h2 className="text-xl font-bold text-foreground">{t('excelExportDesk')}</h2>
           <p className="text-xs text-textMuted mt-1">
             Export structured business datasets from local store ledger tables into high-compatibility Microsoft Excel workbooks
           </p>

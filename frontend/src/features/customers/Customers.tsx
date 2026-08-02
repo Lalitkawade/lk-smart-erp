@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { supabase } from '../../api/supabase';
+import { t } from '../../utils/i18n';
 
 interface Customer {
   id: string;
@@ -79,10 +80,21 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
 
   const fetchCustomersData = async () => {
     try {
-      let query = supabase.from('customers').select('*');
-      if (tenantId) query = query.eq('tenant_id', tenantId);
+      let custsQuery = supabase.from('customers').select('*');
+      let paysQuery = supabase.from('customer_payments').select('*');
+      if (tenantId) {
+        custsQuery = custsQuery.eq('tenant_id', tenantId);
+        paysQuery = paysQuery.eq('tenant_id', tenantId);
+      }
 
-      const { data: custsData } = await query.order('customer_name', { ascending: true });
+      const [custsRes, paysRes] = await Promise.all([
+        custsQuery.order('customer_name', { ascending: true }),
+        paysQuery.order('payment_date', { ascending: false })
+      ]);
+
+      const custsData = custsRes.data;
+      const paysData = paysRes.data;
+
       let currentCusts = (custsData || []) as Customer[];
 
       if (currentCusts.length === 0) {
@@ -98,14 +110,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
       }
 
       setCustomers(currentCusts);
-
-      // Load customer payments history logs
-      let paysQuery = supabase.from('customer_payments').select('*');
-      if (tenantId) paysQuery = paysQuery.eq('tenant_id', tenantId);
-      const { data: paysData } = await paysQuery.order('payment_date', { ascending: false });
-
-      let currentPays = (paysData || []) as PaymentRecord[];
-      setPayments(currentPays);
+      setPayments((paysData || []) as PaymentRecord[]);
     } catch (e) {
       console.error('Failed to sync customers with Supabase:', e);
       const cached = localStorage.getItem('lk_customers');
@@ -458,11 +463,11 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
       )}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 mb-6 bg-secondary border border-border p-4 sm:p-6 rounded-xl shadow-md">
         <div>
-          <h2 className="text-xl font-bold text-foreground">Customer Details & Account History</h2>
+          <h2 className="text-xl font-bold text-foreground">{t('customerManagement')}</h2>
           <p className="text-xs text-textMuted mt-1">Manage customer profiles, purchase history, and outstanding ledgers</p>
         </div>
         <button className="w-full sm:w-auto px-4 py-2 bg-primary hover:bg-primary/90 text-white font-bold rounded-lg text-sm text-center shrink-0 shadow-md transition active:scale-95 cursor-pointer" onClick={handleOpenAdd}>
-          Register Customer
+          + {t('addCustomer')}
         </button>
       </div>
 
@@ -488,95 +493,106 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
 
       <div className="mb-4">
         <input type="text" className="w-full bg-secondary border border-border text-foreground rounded-xl p-3 text-sm focus:outline-none focus:border-primary font-semibold shadow-inner"
-          placeholder="🔍 Search by customer name or mobile number..."
+          placeholder={`🔍 ${t('searchCustomerPlaceholder')}`}
           value={search} onChange={(e) => setSearch(e.target.value)} />
       </div>
 
-      <div className="bg-secondary border border-border rounded-xl p-6 shadow-lg overflow-x-auto">
-        <table className="w-full text-left text-sm text-textSecondary">
+      <div className="bg-secondary border border-border/80 rounded-2xl shadow-sm overflow-x-auto">
+        <table className="w-full text-left text-sm text-textSecondary border-collapse">
           <thead>
-            <tr className="border-b border-border text-textPrimary font-extrabold uppercase tracking-wider text-[11px]">
-              <th className="py-3">Customer Profile</th>
-              <th className="py-3">Mobile Phone</th>
-              <th className="py-3 text-right">Total Purchases (₹)</th>
-              <th className="py-3 text-right">Outstanding (Udhar)</th>
-              <th className="py-3 text-center">Last Purchase</th>
-              <th className="py-3 text-center">Last Payment</th>
-              <th className="py-3 text-center">Credit Status</th>
-              <th className="py-3 text-right">Actions</th>
+            <tr className="border-b border-border/80 bg-slate-100/70 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 font-extrabold uppercase tracking-wider text-[11px]">
+              <th className="py-3.5 px-4">Customer Profile</th>
+              <th className="py-3.5 px-4">Mobile Phone</th>
+              <th className="py-3.5 px-4 text-right">Total Purchases (₹)</th>
+              <th className="py-3.5 px-4 text-right">Outstanding (Udhar)</th>
+              <th className="py-3.5 px-4 text-center">Last Purchase</th>
+              <th className="py-3.5 px-4 text-center">Last Payment</th>
+              <th className="py-3.5 px-4 text-center">Credit Status</th>
+              <th className="py-3.5 px-4 text-right">Actions</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-border/40">
             {processedCustomers.length === 0 ? (
               <tr>
-                <td colSpan={8} className="py-8 text-center text-textMuted">No matching customer accounts found.</td>
+                <td colSpan={8} className="py-8 text-center text-textMuted text-xs font-medium">
+                  <i className="fa-solid fa-users-slash text-2xl text-slate-400 mb-2 block"></i>
+                  No matching customer accounts found.
+                </td>
               </tr>
             ) : processedCustomers.map((c) => {
               const stats = customerStatsMap.get(c.id) || { totalPurchases: 0, lastPurchaseDate: null, lastPaymentDate: null };
               const hasUdhar = Number(c.outstanding || 0) > 0;
+              const initials = c.customer_name ? c.customer_name.slice(0, 2).toUpperCase() : 'CU';
 
               return (
-                <tr key={c.id} className="border-b border-border hover:bg-slate-100/10 dark:hover:bg-slate-800/10 transition">
-                  <td className="py-3.5">
-                    <div className="font-extrabold text-foreground uppercase flex items-center gap-1.5">
-                      {c.customer_name}
-                      {c.dob && (
-                        <span className="text-[10px] bg-pink-500/20 text-pink-400 border border-pink-500/30 px-1.5 py-0.5 rounded font-mono font-bold" title={`Birthday: ${new Date(c.dob).toLocaleDateString()}`}>
-                          🎂 {new Date(c.dob).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-                        </span>
-                      )}
+                <tr key={c.id} className="hover:bg-slate-500/5 transition-colors group">
+                  <td className="py-3.5 px-4">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 font-bold text-xs flex items-center justify-center shrink-0">
+                        {initials}
+                      </div>
+                      <div className="flex flex-col">
+                        <div className="font-bold text-foreground uppercase flex items-center gap-1.5 text-xs">
+                          {c.customer_name}
+                          {c.dob && (
+                            <span className="text-[10px] bg-pink-500/15 text-pink-500 border border-pink-500/30 px-1.5 py-0.2 rounded font-mono font-bold" title={`Birthday: ${new Date(c.dob).toLocaleDateString()}`}>
+                              🎂 {new Date(c.dob).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-textMuted truncate max-w-[180px]">{c.address || 'No address'}</div>
+                      </div>
                     </div>
-                    <div className="text-[11px] text-textMuted">{c.address || 'No address'}</div>
                   </td>
-                  <td className="py-3.5 text-xs font-mono font-bold text-foreground">
+                  <td className="py-3.5 px-4 text-xs font-mono font-bold text-foreground">
                     {c.phone ? (
                       <div className="flex items-center gap-1.5">
                         <span>{c.phone}</span>
-                        <a href={`tel:${c.phone}`} className="px-1.5 py-0.5 bg-primary/10 text-primary border border-primary/30 hover:bg-primary/20 rounded text-[9px] font-black uppercase inline-flex items-center gap-1" title="Call Customer">
+                        <a href={`tel:${c.phone}`} className="px-1.5 py-0.2 bg-primary/10 text-primary border border-primary/30 hover:bg-primary hover:text-white rounded text-[9px] font-black uppercase inline-flex items-center gap-1 transition" title="Call Customer">
                           <i className="fa-solid fa-phone text-[8px]"></i> Call
                         </a>
                       </div>
                     ) : '-'}
                   </td>
-                  <td className="py-3.5 text-right font-mono font-bold text-foreground">
-                    ₹{stats.totalPurchases.toFixed(2)}
+                  <td className="py-3.5 px-4 text-right font-mono font-bold text-foreground text-xs">
+                    ₹{stats.totalPurchases.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                   </td>
-                  <td className="py-3.5 text-right font-mono font-bold">
-                    <span className={hasUdhar ? 'text-primary font-bold text-sm' : 'text-textMuted'}>
-                      ₹{Number(c.outstanding || 0).toFixed(2)}
+                  <td className="py-3.5 px-4 text-right font-mono text-xs">
+                    <span className={`font-bold inline-block px-2 py-0.5 rounded ${hasUdhar ? 'text-rose-500 bg-rose-500/10 border border-rose-500/20' : 'text-slate-500'}`}>
+                      ₹{Number(c.outstanding || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </span>
-                    <div className="text-[10px] text-textMuted font-mono">Limit: ₹{Number(c.credit_limit || 0).toLocaleString()}</div>
+                    <div className="text-[10px] text-textMuted font-mono mt-0.5">Limit: ₹{Number(c.credit_limit || 0).toLocaleString()}</div>
                   </td>
-                  <td className="py-3.5 text-center text-xs font-mono">
-                    {stats.lastPurchaseDate ? new Date(stats.lastPurchaseDate).toLocaleDateString() : '-'}
+                  <td className="py-3.5 px-4 text-center text-xs font-mono text-textSecondary">
+                    {stats.lastPurchaseDate ? new Date(stats.lastPurchaseDate).toLocaleDateString('en-IN') : '-'}
                   </td>
-                  <td className="py-3.5 text-center text-xs font-mono">
-                    {stats.lastPaymentDate ? new Date(stats.lastPaymentDate).toLocaleDateString() : '-'}
+                  <td className="py-3.5 px-4 text-center text-xs font-mono text-textSecondary">
+                    {stats.lastPaymentDate ? new Date(stats.lastPaymentDate).toLocaleDateString('en-IN') : '-'}
                   </td>
-                  <td className="py-3.5 text-center">
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase inline-block ${hasUdhar ? 'bg-primary/10 text-primary border border-primary/30' : 'bg-secondary border border-border text-textMuted'}`}>
-                      {hasUdhar ? '⚠️ Pending' : '✓ No Due'}
+                  <td className="py-3.5 px-4 text-center">
+                    <span className={`px-2.5 py-1 rounded-full text-xs font-bold border inline-block ${hasUdhar ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20' : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'}`}>
+                      {hasUdhar ? '⚠️ Pending' : '✓ Clean'}
                     </span>
                   </td>
-                  <td className="py-3.5 text-right">
-                    <div className="flex gap-1.5 justify-end">
+                  <td className="py-3.5 px-4 text-right">
+                    <div className="flex gap-1.5 justify-end items-center">
                       <button 
-                        className="text-xs bg-primary/10 hover:bg-primary/20 border border-primary/30 px-2 py-1 rounded text-primary font-bold transition flex items-center gap-1 active:scale-95 cursor-pointer"
+                        className="text-xs bg-primary/10 hover:bg-primary hover:text-white border border-primary/20 text-primary px-2.5 py-1.5 rounded-lg font-bold transition-all active:scale-95 cursor-pointer flex items-center gap-1"
                         onClick={() => onNewInvoice && onNewInvoice(c.customer_name)}
                         title="Create new sales bill for this customer"
                       >
-                        🛒 New Invoice
+                        🛒 Invoice
                       </button>
-                      <button className="text-xs bg-background hover:bg-slate-100 dark:hover:bg-slate-800 border border-border px-2 py-1 rounded text-textSecondary hover:text-foreground font-semibold transition"
+                      <button className="text-xs bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-border text-textSecondary hover:text-foreground px-2.5 py-1.5 rounded-lg transition-all active:scale-95 cursor-pointer flex items-center gap-1"
                         onClick={() => {
                           setStatementTab('ledger');
                           setStatementCustomer(c);
                         }}>
-                        📜 History
+                        <i className="fa-solid fa-clock-rotate-left text-[10px]"></i> History
                       </button>
-                      <button className="text-xs bg-background hover:bg-slate-100 dark:hover:bg-slate-800 border border-border px-2 py-1 rounded text-textSecondary hover:text-foreground transition"
+                      <button className="text-xs bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-border text-textSecondary hover:text-foreground px-2.5 py-1.5 rounded-lg transition-all active:scale-95 cursor-pointer"
                         onClick={() => handleOpenEdit(c)}>Edit</button>
-                      <button className="text-xs bg-rose-950 border border-rose-900/30 text-rose-400 hover:bg-rose-900/45 px-2 py-1 rounded font-semibold transition"
+                      <button className="text-xs bg-rose-500/10 hover:bg-rose-500 hover:text-white border border-rose-500/20 text-rose-600 dark:text-rose-400 px-2.5 py-1.5 rounded-lg font-semibold transition-all active:scale-95 cursor-pointer"
                         onClick={() => handleDeleteCustomer(c.id)}>Delete</button>
                     </div>
                   </td>

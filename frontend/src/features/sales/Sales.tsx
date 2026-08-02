@@ -5,6 +5,7 @@ import { useBilling } from '../../hooks/useBilling';
 import { useDemandTracker } from '../../hooks/useDemandTracker';
 import { supabase } from '../../api/supabase';
 import type { Product } from '../../types/erp.types';
+import { t, Language } from '../../utils/i18n';
 
 interface SalesProps {
   tenantId: string;
@@ -18,6 +19,7 @@ interface SalesProps {
 export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCustomerConsumed, autoOpenModal, onModalClosed }: SalesProps) {
   const { products, isLoading: prodLoading } = useInventory(tenantId);
   const { logDemand } = useDemandTracker(tenantId);
+  const activeLang: Language = (localStorage.getItem('lk_lang') as Language) || 'en';
   const {
     cart,
     customerName,
@@ -424,47 +426,57 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
           value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-sm text-textSecondary">
+      <div className="bg-secondary border border-border/80 rounded-2xl shadow-sm overflow-x-auto">
+        <table className="w-full text-left text-sm text-textSecondary border-collapse">
           <thead>
-            <tr className="border-b border-border text-textPrimary font-extrabold uppercase tracking-wider text-xs">
-              <th className="py-3">HSN Code</th>
-              <th className="py-3">Product Name</th>
-              <th className="py-3">Customer Billed To</th>
-              <th className="py-3">Date & Time</th>
-              <th className="py-3 text-center">Qty (Units)</th>
-              <th className="py-3 text-right">Price</th>
-              <th className="py-3 text-right">Amount</th>
-              <th className="py-3 text-right">Actions</th>
+            <tr className="border-b border-border/80 bg-slate-100/70 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 font-extrabold uppercase tracking-wider text-[11px]">
+              <th className="py-3.5 px-4">HSN Code</th>
+              <th className="py-3.5 px-4">Product Name</th>
+              <th className="py-3.5 px-4">Customer Billed To</th>
+              <th className="py-3.5 px-4">Date & Time</th>
+              <th className="py-3.5 px-4 text-center">Qty (Units)</th>
+              <th className="py-3.5 px-4 text-right">Unit Price (₹)</th>
+              <th className="py-3.5 px-4 text-right">Total Amount (₹)</th>
+              <th className="py-3.5 px-4 text-right">Actions</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-border/40">
             {filteredSaleLines.length === 0 ? (
               <tr>
-                <td colSpan={8} className="py-6 text-center text-textMuted">
+                <td colSpan={8} className="py-8 text-center text-textMuted text-xs font-medium">
+                  <i className="fa-solid fa-file-invoice-dollar text-2xl text-slate-400 mb-2 block"></i>
                   No sales invoices recorded yet matching "{searchQuery}". Click 'New Invoice Billing' to check out.
                 </td>
               </tr>
             ) : filteredSaleLines.map((line, idx) => (
-              <tr key={idx} className="border-b border-border hover:bg-slate-100/10 dark:hover:bg-slate-800/10">
-                <td className="py-4 font-mono text-foreground font-semibold">{line.hsn}</td>
-                <td className="py-4 font-semibold text-foreground uppercase">{line.product_name}</td>
-                <td className="py-4 font-black uppercase text-slate-900 dark:text-slate-100 text-xs tracking-wide">
-                  {line.customer_name}
+              <tr key={idx} className="hover:bg-slate-500/5 transition-colors group">
+                <td className="py-3.5 px-4 font-mono text-xs">
+                  <span className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded font-bold">
+                    {line.hsn}
+                  </span>
                 </td>
-                <td className="py-4 text-xs">
-                  <div className="font-semibold text-slate-800 dark:text-slate-200">{new Date(line.date).toLocaleDateString()}</div>
-                  <div className="text-[10.5px] font-mono text-primary font-extrabold mt-0.5">
+                <td className="py-3.5 px-4 text-xs font-bold text-foreground uppercase">{line.product_name}</td>
+                <td className="py-3.5 px-4 text-xs">
+                  <span className="font-bold text-indigo-600 dark:text-indigo-400 uppercase flex items-center gap-1">
+                    <i className="fa-solid fa-user text-[10px] text-slate-400"></i>
+                    {line.customer_name}
+                  </span>
+                </td>
+                <td className="py-3.5 px-4 text-xs">
+                  <div className="font-mono text-foreground font-semibold">{new Date(line.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
+                  <div className="text-[10px] font-mono text-textMuted mt-0.5">
                     {new Date(line.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </div>
                 </td>
-                <td className="py-4 text-center font-bold text-foreground">{line.qty}</td>
-                <td className="py-4 text-right font-mono">₹{line.price.toFixed(2)}</td>
-                <td className="py-4 text-right font-mono font-bold text-foreground">₹{line.amount.toFixed(2)}</td>
-                <td className="py-4 text-right">
-                  <button className="text-xs bg-background hover:bg-slate-100 dark:hover:bg-slate-800 border border-border px-2.5 py-1 rounded text-primary hover:text-primary/80 font-semibold transition"
+                <td className="py-3.5 px-4 text-center text-xs font-mono font-bold text-foreground">{line.qty}</td>
+                <td className="py-3.5 px-4 text-right text-xs font-mono text-foreground">₹{line.price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                <td className="py-3.5 px-4 text-right text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                  ₹{line.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </td>
+                <td className="py-3.5 px-4 text-right">
+                  <button className="text-xs bg-primary/10 hover:bg-primary hover:text-white border border-primary/20 text-primary px-2.5 py-1.5 rounded-lg font-bold transition-all active:scale-95 cursor-pointer flex items-center gap-1 ml-auto"
                     onClick={() => setPrintInvoice(line.rawSaleObj)}>
-                    🖨️ Print
+                    <i className="fa-solid fa-print text-[10px]"></i> Print
                   </button>
                 </td>
               </tr>
@@ -894,55 +906,55 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                   const grandTotalCollected = currentCollected + explicitRepay;
 
                   return (
-                    <div className="bg-background/50 p-3 rounded-xl border border-border space-y-2 text-xs">
-                      <div className="flex justify-between text-textSecondary font-semibold">
-                        <span>Current Cart Sub Total</span>
-                        <span className="font-mono text-foreground font-bold">₹{totalAmount.toFixed(2)}</span>
+                    <div className="bg-background/60 p-3 sm:p-4 rounded-xl border border-border space-y-2.5 text-xs shadow-inner">
+                      <div className="flex justify-between items-center text-textSecondary font-semibold">
+                        <span className="truncate pr-1">{t('cartSubTotal', activeLang)}</span>
+                        <span className="font-mono text-foreground font-bold shrink-0 text-right">₹{totalAmount.toFixed(2)}</span>
                       </div>
 
-                      <div className="flex justify-between text-textSecondary font-semibold">
-                        <span>Today's Bill Collected:</span>
-                        <span className="font-mono font-bold text-primary">₹{currentCollected.toFixed(2)}</span>
+                      <div className="flex justify-between items-center text-textSecondary font-semibold">
+                        <span className="truncate pr-1">{t('todayBillCollected', activeLang)}</span>
+                        <span className="font-mono font-bold text-primary shrink-0 text-right">₹{currentCollected.toFixed(2)}</span>
                       </div>
 
                       {explicitRepay > 0 && (
-                        <div className="flex justify-between text-amber-300 font-semibold">
-                          <span>Previous Udhar Repaid Today:</span>
-                          <span className="font-mono font-bold text-amber-400">-₹{explicitRepay.toFixed(2)}</span>
+                        <div className="flex justify-between items-center text-amber-300 font-semibold">
+                          <span className="truncate pr-1">{t('previousUdharRepaid', activeLang)}</span>
+                          <span className="font-mono font-bold text-amber-400 shrink-0 text-right">-₹{explicitRepay.toFixed(2)}</span>
                         </div>
                       )}
 
-                      <div className="flex justify-between text-foreground font-extrabold border-t border-border/40 pt-1">
-                        <span>TOTAL CASH / PAYMENT COLLECTED:</span>
-                        <span className="font-mono text-primary text-xs font-black">₹{grandTotalCollected.toFixed(2)}</span>
+                      <div className="flex justify-between items-center text-foreground font-extrabold border-t border-border/40 pt-1.5">
+                        <span className="text-[11px] sm:text-xs tracking-tight uppercase">{t('totalCashCollected', activeLang)}</span>
+                        <span className="font-mono text-primary text-xs sm:text-sm font-black shrink-0 text-right ml-1">₹{grandTotalCollected.toFixed(2)}</span>
                       </div>
 
-                      <div className="pt-1.5 border-t border-border/60 space-y-1 text-[11px]">
-                        <div className="flex justify-between text-foreground font-bold">
-                          <span>Current Bill Payment Status:</span>
-                          <span className={unpaidCurrentBill === 0 ? 'text-primary font-extrabold' : (appliedToBill > 0 ? 'text-amber-400 font-extrabold' : 'text-rose-400 font-extrabold')}>
-                            {unpaidCurrentBill === 0 ? '✓ PAID' : (appliedToBill > 0 ? `PARTIAL (₹${unpaidCurrentBill.toFixed(2)} Unpaid)` : 'UNPAID (Udhar)')}
+                      <div className="pt-1.5 border-t border-border/60 space-y-1.5 text-[11px]">
+                        <div className="flex justify-between items-center text-foreground font-bold">
+                          <span className="text-[10.5px] sm:text-xs">{t('currentBillStatus', activeLang)}</span>
+                          <span className={`${unpaidCurrentBill === 0 ? 'text-primary font-extrabold' : (appliedToBill > 0 ? 'text-amber-400 font-extrabold' : 'text-rose-400 font-extrabold')} shrink-0 text-right ml-1`}>
+                            {unpaidCurrentBill === 0 ? `✓ ${t('paid', activeLang)}` : (appliedToBill > 0 ? `${t('partial', activeLang)} (₹${unpaidCurrentBill.toFixed(2)} Unpaid)` : t('unpaid', activeLang))}
                           </span>
                         </div>
 
                         {totalUdharRepaid > 0 && (
-                          <div className="flex justify-between text-primary font-bold">
-                            <span>Applied to Previous Udhar:</span>
-                            <span className="font-mono">-₹{totalUdharRepaid.toFixed(2)}</span>
+                          <div className="flex justify-between items-center text-primary font-bold">
+                            <span className="text-[10.5px] sm:text-xs">{t('appliedToPreviousUdhar', activeLang)}</span>
+                            <span className="font-mono shrink-0 text-right">-₹{totalUdharRepaid.toFixed(2)}</span>
                           </div>
                         )}
 
                         {unpaidCurrentBill > 0 && matchedCustomer && (
-                          <div className="flex justify-between text-rose-400 font-bold">
-                            <span>Unpaid Amount Added to Udhar:</span>
-                            <span className="font-mono">+₹{unpaidCurrentBill.toFixed(2)}</span>
+                          <div className="flex justify-between items-center text-rose-400 font-bold">
+                            <span className="text-[10.5px] sm:text-xs">{t('unpaidAddedToUdhar', activeLang)}</span>
+                            <span className="font-mono shrink-0 text-right">+₹{unpaidCurrentBill.toFixed(2)}</span>
                           </div>
                         )}
 
                         {matchedCustomer && (
-                          <div className="flex justify-between text-amber-300 font-black pt-1 border-t border-dashed border-border/40 text-xs">
-                            <span>New Net Total Udhar Balance:</span>
-                            <span className="font-mono text-amber-400">₹{newUdharBalance.toFixed(2)} {newUdharBalance > 0 ? '(Pending)' : '(Cleared)'}</span>
+                          <div className="flex justify-between items-center text-amber-300 font-black pt-1.5 border-t border-dashed border-border/40 text-xs">
+                            <span className="text-[10.5px] sm:text-xs truncate pr-1">{t('newUdharBalance', activeLang)}</span>
+                            <span className="font-mono text-amber-400 shrink-0 text-right font-black">₹{newUdharBalance.toFixed(2)} {newUdharBalance > 0 ? `(${t('pending', activeLang)})` : '(Cleared)'}</span>
                           </div>
                         )}
                       </div>
@@ -950,9 +962,12 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                   );
                 })()}
 
-                <div className="flex gap-2">
-                  <button type="button" className="flex-grow px-3 py-2 border border-border text-textSecondary rounded text-xs" onClick={() => setBillingModal(false)}>Cancel</button>
-                  <button type="submit" className="flex-grow px-3 py-2 bg-primary hover:bg-primary/90 text-white font-bold rounded text-xs transition shadow-md cursor-pointer">Checkout & Bill</button>
+                <div className="flex gap-2.5 pt-1">
+                  <button type="button" className="w-1/3 sm:flex-1 py-2.5 px-3 border border-border hover:bg-background/80 text-textSecondary font-bold rounded-xl text-xs transition active:scale-95 cursor-pointer text-center" onClick={() => setBillingModal(false)}>{t('cancel', activeLang)}</button>
+                  <button type="submit" className="w-2/3 sm:flex-1 py-2.5 px-4 bg-primary hover:bg-primary/90 text-white font-extrabold rounded-xl text-xs sm:text-sm transition shadow-lg active:scale-95 cursor-pointer flex items-center justify-center gap-1.5">
+                    <i className="fa-solid fa-check-double text-xs"></i>
+                    <span>{t('checkoutAndBill', activeLang)}</span>
+                  </button>
                 </div>
               </form>
 
@@ -999,26 +1014,26 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
             }
           `}</style>
 
-          <div className="bg-white text-black p-6 rounded-xl w-full max-w-4xl shadow-2xl print:p-0 print:max-w-none print:shadow-none print:bg-white my-auto max-h-[92vh] print:max-h-none overflow-y-auto print:overflow-visible">
+          <div className="bg-white text-black p-3 sm:p-6 rounded-2xl w-[96vw] sm:w-full max-w-4xl shadow-2xl print:p-0 print:max-w-none print:shadow-none print:bg-white my-auto max-h-[95vh] print:max-h-none overflow-y-auto print:overflow-visible">
             
             {/* Action Bar (Hidden during print) */}
-            <div className="flex justify-between items-center pb-4 mb-4 border-b border-slate-200 print:hidden">
-              <div className="flex items-center gap-2">
-                <span className="bg-primary/10 text-primary text-xs font-black px-2.5 py-1 rounded-full uppercase">
+            <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-2.5 pb-3 mb-3 border-b border-slate-200 print:hidden">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                <span className="bg-primary/10 text-primary text-[10px] sm:text-xs font-black px-2.5 py-1 rounded-full uppercase tracking-wider">
                   A4 Print Invoice (2 Copies)
                 </span>
-                <span className="text-xs text-slate-500 font-medium">Customer Copy + Shop Copy</span>
+                <span className="text-[10px] sm:text-xs text-slate-500 font-bold">Customer Copy + Shop Copy</span>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
                 <button 
                   onClick={() => setPrintInvoice(null)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg text-xs transition"
+                  className="flex-1 sm:flex-none px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition text-center"
                 >
                   Close
                 </button>
                 <button 
                   onClick={() => window.print()}
-                  className="px-5 py-2 bg-primary hover:bg-primary/90 text-white font-extrabold rounded-lg text-xs shadow-md transition flex items-center gap-2 cursor-pointer"
+                  className="flex-2 sm:flex-none px-4 py-2 bg-primary hover:bg-primary/90 text-white font-extrabold rounded-xl text-xs shadow-md transition flex items-center justify-center gap-2 cursor-pointer active:scale-95"
                 >
                   <i className="fa-solid fa-print"></i>
                   <span>Print Invoice (Ctrl+P)</span>
@@ -1026,8 +1041,9 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
               </div>
             </div>
 
-            {/* Print Container Area */}
-            <div id="invoice-print-area" className="space-y-4 print:space-y-2">
+            {/* Print Container Area - Smooth Mobile Scroll Wrapper */}
+            <div className="w-full overflow-x-auto p-1 scrollbar-thin print:overflow-visible">
+              <div id="invoice-print-area" className="min-w-[620px] sm:min-w-0 space-y-4 print:space-y-2 print:min-w-0">
               
               {/* Render 2 Copies: CUSTOMER COPY and SHOP COPY */}
               {['CUSTOMER COPY', 'SHOP COPY'].map((copyType, copyIdx) => {
@@ -1249,6 +1265,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                 <div className="border-b border-dashed border-slate-400 flex-1"></div>
               </div>
 
+              </div>
             </div>
 
           </div>

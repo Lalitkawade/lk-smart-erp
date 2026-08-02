@@ -116,12 +116,12 @@ export default function Payments() {
       <div className="bg-secondary border border-border rounded-xl p-6 shadow-lg overflow-x-auto">
         <table className="w-full text-left text-sm text-textSecondary">
           <thead>
-            <tr className="border-b border-border text-textPrimary font-extrabold uppercase tracking-wider text-xs">
-              <th className="py-3">Voucher ID</th>
-              <th className="py-3">{activeTab === 'customers' ? 'Received From' : 'Settled To'}</th>
-              <th className="py-3">Payment Date</th>
-              <th className="py-3">Method / Ref</th>
-              <th className="py-3 text-right">Transaction Amount</th>
+            <tr className="border-b border-border text-textPrimary font-extrabold uppercase tracking-wider text-xs bg-slate-500/5">
+              <th className="py-2.5 px-3">Voucher ID</th>
+              <th className="py-2.5 px-3">{activeTab === 'customers' ? 'Received From' : 'Settled To'}</th>
+              <th className="py-2.5 px-3">Payment Date</th>
+              <th className="py-2.5 px-3">Method / Ref</th>
+              <th className="py-2.5 px-3 text-right">Transaction Amount</th>
             </tr>
           </thead>
           <tbody>
@@ -130,15 +130,15 @@ export default function Payments() {
                 <td colSpan={5} className="py-6 text-center text-textMuted">No payment vouchers logged.</td>
               </tr>
             ) : filtered.map((p) => (
-              <tr key={p.id} className="border-b border-border hover:bg-slate-100/10 dark:hover:bg-slate-800/10">
-                <td className="py-4 font-mono text-xs text-textMuted">{p.id.slice(0, 8).toUpperCase()}</td>
-                <td className="py-4 font-bold text-foreground uppercase">{p.party_name}</td>
-                <td className="py-4">{new Date(p.payment_date).toLocaleDateString()}</td>
-                <td className="py-4">
+              <tr key={p.id} className="border-b border-border hover:bg-slate-100/10 dark:hover:bg-slate-800/10 transition-colors">
+                <td className="py-2.5 px-3 font-mono text-xs text-textMuted">{p.id.slice(0, 8).toUpperCase()}</td>
+                <td className="py-2.5 px-3 text-xs font-bold text-foreground uppercase">{p.party_name}</td>
+                <td className="py-2.5 px-3 text-xs">{new Date(p.payment_date).toLocaleDateString()}</td>
+                <td className="py-2.5 px-3 text-xs">
                   <div className="font-semibold text-textSecondary">{p.payment_mode}</div>
                   <div className="text-[10px] text-textMuted font-mono">Ref: {p.ref_number}</div>
                 </td>
-                <td className={`py-4 text-right font-mono font-bold text-base ${activeTab === 'customers' ? 'text-primary' : 'text-rose-455'}`}>
+                <td className={`py-2.5 px-3 text-right font-mono font-bold text-sm ${activeTab === 'customers' ? 'text-primary' : 'text-rose-455'}`}>
                   {activeTab === 'customers' ? '+' : '-'}₹{p.amount.toLocaleString()}
                 </td>
               </tr>

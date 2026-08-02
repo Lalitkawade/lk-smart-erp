@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../api/supabase';
 import type { Profile, Tenant } from '../types/erp.types';
+import { authRateLimiter } from '../utils/rateLimiter';
 
 const DEFAULT_FALLBACK_TENANT_ID = 'default-hardware-erp';
 
@@ -123,24 +124,38 @@ export function useAuth() {
   const signIn = async (email: string, password: string, role: string) => {
     setLoading(true);
     try {
-      // 1. Authenticate with Supabase Auth
+      // 1. Validate inputs securely
+      if (!email || !password) {
+        throw new Error('Email and password are required.');
+      }
+
+      // 2. Rate limiting check to prevent brute force attempts
+      if (!authRateLimiter.isAllowed(email.toLowerCase(), { maxAttempts: 5, windowMs: 60000 })) {
+        throw new Error('Too many login attempts. Please wait 1 minute before trying again.');
+      }
+
+      // 3. Authenticate with Supabase Auth
       let { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
-      // 2. Self-Healing: If user profile doesn't exist, automatically sign up on first try
-      if (error && (error.message.includes('Invalid login credentials') || error.message.includes('User not found'))) {
+      // If user doesn't exist yet, attempt registration
+      if (error && (error.message.includes('User not found') || error.message.includes('Invalid login credentials'))) {
         const signupRes = await supabase.auth.signUp({ email, password });
-        if (signupRes.error) throw signupRes.error;
+        if (signupRes.error) {
+          throw new Error('Invalid email or password. Please verify your credentials.');
+        }
         data = { user: signupRes.data.user, session: signupRes.data.session } as any;
         error = null;
       } else if (error) {
-        throw error;
+        throw new Error(error.message || 'Authentication failed');
       }
 
-      if (!data.user) throw new Error('Authentication failed');
+      if (!data?.user) {
+        throw new Error('Authentication failed: No user returned');
+      }
 
       const userId = data.user.id;
 
-      // 3. Fetch or provision the associated profiles & tenants records
+      // Fetch or provision profile & tenant records
       let { data: profileData } = await supabase
         .from('profiles')
         .select('*')
@@ -150,7 +165,6 @@ export function useAuth() {
       let tenantData: Tenant | null = null;
 
       if (!profileData) {
-        // Fallback: Check if there's any active tenant in the database, else create a default one
         const { data: existingTenants } = await supabase
           .from('tenants')
           .select('*')
@@ -161,7 +175,6 @@ export function useAuth() {
           tenantData = existingTenants[0];
           tenantId = tenantData.id;
         } else {
-          // Provision new tenant
           const { data: newTenant, error: createTenErr } = await supabase
             .from('tenants')
             .insert({
@@ -179,7 +192,6 @@ export function useAuth() {
           tenantData = newTenant;
           tenantId = newTenant.id;
 
-          // Provision default Settings profile
           await supabase.from('settings').insert({
             tenant_id: tenantId,
             invoice_prefix: 'INV',
@@ -189,14 +201,13 @@ export function useAuth() {
           });
         }
 
-        // Create Profile record
         const { data: newProfile, error: createProfErr } = await supabase
           .from('profiles')
           .insert({
             id: userId,
             tenant_id: tenantId,
             username: email.split('@')[0].toUpperCase(),
-            role: role,
+            role: role || 'Owner',
             status: 'Active'
           })
           .select()
@@ -205,7 +216,6 @@ export function useAuth() {
         if (createProfErr) throw createProfErr;
         profileData = newProfile;
       } else if (profileData.tenant_id) {
-        // Retrieve existing tenant info
         const { data: tenantFetch } = await supabase
           .from('tenants')
           .select('*')
@@ -237,6 +247,9 @@ export function useAuth() {
         created_at: new Date().toISOString()
       };
 
+      // Clear rate limiter on successful authentication
+      authRateLimiter.reset(email.toLowerCase());
+
       setUser(data.user);
       setProfile(activeProfile);
       setTenant(activeTenant);
@@ -245,36 +258,8 @@ export function useAuth() {
       localStorage.setItem('lk_session', JSON.stringify(session));
       return session;
     } catch (err: any) {
-      // Fail-safe fallback if remote Supabase database network fetch is blocked or offline
-      console.warn('Supabase Auth remote sync fallback:', err?.message || err);
-      
-      const fallbackUser = { id: 'usr-' + Date.now(), email };
-      const fallbackProfile: Profile = {
-        id: fallbackUser.id,
-        tenant_id: DEFAULT_FALLBACK_TENANT_ID,
-        username: (email.split('@')[0] || 'OPERATOR').toUpperCase(),
-        role: role || 'Owner',
-        status: 'Active',
-        created_at: new Date().toISOString()
-      };
-      const fallbackTenant: Tenant = {
-        id: DEFAULT_FALLBACK_TENANT_ID,
-        company_code: 'LKHARDWARE',
-        company_name: 'LK Hardware ERP',
-        owner_name: 'Store Owner',
-        owner_email: email,
-        plan: 'Enterprise',
-        status: 'Active',
-        created_at: new Date().toISOString()
-      };
-
-      setUser(fallbackUser);
-      setProfile(fallbackProfile);
-      setTenant(fallbackTenant);
-
-      const session = { user: fallbackUser, profile: fallbackProfile, tenant: fallbackTenant };
-      localStorage.setItem('lk_session', JSON.stringify(session));
-      return session;
+      console.error('Authentication Error:', err?.message || err);
+      throw err;
     } finally {
       setLoading(false);
     }

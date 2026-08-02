@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useInventory } from '../../hooks/useInventory';
 import { supabase } from '../../api/supabase';
 import type { Product, BusinessType } from '../../types/erp.types';
+import { t } from '../../utils/i18n';
 
 interface ProductsProps {
   tenantId: string;
@@ -552,44 +553,44 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
       )}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 mb-6">
         <div>
-          <h2 className="text-xl font-bold text-foreground">Products</h2>
+          <h2 className="text-xl font-bold text-foreground">{t('productCatalog')}</h2>
           <p className="text-xs text-textMuted mt-1">Configure and manage standard product parameters</p>
         </div>
         <button className="w-full sm:w-auto px-4 py-2 bg-primary hover:bg-primary/90 text-white font-bold rounded-lg text-sm text-center shrink-0 shadow-md transition active:scale-95 cursor-pointer" onClick={handleOpenAdd}>
-          Add Product Item
+          + {t('addProduct')}
         </button>
       </div>
 
       <div className="mb-4">
-        <input type="text" className="w-full bg-background border border-border text-foreground rounded-lg p-3 text-sm focus:outline-none focus:border-primary font-semibold" placeholder="Search products..."
+        <input type="text" className="w-full bg-background border border-border text-foreground rounded-lg p-3 text-sm focus:outline-none focus:border-primary font-semibold" placeholder={`🔍 ${t('searchPlaceholder')}`}
           value={search} onChange={(e) => setSearch(e.target.value)} />
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-sm text-textSecondary">
+      <div className="bg-secondary border border-border/80 rounded-2xl shadow-sm overflow-x-auto">
+        <table className="w-full text-left text-sm text-textSecondary border-collapse">
           <thead>
-            <tr className="border-b border-border text-textPrimary font-extrabold uppercase tracking-wider text-xs">
-              <th className="py-3">HSN Code of Product</th>
-              <th className="py-3">Product Name</th>
-              <th className="py-3">Cost</th>
-              <th className="py-3">Margin</th>
-              <th className="py-3">Selling Price</th>
-              <th className="py-3">Available Stock</th>
-              <th className="py-3 text-right">Actions</th>
+            <tr className="border-b border-border/80 bg-slate-100/70 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 font-extrabold uppercase tracking-wider text-[11px]">
+              <th className="py-3.5 px-4">HSN Code</th>
+              <th className="py-3.5 px-4">Product Name</th>
+              <th className="py-3.5 px-4">Cost (₹)</th>
+              <th className="py-3.5 px-4">Margin</th>
+              <th className="py-3.5 px-4">Selling Price (₹)</th>
+              <th className="py-3.5 px-4">Available Stock</th>
+              <th className="py-3.5 px-4 text-right">Actions</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-border/40">
             {isLoading ? (
-              <tr><td colSpan={7} className="py-6 text-center text-textMuted">Retrieving catalog records...</td></tr>
+              <tr><td colSpan={7} className="py-8 text-center text-textMuted text-xs font-medium">Retrieving catalog records...</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={7} className="py-6 text-center text-textMuted">No items configured in catalog.</td></tr>
+              <tr><td colSpan={7} className="py-8 text-center text-textMuted text-xs font-medium">No items configured in catalog.</td></tr>
             ) : filtered.map((p) => {
               const name = p?.product_name || 'Unnamed Product';
               const purchasePrice = Number(p?.purchase_price || 0);
               const sellingPrice = Number(p?.selling_price || 0);
               const marginAmount = sellingPrice - purchasePrice;
               const marginPercent = purchasePrice > 0 ? (marginAmount / purchasePrice) * 100 : 0;
-               const currentStock = Number(p?.current_stock || 0);
+              const currentStock = Number(p?.current_stock || 0);
               const minStock = Number(p?.min_stock_level || 10);
               const unit = p?.s_unit || p?.unit || 'Pcs';
               const isLowStock = currentStock <= minStock;
@@ -626,13 +627,17 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
               const lastSale = matchedSales[0] || null;
               
               return (
-                <tr key={p.id} className="border-b border-border hover:bg-slate-100/10 dark:hover:bg-slate-800/10 group">
-                  <td className="py-4 font-mono text-xs font-bold text-foreground">{p.hsn || '-'}</td>
-                  <td className="py-4 font-bold uppercase cursor-pointer"
+                <tr key={p.id} className="hover:bg-slate-500/5 transition-colors group">
+                  <td className="py-3.5 px-4 font-mono text-xs">
+                    <span className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded font-bold">
+                      {p.hsn || '-'}
+                    </span>
+                  </td>
+                  <td className="py-3.5 px-4 font-bold uppercase cursor-pointer"
                     onClick={() => handleShowHistory(p)}
                     title="Click to view transaction ledger details">
                     <div className="flex flex-col">
-                      <span className="flex items-center gap-1.5 font-bold text-blue-500 dark:text-blue-400 hover:text-blue-650 dark:hover:text-blue-350 hover:underline">
+                      <span className="flex items-center gap-1.5 font-bold text-primary hover:underline text-xs">
                         <i className="fa-solid fa-clock-rotate-left text-[10px]"></i>
                         {name}
                       </span>
@@ -646,14 +651,14 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
                       {(lastPurchase || lastSale) && (
                         <div className="text-[10px] mt-1.5 space-y-0.5 border-t border-border/30 pt-1.5 normal-case font-medium">
                           {lastPurchase && (
-                            <div className="text-blue-550 dark:text-blue-400 flex items-center gap-1 flex-wrap">
+                            <div className="text-blue-500 flex items-center gap-1 flex-wrap">
                               <span>📥 Last Buy:</span>
                               <span className="font-mono font-bold">₹{lastPurchase.rate.toFixed(2)}</span>
                               <span className="text-[9px] text-textMuted truncate max-w-[150px] uppercase font-bold" title={lastPurchase.supplier_name}>({lastPurchase.supplier_name})</span>
                             </div>
                           )}
                           {lastSale && (
-                            <div className="text-primary flex items-center gap-1 flex-wrap">
+                            <div className="text-emerald-500 flex items-center gap-1 flex-wrap">
                               <span>📤 Last Sell:</span>
                               <span className="font-mono font-bold">₹{lastSale.rate.toFixed(2)}</span>
                             </div>
@@ -662,21 +667,21 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
                       )}
                     </div>
                   </td>
-                  <td className="py-4 font-mono">₹{purchasePrice.toFixed(2)}</td>
-                  <td className="py-4">
-                    <div className="font-mono text-xs text-primary font-bold">₹{marginAmount.toFixed(2)}</div>
-                    <div className="text-[10px] text-textMuted">({marginPercent.toFixed(1)}%)</div>
+                  <td className="py-3.5 px-4 font-mono text-xs text-foreground">₹{purchasePrice.toFixed(2)}</td>
+                  <td className="py-3.5 px-4">
+                    <div className="font-mono text-xs text-emerald-600 dark:text-emerald-400 font-bold">₹{marginAmount.toFixed(2)}</div>
+                    <div className="text-[10px] text-textMuted font-mono">({marginPercent.toFixed(1)}%)</div>
                   </td>
-                  <td className="py-4 font-semibold text-foreground font-bold">₹{sellingPrice.toFixed(2)}</td>
-                  <td className="py-4">
+                  <td className="py-3.5 px-4 font-mono font-bold text-foreground text-xs">₹{sellingPrice.toFixed(2)}</td>
+                  <td className="py-3.5 px-4">
                     <div className="flex flex-col">
                       <div className="flex items-center gap-1.5">
-                        <span className={`font-mono font-bold text-sm ${isLowStock ? 'text-rose-455' : 'text-foreground'}`}>
+                        <span className={`font-mono font-bold text-xs ${isLowStock ? 'text-rose-500' : 'text-foreground'}`}>
                           {currentStock.toFixed(2).replace(/\.00$/, '')}
                         </span>
                         <span className="text-[10px] text-textMuted font-bold uppercase">{unit}</span>
                         {isLowStock && (
-                          <span className="text-[9px] px-1.5 py-0.5 bg-rose-955 border border-rose-900 text-rose-400 rounded-md font-bold" title="Low stock warning!">
+                          <span className="text-[9px] px-1.5 py-0.5 bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 rounded-md font-bold" title="Low stock warning!">
                             ⚠️ Low
                           </span>
                         )}
@@ -688,11 +693,11 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
                       )}
                     </div>
                   </td>
-                  <td className="py-4 text-right">
-                    <div className="flex gap-2 justify-end">
-                      <button className="text-xs bg-background hover:bg-slate-100 dark:hover:bg-slate-800 border border-border px-2.5 py-1 rounded text-textSecondary hover:text-foreground transition"
+                  <td className="py-3.5 px-4 text-right">
+                    <div className="flex gap-1.5 justify-end">
+                      <button className="text-xs bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-border text-textSecondary hover:text-foreground px-2.5 py-1.5 rounded-lg transition-all active:scale-95 cursor-pointer font-semibold"
                         onClick={() => handleOpenEdit(p)}>Edit</button>
-                      <button className="text-xs bg-rose-950 border border-rose-900/30 text-rose-400 hover:bg-rose-900/45 px-2.5 py-1 rounded font-semibold transition"
+                      <button className="text-xs bg-rose-500/10 hover:bg-rose-500 hover:text-white border border-rose-500/20 text-rose-600 dark:text-rose-400 px-2.5 py-1.5 rounded-lg font-semibold transition-all active:scale-95 cursor-pointer"
                         onClick={() => handleDeleteProduct(p.id)}>Delete</button>
                     </div>
                   </td>

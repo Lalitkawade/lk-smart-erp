@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { supabase } from '../../api/supabase';
+import { t } from '../../utils/i18n';
 
 interface Expense {
   id: string;
@@ -169,11 +170,11 @@ export default function Expenses({ autoOpenModal, onModalClosed }: ExpensesProps
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 mb-6 bg-secondary border border-border p-4 sm:p-6 rounded-xl shadow-md">
         <div>
-          <h2 className="text-xl font-bold text-foreground">Expenses Ledger</h2>
+          <h2 className="text-xl font-bold text-foreground">{t('shopOperatingExpenses')}</h2>
           <p className="text-xs text-textMuted mt-1">Audit daily store operational costs and administrative cash outflows</p>
         </div>
         <button className="w-full sm:w-auto px-4 py-2 bg-primary hover:bg-primary/90 text-white font-bold rounded-lg text-sm text-center shrink-0 shadow-md transition active:scale-95 cursor-pointer" onClick={handleOpenAdd}>
-          Log Store Expense
+          + {t('logExpense')}
         </button>
       </div>
 
@@ -187,34 +188,41 @@ export default function Expenses({ autoOpenModal, onModalClosed }: ExpensesProps
               value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
 
-          <div className="bg-secondary border border-border rounded-xl p-6 shadow-lg overflow-x-auto">
-            <table className="w-full text-left text-sm text-textSecondary">
+          <div className="bg-secondary border border-border/80 rounded-2xl shadow-sm overflow-x-auto">
+            <table className="w-full text-left text-sm text-textSecondary border-collapse">
               <thead>
-                <tr className="border-b border-border text-textPrimary font-extrabold uppercase tracking-wider text-xs">
-                  <th className="py-3">Date</th>
-                  <th className="py-3">Category</th>
-                  <th className="py-3">Description</th>
-                  <th className="py-3">Value</th>
-                  <th className="py-3 text-right">Actions</th>
+                <tr className="border-b border-border/80 bg-slate-100/70 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 font-extrabold uppercase tracking-wider text-[11px]">
+                  <th className="py-3.5 px-4">Expense Date</th>
+                  <th className="py-3.5 px-4">Category</th>
+                  <th className="py-3.5 px-4">Description</th>
+                  <th className="py-3.5 px-4 text-right">Outflow Amount (₹)</th>
+                  <th className="py-3.5 px-4 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-border/40">
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-6 text-center text-textMuted">No matching expense logs found.</td>
+                    <td colSpan={5} className="py-8 text-center text-textMuted text-xs font-medium">
+                      <i className="fa-solid fa-hand-holding-dollar text-2xl text-slate-400 mb-2 block"></i>
+                      No matching expense logs found.
+                    </td>
                   </tr>
                 ) : filtered.map((e) => (
-                  <tr key={e.id} className="border-b border-border hover:bg-slate-100/10 dark:hover:bg-slate-800/10">
-                    <td className="py-4 font-mono">{new Date(e.expense_date).toLocaleDateString()}</td>
-                    <td className="py-4">
-                      <span className="text-xs px-2 py-0.5 bg-background border border-border text-textSecondary rounded-md font-mono font-bold">
+                  <tr key={e.id} className="hover:bg-slate-500/5 transition-colors group">
+                    <td className="py-3.5 px-4 font-mono text-xs text-foreground font-medium">
+                      {new Date(e.expense_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <span className="text-[11px] px-2.5 py-1 bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 rounded-full font-mono font-bold uppercase">
                         {e.category}
                       </span>
                     </td>
-                    <td className="py-4 text-xs text-textSecondary max-w-[200px] truncate" title={e.description}>{e.description || '-'}</td>
-                    <td className="py-4 font-mono font-bold text-rose-450">₹{e.amount.toLocaleString()}</td>
-                    <td className="py-4 text-right">
-                      <button className="text-xs bg-rose-950/20 text-rose-400 hover:bg-rose-900/40 px-2 py-1 rounded border border-rose-900/30"
+                    <td className="py-3.5 px-4 text-xs text-textSecondary max-w-[220px] truncate" title={e.description}>{e.description || '-'}</td>
+                    <td className="py-3.5 px-4 text-right font-mono font-bold text-rose-600 dark:text-rose-400 text-xs">
+                      ₹{e.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="py-3.5 px-4 text-right">
+                      <button className="text-xs bg-rose-500/10 hover:bg-rose-500 hover:text-white border border-rose-500/20 text-rose-600 dark:text-rose-400 px-2.5 py-1.5 rounded-lg font-semibold transition-all active:scale-95 cursor-pointer ml-auto"
                         onClick={() => handleDeleteExpense(e.id)}>Delete</button>
                     </td>
                   </tr>

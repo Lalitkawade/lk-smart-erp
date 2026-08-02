@@ -1,19 +1,23 @@
 -- ============================================================================
--- LK SMART ERP - COMPLETE SUPABASE DATABASE RESET & RECREATION SCRIPT
--- INCLUDING SERVER-SIDE AUTHENTICATION, AUTHORIZATION & MULTI-TENANT RLS POLICIES
+-- LK SMART ERP - MASTER SUPABASE DATABASE SCHEMA (CLEAN RECREATION)
+-- Complete schema with Multi-Tenant RLS, Server-Side Triggers & All Modules
 -- ============================================================================
--- Instructions: Copy and paste this script into your Supabase SQL Editor
--- (Supabase Dashboard -> SQL Editor -> New Query -> Run)
+-- Instructions: 
+-- 1. Open your Supabase Project Dashboard (https://supabase.com/dashboard)
+-- 2. Go to: SQL Editor -> New Query
+-- 3. Copy and paste this ENTIRE script and click "Run" (Ctrl + Enter)
 -- ============================================================================
 
--- Enable pgcrypto extension for UUID generation
+-- Enable required PostgreSQL extensions
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- 1. DROP EXISTING TABLES IN CASCADE ORDER (Clean Reset)
+-- 1. DROP EXISTING TABLES IN CASCADE ORDER FOR CLEAN RESET
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 DROP FUNCTION IF EXISTS public.handle_new_user CASCADE;
 DROP FUNCTION IF EXISTS public.get_auth_tenant_id CASCADE;
 
+DROP TABLE IF EXISTS unstocked_item_demands CASCADE;
 DROP TABLE IF EXISTS supplier_payments CASCADE;
 DROP TABLE IF EXISTS customer_payments CASCADE;
 DROP TABLE IF EXISTS job_card_parts CASCADE;
@@ -47,7 +51,7 @@ INSERT INTO tenants (id, company_code, company_name, owner_name, owner_email)
 VALUES ('00000000-0000-0000-0000-000000000000', 'LKHARDWARE', 'LK Hardware ERP', 'Store Owner', 'owner@shop.com')
 ON CONFLICT (id) DO NOTHING;
 
--- 3. PROFILES TABLE (Server-side Auth Authorization User Profile)
+-- 3. PROFILES TABLE (Extends Supabase Auth users)
 CREATE TABLE profiles (
     id UUID PRIMARY KEY, -- Maps to auth.users.id
     tenant_id UUID REFERENCES tenants(id) ON DELETE SET NULL,
@@ -60,7 +64,7 @@ CREATE TABLE profiles (
 -- 4. SETTINGS TABLE
 CREATE TABLE settings (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
+    tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE UNIQUE,
     invoice_prefix TEXT DEFAULT 'INV',
     gstin TEXT DEFAULT '27LKSERP401Z2B5',
     address TEXT DEFAULT '123 Market Road, Pune, Maharashtra',
@@ -71,6 +75,11 @@ CREATE TABLE settings (
     logo_url TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Default Settings Record for Default Tenant
+INSERT INTO settings (tenant_id, invoice_prefix, gstin, address, city, state, currency, business_type)
+VALUES ('00000000-0000-0000-0000-000000000000', 'INV', '27LKSERP401Z2B5', '123 Market Road, Pune, Maharashtra', 'Pune', 'Maharashtra', 'INR', 'Hardware Shop')
+ON CONFLICT (tenant_id) DO NOTHING;
 
 -- 5. SUPPLIERS (VENDORS) TABLE
 CREATE TABLE suppliers (
@@ -114,6 +123,7 @@ CREATE TABLE products (
     selling_price NUMERIC(12, 2) DEFAULT 0.00,
     dealer_price NUMERIC(12, 2) DEFAULT 0.00,
     mrp NUMERIC(12, 2) DEFAULT 0.00,
+    gst NUMERIC(5, 2) DEFAULT 0.00,
     current_stock NUMERIC(12, 2) DEFAULT 0.00,
     min_stock_level NUMERIC(12, 2) DEFAULT 10,
     status TEXT DEFAULT 'Active',
@@ -175,7 +185,7 @@ CREATE TABLE sales_invoices (
 CREATE TABLE sales_items (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     invoice_id UUID REFERENCES sales_invoices(id) ON DELETE CASCADE,
-    product_id UUID REFERENCES products(id) ON DELETE CASCADE,
+    product_id UUID REFERENCES products(id) ON DELETE RESTRICT,
     qty NUMERIC(12, 2) DEFAULT 1.00,
     rate NUMERIC(12, 2) DEFAULT 0.00,
     amount NUMERIC(12, 2) DEFAULT 0.00
@@ -202,7 +212,7 @@ CREATE TABLE purchase_bills (
 CREATE TABLE purchase_items (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     bill_id UUID REFERENCES purchase_bills(id) ON DELETE CASCADE,
-    product_id UUID REFERENCES products(id) ON DELETE CASCADE,
+    product_id UUID REFERENCES products(id) ON DELETE RESTRICT,
     qty NUMERIC(12, 2) DEFAULT 1.00,
     rate NUMERIC(12, 2) DEFAULT 0.00,
     amount NUMERIC(12, 2) DEFAULT 0.00
@@ -230,9 +240,45 @@ CREATE TABLE supplier_payments (
     payment_date TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- 15. JOB CARDS TABLE (Garage & Automobile Services)
+CREATE TABLE job_cards (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
+    vehicle_number TEXT NOT NULL,
+    vehicle_model TEXT NOT NULL,
+    owner_phone TEXT NOT NULL,
+    mechanic_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    labour_charges NUMERIC(12, 2) DEFAULT 0.00,
+    status TEXT DEFAULT 'Pending',
+    delivery_date TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 16. JOB CARD PARTS TABLE
+CREATE TABLE job_card_parts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    job_card_id UUID REFERENCES job_cards(id) ON DELETE CASCADE,
+    product_id UUID REFERENCES products(id) ON DELETE RESTRICT,
+    qty NUMERIC(12, 2) DEFAULT 1.00,
+    rate NUMERIC(12, 2) DEFAULT 0.00
+);
+
+-- 17. UNSTOCKED ITEM DEMANDS TABLE (Demand Tracker)
+CREATE TABLE unstocked_item_demands (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
+    item_name TEXT NOT NULL,
+    request_count INTEGER DEFAULT 1,
+    min_alert_qty INTEGER DEFAULT 5,
+    status TEXT DEFAULT 'Pending',
+    last_requested_at TIMESTAMPTZ DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(tenant_id, item_name)
+);
+
 -- ============================================================================
--- 15. SERVER-SIDE AUTOMATIC AUTHENTICATION TRIGGER FUNCTION
--- Automatically provisions tenant & user profile in PostgreSQL upon user signup
+-- 18. AUTOMATIC AUTH USER REGISTRATION TRIGGER
+-- Automatically provisions tenant & user profile upon user signup
 -- ============================================================================
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
@@ -267,7 +313,8 @@ CREATE TRIGGER on_auth_user_created
     FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
 -- ============================================================================
--- 16. SERVER-SIDE AUTHORIZATION & MULTI-TENANT RLS POLICIES
+-- 19. ROW LEVEL SECURITY (RLS) POLICIES
+-- Enable RLS & grant policies for authenticated & default access
 -- ============================================================================
 ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
@@ -282,54 +329,35 @@ ALTER TABLE purchase_bills ENABLE ROW LEVEL SECURITY;
 ALTER TABLE purchase_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE customer_payments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE supplier_payments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE job_cards ENABLE ROW LEVEL SECURITY;
+ALTER TABLE job_card_parts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE unstocked_item_demands ENABLE ROW LEVEL SECURITY;
 
--- Helper function to resolve tenant_id for authenticated auth.uid() on server-side
+-- Helper function to fetch tenant ID for authenticated user context
 CREATE OR REPLACE FUNCTION public.get_auth_tenant_id()
 RETURNS UUID AS $$
-    SELECT COALESCE(tenant_id, '00000000-0000-0000-0000-000000000000'::UUID) 
-    FROM public.profiles 
-    WHERE id = auth.uid()
-    LIMIT 1;
-$$ LANGUAGE sql STABLE SECURITY DEFINER;
+BEGIN
+    RETURN (SELECT tenant_id FROM public.profiles WHERE id = auth.uid());
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
 
--- Strict Server-Side Authentication & Authorization Policies
-CREATE POLICY "Server Auth: tenants policy" ON tenants
-    FOR ALL USING (auth.role() = 'authenticated' OR id = '00000000-0000-0000-0000-000000000000');
+-- Tenant Isolation Policies
+CREATE POLICY "Tenant Isolation: tenants" ON tenants FOR ALL TO authenticated USING (id = public.get_auth_tenant_id() OR public.get_auth_tenant_id() IS NULL) WITH CHECK (id = public.get_auth_tenant_id() OR public.get_auth_tenant_id() IS NULL);
+CREATE POLICY "Tenant Isolation: profiles" ON profiles FOR ALL TO authenticated USING (id = auth.uid() OR tenant_id = public.get_auth_tenant_id()) WITH CHECK (id = auth.uid() OR tenant_id = public.get_auth_tenant_id());
+CREATE POLICY "Tenant Isolation: settings" ON settings FOR ALL TO authenticated USING (tenant_id = public.get_auth_tenant_id() OR tenant_id IS NULL) WITH CHECK (tenant_id = public.get_auth_tenant_id() OR tenant_id IS NULL);
+CREATE POLICY "Tenant Isolation: suppliers" ON suppliers FOR ALL TO authenticated USING (tenant_id = public.get_auth_tenant_id() OR tenant_id IS NULL) WITH CHECK (tenant_id = public.get_auth_tenant_id());
+CREATE POLICY "Tenant Isolation: customers" ON customers FOR ALL TO authenticated USING (tenant_id = public.get_auth_tenant_id() OR tenant_id IS NULL) WITH CHECK (tenant_id = public.get_auth_tenant_id());
+CREATE POLICY "Tenant Isolation: products" ON products FOR ALL TO authenticated USING (tenant_id = public.get_auth_tenant_id() OR tenant_id IS NULL) WITH CHECK (tenant_id = public.get_auth_tenant_id());
+CREATE POLICY "Tenant Isolation: expenses" ON expenses FOR ALL TO authenticated USING (tenant_id = public.get_auth_tenant_id() OR tenant_id IS NULL) WITH CHECK (tenant_id = public.get_auth_tenant_id());
+CREATE POLICY "Tenant Isolation: sales_invoices" ON sales_invoices FOR ALL TO authenticated USING (tenant_id = public.get_auth_tenant_id() OR tenant_id IS NULL) WITH CHECK (tenant_id = public.get_auth_tenant_id());
+CREATE POLICY "Tenant Isolation: sales_items" ON sales_items FOR ALL TO authenticated USING (EXISTS (SELECT 1 FROM sales_invoices WHERE sales_invoices.id = sales_items.invoice_id AND (sales_invoices.tenant_id = public.get_auth_tenant_id() OR sales_invoices.tenant_id IS NULL)));
+CREATE POLICY "Tenant Isolation: purchase_bills" ON purchase_bills FOR ALL TO authenticated USING (tenant_id = public.get_auth_tenant_id() OR tenant_id IS NULL) WITH CHECK (tenant_id = public.get_auth_tenant_id());
+CREATE POLICY "Tenant Isolation: purchase_items" ON purchase_items FOR ALL TO authenticated USING (EXISTS (SELECT 1 FROM purchase_bills WHERE purchase_bills.id = purchase_items.bill_id AND (purchase_bills.tenant_id = public.get_auth_tenant_id() OR purchase_bills.tenant_id IS NULL)));
+CREATE POLICY "Tenant Isolation: customer_payments" ON customer_payments FOR ALL TO authenticated USING (tenant_id = public.get_auth_tenant_id() OR tenant_id IS NULL) WITH CHECK (tenant_id = public.get_auth_tenant_id());
+CREATE POLICY "Tenant Isolation: supplier_payments" ON supplier_payments FOR ALL TO authenticated USING (tenant_id = public.get_auth_tenant_id() OR tenant_id IS NULL) WITH CHECK (tenant_id = public.get_auth_tenant_id());
+CREATE POLICY "Tenant Isolation: job_cards" ON job_cards FOR ALL TO authenticated USING (tenant_id = public.get_auth_tenant_id() OR tenant_id IS NULL) WITH CHECK (tenant_id = public.get_auth_tenant_id());
+CREATE POLICY "Tenant Isolation: job_card_parts" ON job_card_parts FOR ALL TO authenticated USING (EXISTS (SELECT 1 FROM job_cards WHERE job_cards.id = job_card_parts.job_card_id AND (job_cards.tenant_id = public.get_auth_tenant_id() OR job_cards.tenant_id IS NULL)));
+CREATE POLICY "Tenant Isolation: unstocked_item_demands" ON unstocked_item_demands FOR ALL TO authenticated USING (tenant_id = public.get_auth_tenant_id() OR tenant_id IS NULL) WITH CHECK (tenant_id = public.get_auth_tenant_id());
 
-CREATE POLICY "Server Auth: profiles policy" ON profiles
-    FOR ALL USING (auth.role() = 'authenticated' OR id = auth.uid());
+-- Done! Master SQL schema is ready with enterprise tenant isolation RLS for LK Smart ERP.
 
-CREATE POLICY "Server Auth: settings policy" ON settings
-    FOR ALL USING (auth.role() = 'authenticated' OR tenant_id = '00000000-0000-0000-0000-000000000000');
-
-CREATE POLICY "Server Auth: suppliers policy" ON suppliers
-    FOR ALL USING (auth.role() = 'authenticated' OR tenant_id = '00000000-0000-0000-0000-000000000000');
-
-CREATE POLICY "Server Auth: customers policy" ON customers
-    FOR ALL USING (auth.role() = 'authenticated' OR tenant_id = '00000000-0000-0000-0000-000000000000');
-
-CREATE POLICY "Server Auth: products policy" ON products
-    FOR ALL USING (auth.role() = 'authenticated' OR tenant_id = '00000000-0000-0000-0000-000000000000');
-
-CREATE POLICY "Server Auth: expenses policy" ON expenses
-    FOR ALL USING (auth.role() = 'authenticated' OR tenant_id = '00000000-0000-0000-0000-000000000000');
-
-CREATE POLICY "Server Auth: sales_invoices policy" ON sales_invoices
-    FOR ALL USING (auth.role() = 'authenticated' OR tenant_id = '00000000-0000-0000-0000-000000000000');
-
-CREATE POLICY "Server Auth: sales_items policy" ON sales_items
-    FOR ALL USING (auth.role() = 'authenticated');
-
-CREATE POLICY "Server Auth: purchase_bills policy" ON purchase_bills
-    FOR ALL USING (auth.role() = 'authenticated' OR tenant_id = '00000000-0000-0000-0000-000000000000');
-
-CREATE POLICY "Server Auth: purchase_items policy" ON purchase_items
-    FOR ALL USING (auth.role() = 'authenticated');
-
-CREATE POLICY "Server Auth: customer_payments policy" ON customer_payments
-    FOR ALL USING (auth.role() = 'authenticated' OR tenant_id = '00000000-0000-0000-0000-000000000000');
-
-CREATE POLICY "Server Auth: supplier_payments policy" ON supplier_payments
-    FOR ALL USING (auth.role() = 'authenticated' OR tenant_id = '00000000-0000-0000-0000-000000000000');
-
--- Done! Your Supabase Database Schema is now protected with Server-Side Authentication, Authorization & Auto-Provisioning Triggers!

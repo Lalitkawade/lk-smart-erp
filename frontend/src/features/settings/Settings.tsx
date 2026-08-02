@@ -329,7 +329,7 @@ export default function Settings({ tenantId, onSettingsSaved }: SettingsProps) {
           </div>
 
           <div className="text-[10px] text-textMuted text-center mt-6 pt-4 border-t border-border">
-            Version 1.0.0 (LK Hardware ERP) • License Activated
+            Version 1.0.0 • Developed by <span className="font-bold text-primary">LK Digital Solution</span> (Ph: <a href="tel:9270138287" className="underline hover:text-primary">9270138287</a>) • License Activated
           </div>
         </div>
 

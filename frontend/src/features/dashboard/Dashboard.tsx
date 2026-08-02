@@ -1,6 +1,7 @@
-import { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useInventory } from '../../hooks/useInventory';
 import type { SalesInvoice, PurchaseBill, Expense } from '../../types/erp.types';
+import { t } from '../../utils/i18n';
 
 interface DashboardProps {
   tenantId: string;
@@ -339,7 +340,7 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-secondary p-4 rounded-xl border border-border">
         <div>
           <h1 className="text-lg font-black text-foreground uppercase tracking-tight flex items-center gap-2">
-            <i className="fa-solid fa-chart-line text-primary"></i> Realtime Executive Dashboard
+            <i className="fa-solid fa-chart-line text-primary"></i> {t('executiveDashboard')}
           </h1>
           <p className="text-xs text-textMuted mt-0.5">Live store financials, inventory velocity, and operational ledger summary.</p>
         </div>
@@ -351,31 +352,31 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
               onClick={() => setTimeRange('10days')}
               className={`px-3 py-1.5 rounded-md transition whitespace-nowrap ${timeRange === '10days' ? 'bg-primary text-white font-bold' : 'text-textSecondary hover:text-foreground'}`}
             >
-              10 Days
+              {t('tenDays')}
             </button>
             <button
               onClick={() => setTimeRange('month')}
               className={`px-3 py-1.5 rounded-md transition whitespace-nowrap ${timeRange === 'month' ? 'bg-primary text-white font-bold' : 'text-textSecondary hover:text-foreground'}`}
             >
-              Month
+              {t('month')}
             </button>
             <button
               onClick={() => setTimeRange('year')}
               className={`px-3 py-1.5 rounded-md transition whitespace-nowrap ${timeRange === 'year' ? 'bg-primary text-white font-bold' : 'text-textSecondary hover:text-foreground'}`}
             >
-              Year
+              {t('year')}
             </button>
             <button
               onClick={() => setTimeRange('all')}
               className={`px-3 py-1.5 rounded-md transition whitespace-nowrap ${timeRange === 'all' ? 'bg-primary text-white font-bold' : 'text-textSecondary hover:text-foreground'}`}
             >
-              All Time
+              {t('allTime')}
             </button>
             <button
               onClick={() => setTimeRange('custom')}
               className={`px-3 py-1.5 rounded-md transition whitespace-nowrap ${timeRange === 'custom' ? 'bg-primary text-white font-bold' : 'text-textSecondary hover:text-foreground'}`}
             >
-              Custom
+              {t('custom')}
             </button>
           </div>
 
@@ -407,7 +408,7 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
         <div className="bento-card relative overflow-hidden group">
           <div className="flex justify-between items-start">
             <div>
-              <span className="text-[10px] font-bold text-textMuted uppercase tracking-wider">Total Sales</span>
+              <span className="text-[10.5px] font-bold text-textMuted uppercase tracking-wider">{t('totalSales')}</span>
               <div className="text-xl font-black text-foreground font-mono mt-1">₹{stats.sales.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
               <span className="text-[10px] text-primary font-bold mt-1 inline-flex items-center gap-1">
                 <i className="fa-solid fa-arrow-up-right"></i> {filteredData.sales.length} Invoices
@@ -423,7 +424,7 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
         <div className="bento-card relative overflow-hidden group">
           <div className="flex justify-between items-start">
             <div>
-              <span className="text-[10px] font-bold text-textMuted uppercase tracking-wider">Total Purchases</span>
+              <span className="text-[10.5px] font-bold text-textMuted uppercase tracking-wider">{t('totalPurchases')}</span>
               <div className="text-xl font-black text-foreground font-mono mt-1">₹{stats.purchases.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
               <span className="text-[10px] text-purple-400 font-bold mt-1 inline-flex items-center gap-1">
                 <i className="fa-solid fa-boxes-stacked"></i> {filteredData.purchases.length} Procurement Bills
@@ -439,7 +440,7 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
         <div className="bento-card relative overflow-hidden group">
           <div className="flex justify-between items-start">
             <div>
-              <span className="text-[10px] font-bold text-textMuted uppercase tracking-wider">Shop Expenses</span>
+              <span className="text-[10.5px] font-bold text-textMuted uppercase tracking-wider">{t('shopExpenses')}</span>
               <div className="text-xl font-black text-foreground font-mono mt-1">₹{stats.expenses.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
               <span className="text-[10px] text-rose-400 font-bold mt-1 inline-flex items-center gap-1">
                 <i className="fa-solid fa-receipt"></i> {filteredData.expenses.length} Logged Entries
@@ -455,7 +456,7 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
         <div className="bento-card relative overflow-hidden group">
           <div className="flex justify-between items-start">
             <div>
-              <span className="text-[10px] font-bold text-textMuted uppercase tracking-wider">Net Profit</span>
+              <span className="text-[10.5px] font-bold text-textMuted uppercase tracking-wider">{t('netProfit')}</span>
               <div className={`text-xl font-black font-mono mt-1 ${stats.netProfit >= 0 ? 'text-primary' : 'text-rose-400'}`}>
                 ₹{stats.netProfit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
               </div>

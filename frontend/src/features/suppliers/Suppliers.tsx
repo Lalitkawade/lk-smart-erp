@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { supabase } from '../../api/supabase';
+import { t } from '../../utils/i18n';
 
 interface Supplier {
   id: string;
@@ -81,53 +82,34 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
 
   const fetchSuppliersData = async () => {
     if (!tenantId) return;
+
+    let localSups: any[] = [];
+    let localBills: any[] = [];
+    let localProds: any[] = [];
     try {
-      // 1. Remote suppliers
-      const { data: supsData } = await supabase
-        .from('suppliers')
-        .select('*')
-        .eq('tenant_id', tenantId)
-        .order('supplier_name', { ascending: true });
+      localSups = JSON.parse(localStorage.getItem('lk_suppliers') || '[]');
+      localBills = JSON.parse(localStorage.getItem('lk_purchases') || '[]');
+      localProds = JSON.parse(localStorage.getItem('lk_products') || '[]');
+    } catch (e) {}
 
-      // 2. Local suppliers cache
-      let localSups: any[] = [];
-      try {
-        localSups = JSON.parse(localStorage.getItem('lk_suppliers') || '[]');
-      } catch (e) {}
+    try {
+      // 1. Parallel remote data fetching (reduces network latency by 4x)
+      const [supsRes, billsRes, prodsRes, paysRes] = await Promise.all([
+        supabase.from('suppliers').select('*').eq('tenant_id', tenantId).order('supplier_name', { ascending: true }),
+        supabase.from('purchase_bills').select('*').eq('tenant_id', tenantId),
+        supabase.from('products').select('*').eq('tenant_id', tenantId),
+        supabase.from('supplier_payments').select('*').eq('tenant_id', tenantId).order('payment_date', { ascending: false })
+      ]);
 
-      // 3. Purchase bills (to discover any vendors registered via purchase bills)
-      const { data: billsData } = await supabase
-        .from('purchase_bills')
-        .select('*')
-        .eq('tenant_id', tenantId);
-
-      let localBills: any[] = [];
-      try {
-        localBills = JSON.parse(localStorage.getItem('lk_purchases') || '[]');
-      } catch (e) {}
-
-      // 4. Products catalog (to discover any vendors assigned to products)
-      const { data: prodsData } = await supabase
-        .from('products')
-        .select('*')
-        .eq('tenant_id', tenantId);
-
-      let localProds: any[] = [];
-      try {
-        localProds = JSON.parse(localStorage.getItem('lk_products') || '[]');
-      } catch (e) {}
-
-      // 5. Payment records
-      const { data: paysData } = await supabase
-        .from('supplier_payments')
-        .select('*')
-        .eq('tenant_id', tenantId)
-        .order('payment_date', { ascending: false });
+      const supsData = supsRes.data || [];
+      const billsData = billsRes.data || [];
+      const prodsData = prodsRes.data || [];
+      const paysData = paysRes.data || [];
 
       const currentPays = (paysData || []) as SupplierPaymentRecord[];
       setPayments(currentPays);
 
-      // Build master unified supplier map
+      // 2. Build master unified supplier map
       const masterMap = new Map<string, Supplier>();
 
       // A. Add localSups first
@@ -150,7 +132,7 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
         }
       });
 
-      // B. Add remote sups (overwrite/enrich without losing local metadata)
+      // B. Add remote sups
       (supsData || []).forEach((s: any) => {
         if (s && s.supplier_name) {
           const key = s.supplier_name.toUpperCase().trim();
@@ -213,20 +195,44 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
         }
       });
 
-      // Re-calculate live outstanding balance for each supplier in masterMap
+      // 3. Fast indexed balance calculation (O(N) instead of O(N*M))
       const uniqueBills = Array.from(
         new Map(allBills.map((b: any) => [b.bill_number || b.id, b])).values()
       );
 
+      const billDuesMap = new Map<string, number>();
+      uniqueBills.forEach((b: any) => {
+        const due = Number(b.due_amount || 0);
+        if (due <= 0) return;
+        if (b.supplier_name) {
+          const key = b.supplier_name.toUpperCase().trim();
+          billDuesMap.set(key, (billDuesMap.get(key) || 0) + due);
+        }
+        if (b.supplier_id) {
+          const key = String(b.supplier_id);
+          billDuesMap.set(key, (billDuesMap.get(key) || 0) + due);
+        }
+      });
+
+      const payoutsMap = new Map<string, number>();
+      currentPays.forEach((p: any) => {
+        const amt = Number(p.amount || 0);
+        if (amt <= 0) return;
+        if (p.supplier_id) {
+          const key = String(p.supplier_id);
+          payoutsMap.set(key, (payoutsMap.get(key) || 0) + amt);
+        }
+        if ((p as any).supplier_name) {
+          const key = (p as any).supplier_name.toUpperCase().trim();
+          payoutsMap.set(key, (payoutsMap.get(key) || 0) + amt);
+        }
+      });
+
       const finalSuppliers = Array.from(masterMap.values()).map(s => {
-        const supBills = uniqueBills.filter((b: any) =>
-          (b.supplier_name && b.supplier_name.toUpperCase().trim() === s.supplier_name.toUpperCase().trim()) ||
-          (b.supplier_id && String(b.supplier_id) === String(s.id))
-        );
-        const totalDueFromBills = supBills.reduce((acc: number, b: any) => acc + Number(b.due_amount || 0), 0);
-        const totalPayouts = currentPays
-          .filter((p: any) => String(p.supplier_id) === String(s.id) || (p as any).supplier_name?.toUpperCase() === s.supplier_name)
-          .reduce((acc: number, p: any) => acc + Number(p.amount || 0), 0);
+        const nameKey = s.supplier_name.toUpperCase().trim();
+        const idKey = String(s.id);
+        const totalDueFromBills = (billDuesMap.get(nameKey) || 0) + (billDuesMap.get(idKey) || 0);
+        const totalPayouts = (payoutsMap.get(idKey) || 0) + (payoutsMap.get(nameKey) || 0);
 
         const initialBal = s.initial_outstanding !== undefined ? Number(s.initial_outstanding) : Number(s.outstanding || 0);
         const liveOutstanding = Math.max(0, initialBal + totalDueFromBills - totalPayouts);
@@ -496,11 +502,11 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
       )}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 mb-6 bg-secondary border border-border p-4 sm:p-6 rounded-xl shadow-md">
         <div>
-          <h2 className="text-xl font-bold text-foreground">Vendor list</h2>
+          <h2 className="text-xl font-bold text-foreground">{t('vendorManagement')}</h2>
           <p className="text-xs text-textMuted mt-1">Manage vendor contact profiles, credit statements, and payment ledgers</p>
         </div>
         <button className="w-full sm:w-auto px-4 py-2 bg-primary hover:bg-primary/90 text-white font-bold rounded-lg text-sm text-center shrink-0 shadow-md transition active:scale-95 cursor-pointer" onClick={handleOpenAdd}>
-          Register Vendor
+          + {t('addVendor')}
         </button>
       </div>
 
@@ -510,74 +516,109 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
           value={search} onChange={(e) => setSearch(e.target.value)} />
       </div>
 
-      <div className="bg-secondary border border-border rounded-xl p-6 shadow-lg overflow-x-auto">
-        <table className="w-full text-left text-sm text-textSecondary">
+      <div className="bg-secondary border border-border/80 rounded-2xl shadow-sm overflow-x-auto">
+        <table className="w-full text-left text-sm text-textSecondary border-collapse">
           <thead>
-            <tr className="border-b border-border text-textPrimary font-extrabold uppercase tracking-wider text-xs">
-              <th className="py-3">Vendor ID</th>
-              <th className="py-3">Vendor Name</th>
-              <th className="py-3">Contact details</th>
-              <th className="py-3">Office Address</th>
-              <th className="py-3 text-right">Outstanding (₹)</th>
-              <th className="py-3 text-right text-xs">Actions</th>
+            <tr className="border-b border-border/80 bg-slate-100/70 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 font-extrabold uppercase tracking-wider text-[11px]">
+              <th className="py-3.5 px-4">Vendor ID</th>
+              <th className="py-3.5 px-4">Vendor Profile</th>
+              <th className="py-3.5 px-4">Contact Details</th>
+              <th className="py-3.5 px-4">Office Address</th>
+              <th className="py-3.5 px-4 text-right">Outstanding (₹)</th>
+              <th className="py-3.5 px-4 text-right">Actions</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-border/40">
             {filteredSuppliers.length === 0 ? (
               <tr>
-                <td colSpan={6} className="py-6 text-center text-textMuted">No matching vendor records found.</td>
+                <td colSpan={6} className="py-8 text-center text-textMuted text-xs font-medium">
+                  <i className="fa-solid fa-truck-ramp-box text-2xl text-slate-400 mb-2 block"></i>
+                  No matching vendor records found.
+                </td>
               </tr>
             ) : filteredSuppliers.map((s, idx) => {
+              const code = getVendorCode(s, idx);
+              const initials = s.supplier_name ? s.supplier_name.slice(0, 2).toUpperCase() : 'VN';
+              const isOutstanding = Number(s.outstanding || 0) > 0;
+
               return (
-                <tr key={s.id} className="border-b border-border hover:bg-slate-100/10 dark:hover:bg-slate-800/10">
-                  <td className="py-4 font-mono text-foreground font-extrabold">{getVendorCode(s, idx)}</td>
-                  <td className="py-4">
-                    <div className="font-bold text-foreground uppercase flex items-center gap-1.5 flex-wrap">
-                      {s.supplier_name}
-                      {s.establishment_date && (
-                        <span className="text-[10px] bg-blue-500/20 text-blue-400 border border-blue-500/30 px-1.5 py-0.5 rounded font-mono font-bold" title={`Established: ${s.establishment_date}`}>
-                          🏛️ Est. {new Date(s.establishment_date).getFullYear()}
-                        </span>
-                      )}
-                      {s.dob && (
-                        <span className="text-[10px] bg-pink-500/20 text-pink-400 border border-pink-500/30 px-1.5 py-0.5 rounded font-mono font-bold" title={`Contact Birthday: ${new Date(s.dob).toLocaleDateString()}`}>
-                          🎂 {new Date(s.dob).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-                        </span>
-                      )}
+                <tr key={s.id} className="hover:bg-slate-500/5 transition-colors group">
+                  <td className="py-3.5 px-4">
+                    <span className="font-mono text-[11px] font-extrabold bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-md inline-block">
+                      {code}
+                    </span>
+                  </td>
+                  <td className="py-3.5 px-4">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 font-bold text-xs flex items-center justify-center shrink-0">
+                        {initials}
+                      </div>
+                      <div className="flex flex-col">
+                        <div className="font-bold text-foreground uppercase text-xs flex items-center gap-1.5 flex-wrap">
+                          {s.supplier_name}
+                          {s.establishment_date && (
+                            <span className="text-[10px] bg-blue-500/15 text-blue-500 border border-blue-500/30 px-1.5 py-0.2 rounded font-mono font-bold" title={`Established: ${s.establishment_date}`}>
+                              🏛️ Est. {new Date(s.establishment_date).getFullYear()}
+                            </span>
+                          )}
+                          {s.dob && (
+                            <span className="text-[10px] bg-pink-500/15 text-pink-500 border border-pink-500/30 px-1.5 py-0.2 rounded font-mono font-bold" title={`Contact Birthday: ${new Date(s.dob).toLocaleDateString()}`}>
+                              🎂 {new Date(s.dob).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   </td>
-                  <td className="py-4 text-xs">
-                    <div className="font-semibold text-foreground flex items-center gap-1.5">
-                      <span>{s.phone || '-'}</span>
-                      {s.phone && (
-                        <a href={`tel:${s.phone}`} className="px-1.5 py-0.5 bg-primary/10 text-primary border border-primary/30 hover:bg-primary/20 rounded text-[9px] font-black uppercase inline-flex items-center gap-1" title="Call Vendor">
-                          <i className="fa-solid fa-phone text-[8px]"></i> Call
-                        </a>
-                      )}
-                    </div>
-                    <div className="text-textMuted">{s.email || '-'}</div>
+                  <td className="py-3.5 px-4 text-xs">
+                    {s.phone || s.email ? (
+                      <div className="flex flex-col gap-0.5">
+                        {s.phone && (
+                          <div className="font-semibold text-foreground flex items-center gap-1.5">
+                            <span>{s.phone}</span>
+                            <a href={`tel:${s.phone}`} className="px-1.5 py-0.2 bg-primary/10 text-primary border border-primary/30 hover:bg-primary hover:text-white rounded text-[9px] font-black uppercase inline-flex items-center gap-1 transition" title="Call Vendor">
+                              <i className="fa-solid fa-phone text-[8px]"></i> Call
+                            </a>
+                          </div>
+                        )}
+                        {s.email && <div className="text-textMuted text-[11px] truncate max-w-[160px]">{s.email}</div>}
+                      </div>
+                    ) : (
+                      <span className="text-textMuted text-xs">-</span>
+                    )}
                   </td>
-                  <td className="py-4 text-xs text-textSecondary max-w-[200px] truncate" title={s.address}>{s.address || '-'}</td>
-                  <td className="py-4 text-right font-mono font-bold text-amber-500">
-                    ₹{Number(s.outstanding || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  <td className="py-3.5 px-4 text-xs text-textSecondary max-w-[200px] truncate" title={s.address || '-'}>
+                    {s.address ? (
+                      <span className="flex items-center gap-1">
+                        <i className="fa-solid fa-location-dot text-textMuted text-[10px]"></i>
+                        {s.address}
+                      </span>
+                    ) : (
+                      <span className="text-textMuted">-</span>
+                    )}
                   </td>
-                  <td className="py-4 text-right">
-                    <div className="flex gap-2 justify-end">
-                      <button className="text-xs bg-background hover:bg-slate-100 dark:hover:bg-slate-800 border border-border px-2.5 py-1 rounded text-textSecondary hover:text-foreground transition"
+                  <td className="py-3.5 px-4 text-right">
+                    <span className={`font-mono font-bold text-xs px-2.5 py-1 rounded-full border inline-block ${isOutstanding ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20' : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'}`}>
+                      ₹{Number(s.outstanding || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </span>
+                  </td>
+                  <td className="py-3.5 px-4 text-right">
+                    <div className="flex gap-1.5 justify-end items-center">
+                      <button className="text-xs bg-primary/10 hover:bg-primary hover:text-white border border-primary/20 text-primary px-2.5 py-1.5 rounded-lg font-bold transition-all active:scale-95 cursor-pointer flex items-center gap-1"
                         onClick={() => setStatementSupplier(s)}>
-                        🧾 Statement
+                        <i className="fa-solid fa-file-invoice text-[10px]"></i> Statement
                       </button>
                       {s.outstanding > 0 && (
-                        <button className="text-xs bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20 px-2.5 py-1 rounded font-semibold transition"
+                        <button className="text-xs bg-amber-500/10 hover:bg-amber-500 hover:text-white border border-amber-500/20 text-amber-600 dark:text-amber-400 px-2.5 py-1.5 rounded-lg font-bold transition-all active:scale-95 cursor-pointer flex items-center gap-1"
                           onClick={() => handleOpenPayModal(s)}>
                           💸 Pay
                         </button>
                       )}
-                      <button className="text-xs bg-background hover:bg-slate-100 dark:hover:bg-slate-800 border border-border px-2.5 py-1 rounded text-textSecondary hover:text-foreground transition"
+                      <button className="text-xs bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-border text-textSecondary hover:text-foreground px-2.5 py-1.5 rounded-lg transition-all active:scale-95 cursor-pointer"
                         onClick={() => handleOpenEdit(s)}>
                         Edit
                       </button>
-                      <button className="text-xs bg-rose-950 border border-rose-900/30 text-rose-400 hover:bg-rose-900/45 px-2.5 py-1 rounded font-semibold transition"
+                      <button className="text-xs bg-rose-500/10 hover:bg-rose-500 hover:text-white border border-rose-500/20 text-rose-600 dark:text-rose-400 px-2.5 py-1.5 rounded-lg font-semibold transition-all active:scale-95 cursor-pointer"
                         onClick={() => handleDeleteSupplier(s.id)}>
                         Delete
                       </button>

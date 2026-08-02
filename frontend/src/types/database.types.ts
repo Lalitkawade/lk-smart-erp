@@ -583,6 +583,7 @@ export type UnstockedDemandRow = {
   tenant_id: string;
   item_name: string;
   request_count: number;
+  min_alert_qty?: number;
   status?: string;
   last_requested_at?: string;
 }
@@ -591,6 +592,7 @@ export type UnstockedDemandInsert = {
   tenant_id: string;
   item_name: string;
   request_count?: number;
+  min_alert_qty?: number;
   status?: string;
   last_requested_at?: string;
 }
@@ -599,6 +601,7 @@ export type UnstockedDemandUpdate = {
   tenant_id?: string;
   item_name?: string;
   request_count?: number;
+  min_alert_qty?: number;
   status?: string;
   last_requested_at?: string;
 }

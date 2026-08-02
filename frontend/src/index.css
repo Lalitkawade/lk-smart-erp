@@ -97,6 +97,38 @@
   --scrollbar-thumb: #CBD5E1;
 }
 
+[data-theme="dark"] {
+  --bg-primary: #0F172A;       /* Deep Navy Slate Canvas */
+  --bg-secondary: #1E293B;     /* Dark Slate Card Container */
+  --bg-sidebar: #090D16;       /* Ultra Deep Navy Sidebar */
+  --bg-sidebar-hover: #1E293B;
+  
+  --text-sidebar: #94A3B8;
+  --text-sidebar-active: #38BDF8;
+  --text-primary: #F8FAFC;     /* Pure White / Light Slate Primary Text */
+  --text-secondary: #CBD5E1;   /* Light Secondary Text */
+  --text-muted: #94A3B8;       /* Soft Muted Text */
+  
+  --primary: #38BDF8;          /* Bright Sky Blue Accent */
+  --primary-hover: #0EA5E9;
+  --primary-light: rgba(56, 189, 248, 0.15);
+  
+  --secondary: #F59E0B;        /* Vibrant Amber */
+  --secondary-hover: #D97706;
+  
+  --success: #22C55E;          /* Vibrant Green */
+  --warning: #F59E0B;          /* Amber Warning */
+  --danger: #EF4444;           /* Bright Red */
+  --info: #38BDF8;             /* Sky Blue */
+
+  --border-color: #334155;     /* Dark Slate Border */
+  --border-focus: #38BDF8;
+  --card-glow: rgba(0, 0, 0, 0.4);
+  
+  --scrollbar-track: #0F172A;
+  --scrollbar-thumb: #334155;
+}
+
 /* ==========================================================================
    RESET & BASE STYLES - STANDARD TYPOGRAPHY
    ========================================================================== */
@@ -1138,6 +1170,32 @@ h1, h2, h3, h4, .font-heading {
     touch-action: manipulation;
   }
 }
+
+/* ==========================================================================
+   DEVANAGARI (MARATHI) FONT & CLIPPING PREVENTION
+   ========================================================================== */
+body, [lang="mr"], [data-lang="mr"], .lang-mr {
+  font-family: 'Noto Sans Devanagari', 'Mukta', 'Outfit', 'Inter', system-ui, sans-serif;
+}
+
+/* Prevent Devanagari top shirorekha and bottom matra (उकार / मात्रा) clipping */
+[data-lang="mr"] button,
+[data-lang="mr"] span,
+[data-lang="mr"] nav button,
+[lang="mr"] button,
+[lang="mr"] span {
+  line-height: 1.5 !important;
+  overflow: visible !important;
+}
+
+/* Disable forced CSS uppercase transforms on Marathi script to prevent font warping */
+[data-lang="mr"] .uppercase,
+[lang="mr"] .uppercase,
+.lang-mr .uppercase {
+  text-transform: none !important;
+  letter-spacing: normal !important;
+}
+
 
 
 

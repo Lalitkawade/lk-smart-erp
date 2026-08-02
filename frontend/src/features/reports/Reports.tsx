@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import type { SalesInvoice, PurchaseBill } from '../../types/erp.types';
+import { t } from '../../utils/i18n';
 
 interface ReportsProps {
   tenantId: string;
@@ -50,7 +51,7 @@ export default function Reports({ tenantId, sales, purchases }: ReportsProps) {
   return (
     <div className="bg-secondary border border-border rounded-xl p-6 shadow-xl space-y-6 animate-fade-in">
       <div>
-        <h2 className="text-xl font-bold text-foreground">Track the Material Selling And Purchasing as Per Months</h2>
+        <h2 className="text-xl font-bold text-foreground">{t('materialTrackingReports')}</h2>
         <p className="text-xs text-textMuted mt-1">Audit material flow volume comparisons grouped by calendar months</p>
       </div>
 

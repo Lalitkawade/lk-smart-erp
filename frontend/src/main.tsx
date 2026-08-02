@@ -39,7 +39,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
             <div className="w-14 h-14 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-full flex items-center justify-center mx-auto text-2xl">
               <i className="fa-solid fa-triangle-exclamation"></i>
             </div>
-            <h1 className="text-xl font-bold text-white tracking-tight">LK Hardware ERP</h1>
+            <h1 className="text-xl font-bold text-white tracking-tight">Enterprise Portal</h1>
             <p className="text-sm text-slate-400">Application recovered from a session sync issue.</p>
             <div className="p-3 bg-slate-800/60 rounded-lg text-xs text-slate-300 font-mono text-left overflow-auto max-h-24">
               {this.state.errorMsg}
