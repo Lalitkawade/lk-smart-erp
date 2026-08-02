@@ -24,20 +24,13 @@ export default function DemandModal({ tenantId, isOpen, onClose, onNavigateToPro
 
   if (!isOpen) return null;
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const val = newItemName.trim();
     if (!val) return;
     
-    setIsSubmitting(true);
-    try {
-      await logDemand(val);
-      setNewItemName('');
-    } catch (err) {
-      console.error('Failed to log demand:', err);
-    } finally {
-      setIsSubmitting(false);
-    }
+    logDemand(val);
+    setNewItemName('');
   };
 
   return createPortal(

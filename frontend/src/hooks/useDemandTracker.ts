@@ -73,8 +73,8 @@ export function useDemandTracker(tenantId?: string) {
     return () => window.removeEventListener('storage', fetchDemands);
   }, [tenantId]);
 
-  // Log or increment a requested item
-  const logDemand = async (rawItemName: string) => {
+  // Log or increment a requested item (0ms instant optimistic update)
+  const logDemand = (rawItemName: string) => {
     const itemName = rawItemName.trim();
     if (!itemName) return;
 
@@ -107,44 +107,47 @@ export function useDemandTracker(tenantId?: string) {
       updatedDemands.unshift(newDemandItem);
     }
 
-    // Update state & local storage immediately
+    // Update state & local storage immediately for instant rendering
     setDemands(updatedDemands);
     localStorage.setItem('lk_unstocked_demands', JSON.stringify(updatedDemands));
 
-    // Async sync to Supabase without blocking UI
+    // Non-blocking async background sync to Supabase
     if (tenantId) {
-      try {
-        if (existingIndex >= 0) {
-          await supabase
-            .from('unstocked_item_demands')
-            .update({
-              request_count: newDemandItem.request_count,
-              last_requested_at: newDemandItem.last_requested_at
-            })
-            .eq('id', newDemandItem.id);
-        } else {
-          const { data } = await supabase
-            .from('unstocked_item_demands')
-            .insert([
-              {
-                tenant_id: activeTenantId,
-                item_name: itemName,
-                request_count: 1,
-                status: 'Pending',
+      Promise.race([
+        (async () => {
+          if (existingIndex >= 0) {
+            await supabase
+              .from('unstocked_item_demands')
+              .update({
+                request_count: newDemandItem.request_count,
                 last_requested_at: newDemandItem.last_requested_at
-              }
-            ])
-            .select()
-            .single();
+              })
+              .eq('id', newDemandItem.id);
+          } else {
+            const { data } = await supabase
+              .from('unstocked_item_demands')
+              .insert([
+                {
+                  tenant_id: activeTenantId,
+                  item_name: itemName,
+                  request_count: 1,
+                  status: 'Pending',
+                  last_requested_at: newDemandItem.last_requested_at
+                }
+              ])
+              .select()
+              .single();
 
-          if (data) {
-            newDemandItem.id = data.id;
-            localStorage.setItem('lk_unstocked_demands', JSON.stringify(updatedDemands));
+            if (data) {
+              newDemandItem.id = data.id;
+              localStorage.setItem('lk_unstocked_demands', JSON.stringify(updatedDemands));
+            }
           }
-        }
-      } catch (err) {
+        })(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Supabase timeout')), 3000))
+      ]).catch(err => {
         console.warn('Supabase sync notice for unstocked_item_demands:', err);
-      }
+      });
     }
 
     window.dispatchEvent(new Event('storage'));
