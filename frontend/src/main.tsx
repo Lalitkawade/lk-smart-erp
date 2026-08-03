@@ -83,14 +83,18 @@ window.addEventListener('click', (e) => {
   }
 }, true);
 
-// Clean up any stale service workers to prevent cached stale HTML/JS on Vercel deployment
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.getRegistrations().then((registrations) => {
-    for (let registration of registrations) {
-      registration.unregister();
-    }
-  });
-}
+import { registerSW } from 'virtual:pwa-register';
+
+// Register PWA service worker with auto-update capability
+const updateSW = registerSW({
+  onNeedRefresh() {
+    console.log('New LK Smart ERP update available. Refreshing...');
+    updateSW(true);
+  },
+  onOfflineReady() {
+    console.log('LK Smart ERP is ready for offline operation.');
+  },
+});
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
