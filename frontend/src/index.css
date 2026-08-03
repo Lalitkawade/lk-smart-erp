@@ -140,10 +140,10 @@ html {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
-  font-family: var(--font-body);
 }
 
 body {
+  font-family: var(--font-body);
   background-color: var(--bg-primary);
   color: var(--text-primary);
   font-size: 0.875rem; /* Standard 14px enterprise desktop font size */
@@ -151,6 +151,11 @@ body {
   font-weight: 400;
   overflow-x: hidden;
   transition: background-color var(--transition-normal), color var(--transition-normal);
+}
+
+/* Ensure FontAwesome icons always use FontAwesome font-family */
+i.fa, i.fas, i.far, i.fab, i.fa-solid, i.fa-regular, i.fa-brands, [class*="fa-"] {
+  font-family: "Font Awesome 6 Free", "Font Awesome 6 Brands", "FontAwesome" !important;
 }
 
 h1, h2, h3, h4, h5, h6 {
