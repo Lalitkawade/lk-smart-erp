@@ -104,10 +104,14 @@ export function useBilling(tenantId: string) {
     setCart(cart.filter(i => !(i.product.id === productId && i.isLoose === isLoose)));
   };
 
-  const processCheckout = async (options?: { amountCollected?: number; repayUdharAmount?: number; paymentMode?: string; transactionId?: string }) => {
+  const processCheckout = async (options?: { amountCollected?: number; repayUdharAmount?: number; paymentMode?: string; transactionId?: string; discountAmount?: number }) => {
     if (cart.length === 0) throw new Error('Cart is empty.');
 
-    const totalAmount = cart.reduce((acc, curr) => acc + curr.qty * curr.rate, 0);
+    const cartSubtotal = cart.reduce((acc, curr) => acc + curr.qty * curr.rate, 0);
+    const manualDiscount = options?.discountAmount && options.discountAmount > 0 
+      ? Math.min(cartSubtotal, options.discountAmount) 
+      : 0;
+    const totalAmount = Math.max(0, cartSubtotal - manualDiscount);
     const gstAmount = 0; // GST is frozen for retail billing
     const currentPaymentMode = options?.paymentMode || paymentMode;
     const currentTxnId = options?.transactionId !== undefined ? options.transactionId : transactionId;
@@ -262,6 +266,8 @@ export function useBilling(tenantId: string) {
         payment_mode: currentPaymentMode || 'Cash',
         ref_number: currentTxnId || null,
         payment_status: invoiceStatus,
+        subtotal: cartSubtotal,
+        discount_amount: manualDiscount,
         total_amount: totalAmount,
         paid_amount: paidAmount,
         due_amount: dueAmount,

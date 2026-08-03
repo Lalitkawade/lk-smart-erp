@@ -154,9 +154,9 @@ export default function App() {
       }
     });
 
-    // Only preserve local items that are explicitly flagged as offline drafts
+    // Preserve local items that are not present in remote (so local drafts/records are never erased)
     validLocal.forEach(item => {
-      if (item && item.is_offline_draft) {
+      if (item) {
         const key = getKey(item);
         if (key && !map.has(key)) {
           map.set(key, item);
@@ -220,7 +220,7 @@ export default function App() {
 
     if (isRemoteSuccessful) {
       const localSales = safeParseArray('lk_sales');
-      const localPurchases = safeParseArray('lk_purchases');
+      const localPurchases = safeParseArray('lk_purchases').filter((p: any) => !String(p?.id || '').startsWith('pb-sample-'));
       const localExpenses = safeParseArray('lk_expenses');
       const localProducts = safeParseArray('lk_products');
       const localCustomers = safeParseArray('lk_customers');
@@ -269,7 +269,7 @@ export default function App() {
     } else {
       // Offline fallback: restore from validated local cache
       const cachedSales = safeParseArray('lk_sales');
-      const cachedPurchases = safeParseArray('lk_purchases');
+      const cachedPurchases = safeParseArray('lk_purchases').filter((p: any) => !String(p?.id || '').startsWith('pb-sample-'));
       const cachedExpenses = safeParseArray('lk_expenses');
       const cachedProducts = safeParseArray('lk_products');
       const cachedCustomers = safeParseArray('lk_customers');
@@ -298,9 +298,17 @@ export default function App() {
     window.addEventListener('storage', loadAppState);
     window.addEventListener('focus', loadAppState);
 
-    // Supabase Real-Time Cross-Device Subscription Channel
+    return () => {
+      window.removeEventListener('storage', loadAppState);
+      window.removeEventListener('focus', loadAppState);
+    };
+  }, [theme, tenant, activeTab]);
+
+  // Supabase Real-Time Cross-Device Subscription Channel (Isolated Mount Hook)
+  useEffect(() => {
+    const channelId = `realtime-erp-sync-${Date.now()}`;
     const realtimeChannel = supabase
-      .channel('realtime-erp-sync')
+      .channel(channelId)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public' },
@@ -312,11 +320,9 @@ export default function App() {
       .subscribe();
 
     return () => {
-      window.removeEventListener('storage', loadAppState);
-      window.removeEventListener('focus', loadAppState);
       supabase.removeChannel(realtimeChannel);
     };
-  }, [theme, tenant, activeTab]);
+  }, []);
 
   const toggleTheme = () => {
     const nextTheme = theme === 'dark' ? 'light' : 'dark';
@@ -548,7 +554,6 @@ export default function App() {
       title: t('transactions', lang),
       items: [
         { tab: 'new-entry', icon: 'fa-circle-plus', label: t('newEntry', lang), iconColor: 'text-primary' },
-        { tab: 'purchases', icon: 'fa-cart-shopping', label: t('purchase', lang) },
         { tab: 'sales', icon: 'fa-file-invoice-dollar', label: t('sales', lang) },
         { tab: 'expenses', icon: 'fa-hand-holding-dollar', label: t('shopExpenses', lang) }
       ]
@@ -970,7 +975,7 @@ export default function App() {
                   <button 
                     onClick={() => {
                       setPurchaseAutoOpen(true);
-                      setActiveTab('purchases');
+                      setActiveTab('products');
                     }}
                     className="bg-secondary border border-border hover:border-blue-500/60 rounded-2xl p-6 sm:p-7 flex flex-col items-center justify-center text-center gap-4 group transition-all duration-200 shadow-md hover:shadow-xl hover:-translate-y-1 cursor-pointer min-h-[200px]"
                   >
@@ -1054,7 +1059,14 @@ export default function App() {
               </div>
             )}
             {activeTab === 'products' && (
-              <Products tenantId={tenant?.id || 'default-hardware-erp'} businessType={businessType as any} mode="catalog" autoOpenModal={productAutoOpen} onModalClosed={() => setProductAutoOpen(false)} />
+              <Products 
+                tenantId={tenant?.id || 'default-hardware-erp'} 
+                businessType={businessType as any} 
+                mode="catalog" 
+                autoOpenModal={productAutoOpen} 
+                autoOpenPurchaseModal={purchaseAutoOpen}
+                onModalClosed={() => { setProductAutoOpen(false); setPurchaseAutoOpen(false); }} 
+              />
             )}
             {activeTab === 'sales' && (
               <Sales 
@@ -1067,7 +1079,13 @@ export default function App() {
               />
             )}
             {activeTab === 'purchases' && (
-              <Purchases autoOpenModal={purchaseAutoOpen} onModalClosed={() => setPurchaseAutoOpen(false)} />
+              <Products 
+                tenantId={tenant?.id || 'default-hardware-erp'} 
+                businessType={businessType as any} 
+                mode="catalog" 
+                autoOpenPurchaseModal={true} 
+                onModalClosed={() => setPurchaseAutoOpen(false)} 
+              />
             )}
             {activeTab === 'customers' && (
               <Customers 
@@ -1089,7 +1107,7 @@ export default function App() {
               <Products tenantId={tenant?.id || 'default-hardware-erp'} businessType={businessType as any} mode="stock" autoOpenModal={productAutoOpen} onModalClosed={() => setProductAutoOpen(false)} />
             )}
             {activeTab === 'reports' && (
-              <Reports tenantId={tenant?.id || 'default-hardware-erp'} sales={sales} purchases={purchases} />
+              <Purchases autoOpenModal={false} />
             )}
             {activeTab === 'excel-export' && (
               <ExcelExport />

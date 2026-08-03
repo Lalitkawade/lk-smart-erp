@@ -34,6 +34,8 @@ interface PurchaseBill {
   }>;
 }
 
+
+
 interface PurchasesProps {
   autoOpenModal?: boolean;
   onModalClosed?: () => void;
@@ -51,6 +53,7 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
   // Modals
   const [modalOpen, setModalOpen] = useState(false);
   const [autoFilledNotice, setAutoFilledNotice] = useState<string | null>(null);
+  const [viewingBill, setViewingBill] = useState<any | null>(null);
 
   // Form State
   const [supplierId, setSupplierId] = useState('');
@@ -75,13 +78,10 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
   const loadTodayStockInflows = () => {
     try {
       const localP = JSON.parse(localStorage.getItem('lk_purchases') || '[]');
-      const todayStr = new Date().toISOString().slice(0, 10);
 
-      // Find stock inflows logged today or stock inflows that start with 'STOCK-IN-'
+      // Find ONLY unbilled stock inflows that start with 'STOCK-IN-'
       const todayInflows = localP.filter((b: any) => {
-        const bDate = (b.purchase_date || b.created_at || '').slice(0, 10);
-        const isStockIn = b.bill_number && b.bill_number.startsWith('STOCK-IN-');
-        return isStockIn || bDate === todayStr;
+        return Boolean(b.bill_number && String(b.bill_number).toUpperCase().startsWith('STOCK-IN'));
       });
 
       if (todayInflows.length === 0) {
@@ -90,6 +90,7 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
       }
 
       const itemsMap = new Map<string, { product_id: string; qty: number; rate: number }>();
+      const searchMap: Record<number, string> = {};
       let autoVendorName = '';
 
       todayInflows.forEach((bill: any) => {
@@ -99,16 +100,25 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
         const lineItems = bill.items || bill.purchase_items || [];
         if (lineItems.length > 0) {
           lineItems.forEach((item: any) => {
-            const pId = item.product_id || item.product?.id;
-            if (pId) {
-              const existing = itemsMap.get(pId);
+            const rawId = item.product_id || item.product?.id;
+            const rawName = item.product_name || item.product?.product_name || '';
+
+            // Match product by ID or Name
+            const matched = products.find(p => 
+              (rawId && p.id === rawId) || 
+              (rawName && p.product_name && p.product_name.trim().toLowerCase() === rawName.trim().toLowerCase())
+            );
+
+            const canonicalId = matched ? matched.id : (rawId || rawName);
+            if (canonicalId) {
+              const existing = itemsMap.get(canonicalId);
               const qty = Number(item.qty || item.quantity || 1);
-              const rate = Number(item.rate || item.price || 0);
+              const rate = Number(item.rate || item.price || (matched ? Number(matched.purchase_price) : 0));
               if (existing) {
                 existing.qty += qty;
                 if (rate > 0) existing.rate = rate;
               } else {
-                itemsMap.set(pId, { product_id: pId, qty, rate });
+                itemsMap.set(canonicalId, { product_id: canonicalId, qty, rate });
               }
             }
           });
@@ -117,7 +127,13 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
 
       const itemsArray = Array.from(itemsMap.values());
       if (itemsArray.length > 0) {
+        itemsArray.forEach((it, idx) => {
+          const matched = products.find(p => p.id === it.product_id || (p.product_name && p.product_name.trim().toLowerCase() === it.product_id.trim().toLowerCase()));
+          searchMap[idx] = matched ? matched.product_name : it.product_id;
+        });
+
         setBillItems(itemsArray);
+        setProductRowSearch(searchMap);
 
         // Auto select supplier if matched
         if (autoVendorName && suppliers.length > 0) {
@@ -128,7 +144,7 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
           }
         }
 
-        setAutoFilledNotice(`⚡ Auto-loaded ${itemsArray.length} item(s) from today's stock entries! Simply enter Supplier Bill No. and save.`);
+        setAutoFilledNotice(`⚡ Auto-loaded ${itemsArray.length} item(s) from today's stock entries! Simply enter Supplier Bill No. and click Save Purchase Bill.`);
         return true;
       }
     } catch (e) {}
@@ -137,18 +153,23 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
 
   useEffect(() => {
     if (autoOpenModal) {
-      setModalOpen(true);
+      handleOpenNewBillModal();
       if (onModalClosed) onModalClosed();
     }
   }, [autoOpenModal]);
 
-  useEffect(() => {
-    if (modalOpen) {
-      if (billItems.length === 0 || (billItems.length === 1 && !billItems[0].product_id)) {
-        loadTodayStockInflows();
-      }
-    }
-  }, [modalOpen]);
+  const handleOpenNewBillModal = () => {
+    setBillItems([{ product_id: '', qty: 1, rate: 0 }]);
+    setProductRowSearch({});
+    setSupplierId('');
+    setVendorSearchQuery('');
+    setBillNumber('');
+    setTransactionId('');
+    setPaidAmount(0);
+    setIsPartialPayment(false);
+    setAutoFilledNotice(null);
+    setModalOpen(true);
+  };
 
   const selectedSup = useMemo(() => {
     return suppliers.find(s => s.id === supplierId);
@@ -166,12 +187,22 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
   const todayUnbilledInflows = useMemo(() => {
     try {
       const localP = JSON.parse(localStorage.getItem('lk_purchases') || '[]');
-      const todayStr = new Date().toISOString().slice(0, 10);
-      return localP.filter((b: any) => {
-        const bDate = (b.purchase_date || b.created_at || '').slice(0, 10);
-        const isStockIn = b.bill_number && b.bill_number.startsWith('STOCK-IN-');
-        return isStockIn || bDate === todayStr;
+      const localInflows = localP.filter((b: any) => {
+        return Boolean(b.bill_number && String(b.bill_number).toUpperCase().startsWith('STOCK-IN'));
       });
+      const stateInflows = bills.filter((b: any) => {
+        return Boolean(b.bill_number && String(b.bill_number).toUpperCase().startsWith('STOCK-IN'));
+      });
+      const map = new Map();
+      localInflows.forEach((b: any) => {
+        const k = b.bill_number || b.id;
+        if (k) map.set(k, b);
+      });
+      stateInflows.forEach((b: any) => {
+        const k = b.bill_number || b.id;
+        if (k && !map.has(k)) map.set(k, b);
+      });
+      return Array.from(map.values());
     } catch (e) {
       return [];
     }
@@ -252,8 +283,9 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
   const fetchPurchasesData = async () => {
     if (!tenantId) return;
     try {
-      // 1. Fetch procurement bills with items
-      const { data: billsData } = await supabase
+      // 1. Fetch procurement bills dynamically with items
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tenantId);
+      let query = supabase
         .from('purchase_bills')
         .select(`
           *,
@@ -261,27 +293,35 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
             *,
             product:products(*)
           )
-        `)
-        .eq('tenant_id', tenantId)
-        .order('purchase_date', { ascending: false });
+        `);
 
-      let currentBills: any[] = (billsData || []) as any[];
+      if (isUuid) {
+        query = query.eq('tenant_id', tenantId);
+      }
 
-      // Merge local storage cache if present
+      const { data: billsData } = await query;
+
+      const rawRemote = (billsData || []) as any[];
+      let currentBills: any[] = rawRemote.filter((b: any) => 
+        !String(b?.id || '').startsWith('pb-sample-')
+      );
+
+      // Merge local storage cache if present (Local bills have primary precedence)
       try {
-        const localP = JSON.parse(localStorage.getItem('lk_purchases') || '[]');
-        if (localP.length > 0) {
-          const map = new Map();
-          currentBills.forEach(b => {
-            const k = b.bill_number || b.id;
-            if (k) map.set(k, b);
-          });
-          localP.forEach((b: any) => {
-            const k = b.bill_number || b.id;
-            if (k && !map.has(k)) map.set(k, b);
-          });
-          currentBills = Array.from(map.values());
-        }
+        const rawLocal = JSON.parse(localStorage.getItem('lk_purchases') || '[]');
+        const localP = rawLocal.filter((b: any) => !String(b?.id || '').startsWith('pb-sample-'));
+        localStorage.setItem('lk_purchases', JSON.stringify(localP));
+
+        const map = new Map();
+        localP.forEach((b: any) => {
+          const k = b.bill_number || b.id;
+          if (k) map.set(k, b);
+        });
+        currentBills.forEach(b => {
+          const k = b.bill_number || b.id;
+          if (k && !String(b?.id || '').startsWith('pb-sample-') && !map.has(k)) map.set(k, b);
+        });
+        currentBills = Array.from(map.values()).filter((b: any) => !String(b?.id || '').startsWith('pb-sample-'));
       } catch (err) {}
 
       setBills(currentBills);
@@ -322,12 +362,46 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
         const localPStr = localStorage.getItem('lk_products') || '[]';
         const localP: Product[] = JSON.parse(localPStr);
         if (localP.length > 0) {
-          const map = new Map<string, Product>();
-          currentProds.forEach(p => { if (p && p.id) map.set(p.id, p); });
+          const finalMap = new Map<string, Product>();
+          const nameIndex = new Map<string, string>();
+
           localP.forEach(p => {
-            if (p && p.id && !map.has(p.id)) map.set(p.id, p);
+            if (p && p.id) {
+              finalMap.set(p.id, p);
+              if (p.product_name) nameIndex.set(p.product_name.trim().toUpperCase(), p.id);
+            }
           });
-          currentProds = Array.from(map.values());
+
+          currentProds.forEach(rp => {
+            if (!rp || !rp.id) return;
+            const normName = rp.product_name ? rp.product_name.trim().toUpperCase() : '';
+            const existingId = finalMap.has(rp.id) ? rp.id : (normName ? nameIndex.get(normName) : undefined);
+
+            if (existingId && finalMap.has(existingId)) {
+              const localItem = finalMap.get(existingId)!;
+              if (existingId !== rp.id) finalMap.delete(existingId);
+              const stockVal = Math.max(Number(localItem.current_stock || 0), Number(rp.current_stock ?? 0));
+              finalMap.set(rp.id, { ...rp, ...localItem, id: rp.id, current_stock: stockVal });
+              if (normName) nameIndex.set(normName, rp.id);
+            } else {
+              finalMap.set(rp.id, rp);
+              if (normName) nameIndex.set(normName, rp.id);
+            }
+          });
+
+          const uniqueByName = new Map<string, Product>();
+          Array.from(finalMap.values()).forEach(p => {
+            if (!p || !p.id) return;
+            const key = p.product_name ? p.product_name.trim().toUpperCase() : p.id;
+            if (uniqueByName.has(key)) {
+              const prev = uniqueByName.get(key)!;
+              uniqueByName.set(key, { ...prev, ...p, current_stock: Math.max(Number(prev.current_stock || 0), Number(p.current_stock || 0)) });
+            } else {
+              uniqueByName.set(key, p);
+            }
+          });
+
+          currentProds = Array.from(uniqueByName.values());
         }
       } catch (err) {}
       setProducts(currentProds);
@@ -352,36 +426,60 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
   };
 
   const handleItemChange = (idx: number, field: string, val: string | number) => {
-    const updated = billItems.map((item, i) => {
+    setBillItems(prev => prev.map((item, i) => {
       if (i === idx) {
         const newItem = { ...item, [field]: val };
         // Auto set rate if product is selected
         if (field === 'product_id') {
-          const match = products.find(p => p.id === val);
+          const match = products.find(p => p.id === val || (p.product_name && p.product_name.trim().toLowerCase() === String(val).trim().toLowerCase()));
           if (match) {
-            newItem.rate = Number(match.purchase_price);
+            newItem.product_id = match.id;
+            newItem.rate = Number(match.purchase_price || 0);
+            setProductRowSearch(prevSearch => ({ ...prevSearch, [idx]: match.product_name }));
           }
         }
         return newItem;
       }
       return item;
-    });
-    setBillItems(updated);
+    }));
+  };
+
+  const handleSelectProduct = (idx: number, product: Product) => {
+    setBillItems(prev => prev.map((item, i) => {
+      if (i === idx) {
+        return {
+          ...item,
+          product_id: product.id,
+          rate: Number(product.purchase_price || 0)
+        };
+      }
+      return item;
+    }));
+    setProductRowSearch(prev => ({ ...prev, [idx]: product.product_name }));
+    setOpenProductRowDropdown(null);
   };
 
   const handleSubmitBill = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!supplierId) {
-      alert('Please select a supplier!');
-      return;
+    
+    // Resolve vendor/supplier (fallback to typed name or General Vendor if unselected)
+    let selectedSup = suppliers.find(s => s.id === supplierId);
+    if (!selectedSup) {
+      const fallbackName = vendorSearchQuery.trim().toUpperCase() || 'GENERAL VENDOR';
+      selectedSup = suppliers.find(s => s.supplier_name.toUpperCase() === fallbackName) || {
+        id: 'sup-gen-' + Date.now(),
+        supplier_name: fallbackName,
+        phone: '',
+        outstanding: 0
+      };
     }
 
-    const selectedSup = suppliers.find(s => s.id === supplierId);
-    if (!selectedSup) return;
+    const rawDate = purchaseDate ? new Date(purchaseDate) : new Date();
+    const safeIsoDate = isNaN(rawDate.getTime()) ? new Date().toISOString() : rawDate.toISOString();
 
     const newBillObj = {
       id: 'pb-' + Date.now(),
-      bill_number: billNumber || 'PB-' + Date.now().toString().slice(-5),
+      bill_number: billNumber.trim() || 'PB-' + Date.now().toString().slice(-5),
       supplier_name: selectedSup.supplier_name,
       payment_mode: paymentMode,
       ref_number: transactionId.trim() || null,
@@ -389,14 +487,16 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
       total_amount: totalAmount,
       paid_amount: effectivePaid,
       due_amount: dueAmount,
-      purchase_date: new Date(purchaseDate).toISOString(),
-      items: billItems.map(item => {
-        const p = products.find(prod => prod.id === item.product_id);
+      purchase_date: safeIsoDate,
+      is_offline_draft: true,
+      items: billItems.map((item, idx) => {
+        const typedName = (productRowSearch[idx] || '').trim();
+        const p = products.find(prod => prod.id === item.product_id || (prod.product_name && typedName && prod.product_name.trim().toLowerCase() === typedName.toLowerCase()));
         return {
-          product_id: item.product_id,
-          product_name: p ? p.product_name : 'Procured Material Item',
-          qty: item.qty,
-          rate: item.rate
+          product_id: p ? p.id : (item.product_id || 'prod-' + Date.now()),
+          product_name: p ? p.product_name : (typedName || 'Procured Material Item'),
+          qty: Number(item.qty || 1),
+          rate: Number(item.rate || 0)
         };
       })
     };
@@ -404,17 +504,28 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
     // 1. Immediate local state and cache updates
     try {
       const localP = JSON.parse(localStorage.getItem('lk_purchases') || '[]');
-      localStorage.setItem('lk_purchases', JSON.stringify([newBillObj, ...localP]));
+      const cleanedP = localP.filter((b: any) => !(b.bill_number && String(b.bill_number).toUpperCase().startsWith('STOCK-IN')));
+      localStorage.setItem('lk_purchases', JSON.stringify([newBillObj, ...cleanedP]));
 
       // Update product stock counts locally
       const localProds: Product[] = JSON.parse(localStorage.getItem('lk_products') || '[]');
-      billItems.forEach(item => {
-        const pIdx = localProds.findIndex(p => p.id === item.product_id);
+      billItems.forEach((item, idx) => {
+        const typedName = (productRowSearch[idx] || '').trim().toLowerCase();
+        const pIdx = localProds.findIndex(p => {
+          if (!p) return false;
+          if (p.id && item.product_id && p.id === item.product_id) return true;
+          if (p.product_name && item.product_id && p.product_name.trim().toLowerCase() === item.product_id.trim().toLowerCase()) return true;
+          if (p.product_name && typedName && p.product_name.trim().toLowerCase() === typedName) return true;
+          return false;
+        });
+
         if (pIdx >= 0) {
           localProds[pIdx].current_stock = Number(localProds[pIdx].current_stock || 0) + item.qty;
         }
       });
       localStorage.setItem('lk_products', JSON.stringify(localProds));
+      window.dispatchEvent(new Event('storage'));
+      window.dispatchEvent(new Event('lk_inventory_updated'));
 
       // Update supplier outstanding locally
       if (dueAmount > 0) {
@@ -425,6 +536,11 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
         }
         localStorage.setItem('lk_suppliers', JSON.stringify(localSups));
       }
+    } catch (e) {}
+
+    // Clean up temporary stock inflow bills from Supabase database as well
+    try {
+      await supabase.from('purchase_bills').delete().ilike('bill_number', 'STOCK-IN%');
     } catch (e) {}
 
     // 2. Background attempt to persist to remote Supabase if UUID
@@ -449,14 +565,27 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
           .single();
 
         if (billRes && billRes.id) {
-          for (const item of billItems) {
+          const localProds: Product[] = JSON.parse(localStorage.getItem('lk_products') || '[]');
+          for (const item of newBillObj.items) {
+            const validProdId = isValidUUID(item.product_id) ? item.product_id : null;
             await supabase.from('purchase_items').insert({
               bill_id: billRes.id,
-              product_id: item.product_id,
+              product_id: validProdId,
               qty: item.qty,
               rate: item.rate,
               amount: item.qty * item.rate
             });
+
+            // Update product stock directly in Supabase products table
+            if (validProdId) {
+              const pObj = localProds.find(p => p.id === validProdId);
+              if (pObj) {
+                await supabase
+                  .from('products')
+                  .update({ current_stock: Number(pObj.current_stock || 0) })
+                  .eq('id', validProdId);
+              }
+            }
           }
         }
       } catch (err) {
@@ -464,28 +593,34 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
       }
     }
 
-    setBills(prev => [newBillObj, ...prev]);
+    setBills(prev => [newBillObj, ...prev.filter(b => !(b.bill_number && String(b.bill_number).toUpperCase().startsWith('STOCK-IN')))]);
     window.dispatchEvent(new Event('storage'));
+    window.dispatchEvent(new CustomEvent('lk_inventory_updated'));
 
     setModalOpen(false);
     setBillItems([{ product_id: '', qty: 1, rate: 0 }]);
+    setProductRowSearch({});
+    setSupplierId('');
+    setVendorSearchQuery('');
     setBillNumber('');
     setTransactionId('');
     setPaidAmount(0);
     setIsPartialPayment(false);
+    setAutoFilledNotice(null);
     alert('Procurement Bill successfully saved! Stock levels incremented and vendor ledgers adjusted.');
   };
 
   // Material receipts are computed dynamically below
   const purchaseLines = useMemo(() => {
     const lines: any[] = [];
-    bills.forEach(b => {
+    const confirmedBills = bills.filter(b => !(b.bill_number && String(b.bill_number).toUpperCase().startsWith('STOCK-IN')));
+    confirmedBills.forEach(b => {
       const items = b.items || (b as any).purchase_items || [];
       if (items.length === 0) {
         lines.push({
           id: b.id || b.bill_number,
           hsn: (b as any).hsn || '-',
-          product_name: (b as any).product_name || (b.bill_number?.startsWith('STOCK-IN') ? 'Direct Inflow Stock' : 'Procurement Bill'),
+          product_name: (b as any).product_name || 'Procurement Bill',
           vendor_name: b.supplier_name || 'Vendor Supplier',
           date: b.purchase_date || (b as any).created_at || new Date().toISOString(),
           qty: 1,
@@ -528,7 +663,7 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
           <h2 className="text-xl font-bold text-foreground">{t('purchaseBills')}</h2>
           <p className="text-xs text-textMuted mt-1">Log supplier purchase bills and manage material receipts</p>
         </div>
-        <button className="w-full sm:w-auto px-4 py-2 bg-primary hover:bg-primary/90 text-white font-bold rounded-lg text-sm text-center shrink-0 shadow-md transition active:scale-95 cursor-pointer" onClick={() => setModalOpen(true)}>
+        <button className="w-full sm:w-auto px-4 py-2 bg-primary hover:bg-primary/90 text-white font-bold rounded-lg text-sm text-center shrink-0 shadow-md transition active:scale-95 cursor-pointer" onClick={handleOpenNewBillModal}>
           + {t('newPurchaseBill')}
         </button>
       </div>
@@ -544,16 +679,34 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
               <p className="text-[11px] text-textMuted mt-0.5">Found stock inflows logged today. Auto-fill them directly into a new purchase bill with 1 click.</p>
             </div>
           </div>
-          <button 
-            type="button"
-            onClick={() => {
-              setModalOpen(true);
-              setTimeout(loadTodayStockInflows, 50);
-            }}
-            className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs rounded-lg shadow-sm transition active:scale-95 cursor-pointer whitespace-nowrap flex items-center gap-1.5"
-          >
-            <i className="fa-solid fa-bolt text-amber-300"></i> Create Purchase Bill with Today's Items
-          </button>
+          <div className="flex items-center gap-2">
+            <button 
+              type="button"
+              onClick={() => {
+                setModalOpen(true);
+                setTimeout(loadTodayStockInflows, 50);
+              }}
+              className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs rounded-lg shadow-sm transition active:scale-95 cursor-pointer whitespace-nowrap flex items-center gap-1.5"
+            >
+              <i className="fa-solid fa-bolt text-amber-300"></i> Create Purchase Bill with Today's Items
+            </button>
+            <button
+              type="button"
+              title="Dismiss stock inflow banner"
+              onClick={async () => {
+                try {
+                  const localP = JSON.parse(localStorage.getItem('lk_purchases') || '[]');
+                  const cleaned = localP.filter((b: any) => !(b.bill_number && String(b.bill_number).toUpperCase().startsWith('STOCK-IN')));
+                  localStorage.setItem('lk_purchases', JSON.stringify(cleaned));
+                  setBills(prev => prev.filter(b => !(b.bill_number && String(b.bill_number).toUpperCase().startsWith('STOCK-IN'))));
+                  await supabase.from('purchase_bills').delete().ilike('bill_number', 'STOCK-IN%');
+                } catch (e) {}
+              }}
+              className="px-2.5 py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs rounded-lg transition cursor-pointer"
+            >
+              &times;
+            </button>
+          </div>
         </div>
       )}
 
@@ -574,18 +727,24 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
               <th className="py-2.5 px-3 text-center whitespace-nowrap">Units</th>
               <th className="py-2.5 px-3 text-center whitespace-nowrap">Unit Rate (₹)</th>
               <th className="py-2.5 px-3 text-center whitespace-nowrap">Total Amount (₹)</th>
+              <th className="py-2.5 px-3 text-center whitespace-nowrap">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
             {filteredLines.length === 0 ? (
               <tr>
-                <td colSpan={7} className="py-8 text-center text-slate-400 text-xs font-medium">
+                <td colSpan={8} className="py-8 text-center text-slate-400 text-xs font-medium">
                   <i className="fa-solid fa-cart-flatbed text-2xl text-slate-400 mb-2 block"></i>
                   No matching purchase records found.
                 </td>
               </tr>
             ) : filteredLines.map((line: any, idx: number) => (
-              <tr key={idx} className="odd:bg-white dark:odd:bg-slate-900 even:bg-slate-50/70 dark:even:bg-slate-800/30 hover:bg-blue-50/60 dark:hover:bg-slate-800/70 transition-colors divide-x divide-slate-200 dark:divide-slate-800">
+              <tr 
+                key={idx} 
+                onClick={() => setViewingBill(line.rawBill)}
+                className="odd:bg-white dark:odd:bg-slate-900 even:bg-slate-50/70 dark:even:bg-slate-800/30 hover:bg-blue-50/60 dark:hover:bg-slate-800/70 transition-colors divide-x divide-slate-200 dark:divide-slate-800 cursor-pointer"
+                title="Click to view complete purchase receipt details"
+              >
                 <td className="py-2.5 px-3 text-center font-mono text-xs">
                   <span className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded font-bold">
                     {line.hsn}
@@ -602,6 +761,18 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
                 <td className="py-2.5 px-3 text-center text-xs font-mono text-slate-900 dark:text-slate-100">₹{line.rate.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                 <td className="py-2.5 px-3 text-center text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">
                   ₹{line.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </td>
+                <td className="py-2.5 px-3 text-center text-xs">
+                  <button 
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setViewingBill(line.rawBill);
+                    }}
+                    className="px-2.5 py-1 bg-primary/10 hover:bg-primary text-primary hover:text-white font-extrabold text-xs rounded-lg border border-primary/30 transition cursor-pointer flex items-center gap-1 mx-auto"
+                  >
+                    <i className="fa-solid fa-eye text-[10px]"></i> View Bill
+                  </button>
                 </td>
               </tr>
             ))}
@@ -633,7 +804,7 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
             <form onSubmit={handleSubmitBill} className="flex-1 min-h-0 overflow-y-auto pr-2 space-y-6 scrollbar-thin">
               
               {/* Auto-filled notice banner */}
-              {autoFilledNotice && (
+              {autoFilledNotice ? (
                 <div className="bg-blue-500/10 border border-blue-500/30 text-blue-600 dark:text-blue-400 px-4 py-2.5 rounded-xl text-xs font-bold flex items-center justify-between gap-2 animate-fade-in">
                   <div className="flex items-center gap-2">
                     <i className="fa-solid fa-bolt text-amber-400 text-sm"></i>
@@ -645,6 +816,20 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
                     className="text-[10px] underline font-extrabold hover:text-foreground cursor-pointer"
                   >
                     Dismiss
+                  </button>
+                </div>
+              ) : todayUnbilledInflows.length > 0 && (
+                <div className="bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 px-4 py-2.5 rounded-xl text-xs font-bold flex items-center justify-between gap-2 animate-fade-in">
+                  <div className="flex items-center gap-2">
+                    <i className="fa-solid fa-bolt text-amber-400 text-sm"></i>
+                    <span>Found {todayUnbilledInflows.length} unbilled stock inflow(s) logged today!</span>
+                  </div>
+                  <button 
+                    type="button" 
+                    onClick={loadTodayStockInflows}
+                    className="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs rounded-md shadow-xs transition active:scale-95 cursor-pointer flex items-center gap-1"
+                  >
+                    ⚡ Auto-load Today's Items
                   </button>
                 </div>
               )}
@@ -859,12 +1044,7 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
                                 filteredProdsForRow.map((p) => (
                                   <div
                                     key={p.id}
-                                    onClick={() => {
-                                      handleItemChange(idx, 'product_id', p.id);
-                                      handleItemChange(idx, 'rate', Number(p.purchase_price || 0));
-                                      setProductRowSearch(prev => ({ ...prev, [idx]: p.product_name }));
-                                      setOpenProductRowDropdown(null);
-                                    }}
+                                    onClick={() => handleSelectProduct(idx, p)}
                                     className={`p-2.5 hover:bg-background/80 cursor-pointer flex justify-between items-center transition ${item.product_id === p.id ? 'bg-primary/10 text-primary font-bold' : 'text-foreground'}`}
                                   >
                                     <div>
@@ -1074,6 +1254,96 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
               </div>
             </form>
 
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Purchase Bill Details Modal */}
+      {viewingBill && createPortal(
+        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 z-[9999] overflow-y-auto animate-backdrop-fade">
+          <div className="bg-secondary border border-border p-6 rounded-2xl w-full max-w-2xl shadow-2xl my-auto space-y-6">
+            
+            {/* Header */}
+            <div className="flex justify-between items-start border-b border-border/80 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-primary/10 border border-primary/30 text-primary rounded-2xl flex items-center justify-center text-xl font-bold">
+                  <i className="fa-solid fa-file-invoice"></i>
+                </div>
+                <div>
+                  <span className="text-[10px] font-black text-primary uppercase tracking-widest block">Procurement Receipt</span>
+                  <h3 className="text-xl font-black text-foreground uppercase tracking-tight">{viewingBill.bill_number || viewingBill.id}</h3>
+                  <p className="text-xs text-textMuted font-medium">{new Date(viewingBill.purchase_date || viewingBill.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
+                </div>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setViewingBill(null)}
+                className="text-textSecondary hover:text-foreground text-xs font-bold bg-background/50 hover:bg-background border border-border px-3 py-1.5 rounded-lg transition"
+              >
+                &times; Close
+              </button>
+            </div>
+
+            {/* Vendor & Payment Meta */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 bg-background/60 p-4 rounded-xl border border-border text-xs">
+              <div>
+                <span className="text-[10px] font-bold text-textMuted uppercase block">Vendor / Supplier</span>
+                <span className="font-extrabold text-foreground uppercase">{viewingBill.supplier_name || 'Vendor Supplier'}</span>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-textMuted uppercase block">Payment Channel</span>
+                <span className="font-bold text-primary">{viewingBill.payment_mode || 'Cash'}</span>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-textMuted uppercase block">Reference / UTR</span>
+                <span className="font-mono font-bold text-foreground">{viewingBill.transaction_id || viewingBill.ref_number || 'N/A'}</span>
+              </div>
+            </div>
+
+            {/* Itemized Table */}
+            <div className="space-y-2">
+              <h4 className="text-xs font-bold text-textSecondary uppercase tracking-wider">Procured Line Items</h4>
+              <div className="border border-border rounded-xl overflow-hidden">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-background/80 text-textSecondary font-black uppercase text-[10px] border-b border-border">
+                    <tr>
+                      <th className="p-2.5">Item Description</th>
+                      <th className="p-2.5 text-center">Qty</th>
+                      <th className="p-2.5 text-right">Rate (₹)</th>
+                      <th className="p-2.5 text-right">Amount (₹)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/40">
+                    {(viewingBill.items || viewingBill.purchase_items || []).map((it: any, i: number) => (
+                      <tr key={i} className="hover:bg-background/30">
+                        <td className="p-2.5 font-bold uppercase">{it.product?.product_name || it.product_name || 'Procured Material Item'}</td>
+                        <td className="p-2.5 text-center font-mono font-bold">{it.qty || 1}</td>
+                        <td className="p-2.5 text-right font-mono">₹{Number(it.rate || 0).toFixed(2)}</td>
+                        <td className="p-2.5 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">₹{(Number(it.qty || 1) * Number(it.rate || 0)).toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Totals Summary */}
+            <div className="flex justify-between items-center bg-slate-900 text-white p-4 rounded-xl">
+              <div>
+                <span className="text-[10px] font-bold uppercase text-slate-400 block">Total Procurement Cost</span>
+                <span className="text-lg font-black text-emerald-400">₹{Number(viewingBill.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+              </div>
+              <div className="flex gap-2">
+                <button 
+                  type="button" 
+                  onClick={() => window.print()}
+                  className="px-4 py-2 bg-primary hover:bg-primary/90 text-white text-xs font-bold rounded-lg shadow-md transition flex items-center gap-1.5 cursor-pointer"
+                >
+                  <i className="fa-solid fa-print"></i> Print Receipt
+                </button>
+              </div>
+            </div>
           </div>
         </div>,
         document.body

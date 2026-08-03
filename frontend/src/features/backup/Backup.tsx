@@ -7,7 +7,7 @@ export default function Backup() {
   const handleExportBackup = () => {
     try {
       const backupData: Record<string, string | null> = {};
-      const keys = ['lk_products', 'lk_sales', 'lk_customers', 'lk_suppliers', 'lk_expenses', 'lk_settings', 'lk_users'];
+      const keys = ['lk_products', 'lk_sales', 'lk_purchases', 'lk_customers', 'lk_suppliers', 'lk_expenses', 'lk_settings', 'lk_users'];
       
       keys.forEach(k => {
         backupData[k] = localStorage.getItem(k);
@@ -48,7 +48,7 @@ export default function Backup() {
     reader.onload = (e) => {
       try {
         const data = JSON.parse(e.target?.result as string);
-        const keys = ['lk_products', 'lk_sales', 'lk_customers', 'lk_suppliers', 'lk_expenses', 'lk_settings', 'lk_users'];
+        const keys = ['lk_products', 'lk_sales', 'lk_purchases', 'lk_customers', 'lk_suppliers', 'lk_expenses', 'lk_settings', 'lk_users'];
         
         // Write keys if present
         keys.forEach(k => {

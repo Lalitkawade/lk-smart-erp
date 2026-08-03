@@ -92,7 +92,22 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
   }, [autoCustomerName, registeredCustomers]);
 
   const [amountCollectedInput, setAmountCollectedInput] = useState<string>('');
+  const [manualDiscountInput, setManualDiscountInput] = useState<string>('');
   const [repayUdharInput, setRepayUdharInput] = useState<string>('');
+
+  const cartSubtotal = useMemo(() => {
+    return cart.reduce((acc, curr) => acc + curr.qty * curr.rate, 0);
+  }, [cart]);
+
+  const manualDiscount = useMemo(() => {
+    const parsed = parseFloat(manualDiscountInput);
+    if (isNaN(parsed) || parsed < 0) return 0;
+    return Math.min(cartSubtotal, parsed);
+  }, [manualDiscountInput, cartSubtotal]);
+
+  const totalAmount = useMemo(() => {
+    return Math.max(0, cartSubtotal - manualDiscount);
+  }, [cartSubtotal, manualDiscount]);
   const [custSearchQuery, setCustSearchQuery] = useState<string>('');
   const [custDropdownOpen, setCustDropdownOpen] = useState<boolean>(false);
   const [quickCustModalOpen, setQuickCustModalOpen] = useState(false);
@@ -275,12 +290,11 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
     alert(`Customer "${newCustObj.customer_name}" successfully registered and selected!`);
   };
 
-  const totalAmount = cart.reduce((acc, curr) => acc + curr.qty * curr.rate, 0);
-
   // Auto-sync amountCollectedInput with totalAmount when cart contents change or modal opens
   useEffect(() => {
     if (!billingModal) {
       setAmountCollectedInput('');
+      setManualDiscountInput('');
       return;
     }
     if (paymentMode === 'Credit') {
@@ -360,12 +374,14 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
         amountCollected: collectedNum,
         repayUdharAmount: repayNum,
         paymentMode,
-        transactionId: transactionId.trim()
+        transactionId: transactionId.trim(),
+        discountAmount: manualDiscount
       });
       alert('Invoice successfully billed, inventory stock decremented.');
       setBillingModal(false);
       setRepayUdharInput('');
       setAmountCollectedInput('');
+      setManualDiscountInput('');
       // Auto open print modal for the newly generated bill!
       setPrintInvoice(bill);
     } catch (err: any) {
@@ -851,7 +867,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
                     <label className="block text-xs text-textSecondary mb-1 font-semibold">Payment Mode</label>
                     <select className="w-full bg-background border border-border rounded p-2 text-xs text-foreground font-semibold"
@@ -866,7 +882,28 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
 
                   <div>
                     <div className="flex justify-between items-center mb-1">
-                      <label className="block text-xs text-textSecondary font-semibold">Amount Collected for Today's Bill (₹)</label>
+                      <label className="block text-xs text-textSecondary font-semibold">Manual Discount (₹)</label>
+                      {manualDiscount > 0 && (
+                        <span className="text-[10px] font-bold text-rose-500 bg-rose-500/10 px-1.5 py-0.2 rounded border border-rose-500/30">
+                          -₹{manualDiscount.toFixed(2)}
+                        </span>
+                      )}
+                    </div>
+                    <input 
+                      type="number"
+                      step="any"
+                      min="0"
+                      max={cartSubtotal}
+                      className="w-full bg-background border border-border rounded p-2 text-xs text-rose-500 font-mono font-bold focus:border-rose-500 focus:outline-none"
+                      value={manualDiscountInput}
+                      onChange={(e) => setManualDiscountInput(e.target.value)}
+                      placeholder="e.g. 50 (Flat ₹ off)"
+                    />
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="block text-xs text-textSecondary font-semibold">Amount Collected (₹)</label>
                       <button
                         type="button"
                         onClick={() => setAmountCollectedInput(totalAmount.toString())}
@@ -928,7 +965,21 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                     <div className="bg-background/60 p-3 sm:p-4 rounded-xl border border-border space-y-2.5 text-xs shadow-inner">
                       <div className="flex justify-between items-center text-textSecondary font-semibold">
                         <span className="truncate pr-1">{t('cartSubTotal', activeLang)}</span>
-                        <span className="font-mono text-foreground font-bold shrink-0 text-right">₹{totalAmount.toFixed(2)}</span>
+                        <span className="font-mono text-foreground font-bold shrink-0 text-right">₹{cartSubtotal.toFixed(2)}</span>
+                      </div>
+
+                      {manualDiscount > 0 && (
+                        <div className="flex justify-between items-center text-rose-500 font-semibold">
+                          <span className="truncate pr-1 flex items-center gap-1">
+                            <i className="fa-solid fa-tag text-[10px]"></i> Manual Flat Discount (₹)
+                          </span>
+                          <span className="font-mono font-bold shrink-0 text-right">-₹{manualDiscount.toFixed(2)}</span>
+                        </div>
+                      )}
+
+                      <div className="flex justify-between items-center text-textSecondary font-semibold border-t border-border/30 pt-1.5">
+                        <span className="truncate pr-1 font-extrabold text-foreground">Final Bill Total Cost</span>
+                        <span className="font-mono text-emerald-600 dark:text-emerald-400 font-black shrink-0 text-right text-xs sm:text-sm">₹{totalAmount.toFixed(2)}</span>
                       </div>
 
                       <div className="flex justify-between items-center text-textSecondary font-semibold">

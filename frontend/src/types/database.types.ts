@@ -262,6 +262,8 @@ export type PurchaseBillRow = {
   supplier_name: string;
   supplier_phone?: string | null;
   payment_mode?: string;
+  ref_number?: string | null;
+  transaction_id?: string | null;
   total_amount: number;
   paid_amount?: number;
   due_amount?: number;
@@ -276,6 +278,8 @@ export type PurchaseBillInsert = {
   supplier_name: string;
   supplier_phone?: string | null;
   payment_mode?: string;
+  ref_number?: string | null;
+  transaction_id?: string | null;
   total_amount?: number;
   paid_amount?: number;
   due_amount?: number;
@@ -288,6 +292,8 @@ export type PurchaseBillUpdate = {
   supplier_name?: string;
   supplier_phone?: string | null;
   payment_mode?: string;
+  ref_number?: string | null;
+  transaction_id?: string | null;
   total_amount?: number;
   paid_amount?: number;
   due_amount?: number;
