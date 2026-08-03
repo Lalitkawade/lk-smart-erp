@@ -418,13 +418,21 @@ export default function App() {
           
           {/* Main Shop Header Branding */}
           <div className="text-center space-y-2">
-            <div className="w-16 h-16 bg-amber-500/10 border-2 border-amber-500/30 text-amber-400 rounded-2xl flex items-center justify-center mx-auto text-3xl shadow-lg">
-              <i className="fa-solid fa-store"></i>
+            <div className="flex justify-center mb-1">
+              <img 
+                src={(tenant as any)?.logo_url || '/logo.png'} 
+                onError={(e) => { 
+                  (e.target as HTMLImageElement).onerror = null; 
+                  (e.target as HTMLImageElement).src = '/logo.png'; 
+                }} 
+                alt="Shop Logo" 
+                className="w-20 h-20 object-contain drop-shadow-2xl rounded-2xl border-2 border-amber-500/40 p-1 bg-slate-950/80 mx-auto" 
+              />
             </div>
             <h1 className="text-2xl font-black text-white tracking-tight uppercase">
               {activeShopName}
             </h1>
-            <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Hardware, Plumbing & Electrical Store</p>
+            <p className="text-xs text-amber-400/90 font-bold uppercase tracking-widest">Hardware, Plumbing & Electrical Store</p>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-4">
