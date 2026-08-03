@@ -12,7 +12,7 @@ export default defineConfig({
       devOptions: {
         enabled: true
       },
-      includeAssets: ['favicon.svg', 'icons.svg', 'manifest.json', 'pwa-192x192.png', 'pwa-512x512.png'],
+      includeAssets: ['favicon.svg', 'icons.svg', 'manifest.json', 'pwa-192x192.png', 'pwa-512x512.png', 'logo.png'],
       manifest: {
         name: 'LK Smart ERP - Business Suite',
         short_name: 'LK Smart ERP',
