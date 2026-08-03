@@ -12,7 +12,7 @@ export default defineConfig({
       devOptions: {
         enabled: true
       },
-      includeAssets: ['favicon.svg', 'icons.svg', 'manifest.json', 'pwa-192x192.png', 'pwa-512x512.png', 'logo.png'],
+      includeAssets: ['favicon.png', 'icons.svg', 'manifest.json', 'pwa-192x192.png', 'pwa-512x512.png', 'apple-touch-icon.png', 'logo.png'],
       manifest: {
         name: 'LK Smart ERP - Business Suite',
         short_name: 'LK Smart ERP',
@@ -75,12 +75,12 @@ export default defineConfig({
             }
           },
           {
-            urlPattern: /^https:\/\/cdnjs\.cloudflare\.com\/.*/i,
+            urlPattern: /^(https:\/\/cdnjs\.cloudflare\.com|https:\/\/cdn\.jsdelivr\.net)\/.*/i,
             handler: 'CacheFirst',
             options: {
               cacheName: 'fontawesome-cache',
               expiration: {
-                maxEntries: 10,
+                maxEntries: 20,
                 maxAgeSeconds: 60 * 60 * 24 * 365
               },
               cacheableResponse: {

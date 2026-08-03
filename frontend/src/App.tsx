@@ -410,22 +410,21 @@ export default function App() {
 
   // Operator Login Panel
   if (!user) {
+    const activeShopName = tenant?.company_name || 'Maharudra Hardware';
+
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
         <div className="w-full max-w-md bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-2xl space-y-6">
+          
+          {/* Main Shop Header Branding */}
           <div className="text-center space-y-2">
-            <div className="flex justify-center mb-1">
-              <img 
-                src="/logo.png" 
-                onError={(e) => { (e.target as HTMLImageElement).onerror = null; (e.target as HTMLImageElement).src = './logo.png'; }} 
-                alt="LK Smart ERP Logo" 
-                className="w-24 h-24 object-contain drop-shadow-2xl rounded-full border-2 border-amber-500/30 p-1 bg-slate-950" 
-              />
+            <div className="w-16 h-16 bg-amber-500/10 border-2 border-amber-500/30 text-amber-400 rounded-2xl flex items-center justify-center mx-auto text-3xl shadow-lg">
+              <i className="fa-solid fa-store"></i>
             </div>
-            <h1 className="text-2xl font-black text-white tracking-tight">
-              LK Smart ERP
+            <h1 className="text-2xl font-black text-white tracking-tight uppercase">
+              {activeShopName}
             </h1>
-            <p className="text-xs text-amber-400/90 font-bold uppercase tracking-widest">Inventory & Billing Management</p>
+            <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Hardware, Plumbing & Electrical Store</p>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-4">
@@ -475,9 +474,19 @@ export default function App() {
             </button>
           </form>
 
-          <div className="pt-4 border-t border-slate-800 text-center">
-            <p className="text-[11px] font-bold text-primary">Developed by LK Digital Solution</p>
-            <a href="tel:9270138287" className="text-[10px] text-slate-400 hover:text-primary transition inline-flex items-center gap-1 mt-1">
+          {/* Platform Branding Footer with LK Emblem */}
+          <div className="pt-4 border-t border-slate-800 text-center space-y-1.5">
+            <div className="flex items-center justify-center gap-2">
+              <img 
+                src="/logo.png" 
+                onError={(e) => { (e.target as HTMLImageElement).onerror = null; (e.target as HTMLImageElement).src = './logo.png'; }} 
+                alt="LK Smart ERP Logo" 
+                className="w-6 h-6 object-contain rounded-full border border-amber-500/40 p-0.5 bg-slate-950" 
+              />
+              <span className="text-xs font-black text-amber-400 uppercase tracking-wider">LK Smart ERP</span>
+            </div>
+            <p className="text-[11px] font-semibold text-slate-400">Developed by LK Digital Solution</p>
+            <a href="tel:9270138287" className="text-[10px] text-slate-400 hover:text-primary transition inline-flex items-center gap-1">
               <i className="fa-solid fa-phone text-[9px]"></i> Call: 9270138287
             </a>
           </div>
@@ -573,7 +582,7 @@ export default function App() {
               <div className="truncate pr-2">
                 <h2 className="text-xs font-black text-sidebar-active truncate uppercase tracking-widest flex items-center gap-2">
                   <img 
-                    src={tenant?.logo_url || '/logo.png'} 
+                    src={(tenant as any)?.logo_url || '/logo.png'} 
                     onError={(e) => { (e.target as HTMLImageElement).onerror = null; (e.target as HTMLImageElement).src = '/logo.png'; }} 
                     alt="LK Logo" 
                     className="w-5 h-5 rounded-full object-cover shrink-0 border border-amber-500/40" 
