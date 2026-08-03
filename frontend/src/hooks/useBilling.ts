@@ -72,7 +72,9 @@ export function useBilling(tenantId: string) {
       if (addedPieces > stockInPieces) {
         throw new Error(`Out of stock.`);
       }
-      const rate = isLoose ? Number(product.piece_selling_price || 0) : Number(product.selling_price);
+      const rate = isLoose 
+        ? Number(product.piece_selling_price || (piecesPerPack > 0 ? Number(product.selling_price || 0) / piecesPerPack : 0)) 
+        : Number(product.selling_price);
       setCart([...cart, { product, qty: 1, rate, isLoose }]);
     }
   };

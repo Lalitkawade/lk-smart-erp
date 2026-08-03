@@ -78,6 +78,9 @@ export type ProductRow = {
   unit?: string;
   purchase_price: number;
   selling_price: number;
+  dealer_price?: number | null;
+  mrp?: number | null;
+  gst?: number | null;
   current_stock: number;
   min_stock_level?: number;
   status?: string;
@@ -113,6 +116,9 @@ export type ProductInsert = {
   unit?: string;
   purchase_price?: number;
   selling_price?: number;
+  dealer_price?: number | null;
+  mrp?: number | null;
+  gst?: number | null;
   current_stock?: number;
   min_stock_level?: number;
   status?: string;
@@ -148,6 +154,9 @@ export type ProductUpdate = {
   unit?: string;
   purchase_price?: number;
   selling_price?: number;
+  dealer_price?: number | null;
+  mrp?: number | null;
+  gst?: number | null;
   current_stock?: number;
   min_stock_level?: number;
   status?: string;

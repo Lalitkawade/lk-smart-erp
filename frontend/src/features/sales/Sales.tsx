@@ -277,6 +277,19 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
 
   const totalAmount = cart.reduce((acc, curr) => acc + curr.qty * curr.rate, 0);
 
+  // Auto-sync amountCollectedInput with totalAmount when cart contents change or modal opens
+  useEffect(() => {
+    if (!billingModal) {
+      setAmountCollectedInput('');
+      return;
+    }
+    if (paymentMode === 'Credit') {
+      setAmountCollectedInput('0');
+    } else if (!amountCollectedInput || amountCollectedInput === '0' || amountCollectedInput === totalAmount.toString()) {
+      setAmountCollectedInput(totalAmount.toString());
+    }
+  }, [totalAmount, billingModal, paymentMode]);
+
   // Filter products for POS
   const filteredPOSProducts = useMemo(() => {
     return products.filter(p => {
@@ -426,55 +439,52 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
           value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
       </div>
 
-      <div className="bg-secondary border border-border/80 rounded-2xl shadow-sm overflow-x-auto">
-        <table className="w-full text-left text-sm text-textSecondary border-collapse">
+      <div className="bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-x-auto">
+        <table className="w-full text-left text-sm text-slate-700 dark:text-slate-200 border-collapse">
           <thead>
-            <tr className="border-b border-border/80 bg-slate-100/70 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 font-extrabold uppercase tracking-wider text-[11px]">
-              <th className="py-3.5 px-4">HSN Code</th>
-              <th className="py-3.5 px-4">Product Name</th>
-              <th className="py-3.5 px-4">Customer Billed To</th>
-              <th className="py-3.5 px-4">Date & Time</th>
-              <th className="py-3.5 px-4 text-center">Qty (Units)</th>
-              <th className="py-3.5 px-4 text-right">Unit Price (₹)</th>
-              <th className="py-3.5 px-4 text-right">Total Amount (₹)</th>
-              <th className="py-3.5 px-4 text-right">Actions</th>
+            <tr className="border-b-2 border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/90 text-slate-700 dark:text-slate-200 font-extrabold uppercase tracking-wider text-[11px] divide-x divide-slate-200 dark:divide-slate-700 whitespace-nowrap">
+              <th className="py-2.5 px-3 text-center whitespace-nowrap">HSN Code</th>
+              <th className="py-2.5 px-3 text-center whitespace-nowrap">Product Name</th>
+              <th className="py-2.5 px-3 text-center whitespace-nowrap">Customer Billed To</th>
+              <th className="py-2.5 px-3 text-center whitespace-nowrap">Date & Time</th>
+              <th className="py-2.5 px-3 text-center whitespace-nowrap">Qty (Units)</th>
+              <th className="py-2.5 px-3 text-center whitespace-nowrap">Unit Price (₹)</th>
+              <th className="py-2.5 px-3 text-center whitespace-nowrap">Total Amount (₹)</th>
+              <th className="py-2.5 px-3 text-center whitespace-nowrap">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-border/40">
+          <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
             {filteredSaleLines.length === 0 ? (
               <tr>
-                <td colSpan={8} className="py-8 text-center text-textMuted text-xs font-medium">
+                <td colSpan={8} className="py-8 text-center text-slate-400 text-xs font-medium">
                   <i className="fa-solid fa-file-invoice-dollar text-2xl text-slate-400 mb-2 block"></i>
                   No sales invoices recorded yet matching "{searchQuery}". Click 'New Invoice Billing' to check out.
                 </td>
               </tr>
             ) : filteredSaleLines.map((line, idx) => (
-              <tr key={idx} className="hover:bg-slate-500/5 transition-colors group">
-                <td className="py-3.5 px-4 font-mono text-xs">
+              <tr key={idx} className="odd:bg-white dark:odd:bg-slate-900 even:bg-slate-50/70 dark:even:bg-slate-800/30 hover:bg-blue-50/60 dark:hover:bg-slate-800/70 transition-colors divide-x divide-slate-200 dark:divide-slate-800">
+                <td className="py-2.5 px-3 text-center font-mono text-xs">
                   <span className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded font-bold">
                     {line.hsn}
                   </span>
                 </td>
-                <td className="py-3.5 px-4 text-xs font-bold text-foreground uppercase">{line.product_name}</td>
-                <td className="py-3.5 px-4 text-xs">
-                  <span className="font-bold text-indigo-600 dark:text-indigo-400 uppercase flex items-center gap-1">
-                    <i className="fa-solid fa-user text-[10px] text-slate-400"></i>
-                    {line.customer_name}
+                <td className="py-2.5 px-3 text-center text-xs font-bold text-slate-900 dark:text-slate-100 uppercase">{line.product_name}</td>
+                <td className="py-2.5 px-3 text-center text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase">
+                  {line.customer_name}
+                </td>
+                <td className="py-2.5 px-3 text-center text-xs">
+                  <span className="font-mono text-slate-900 dark:text-slate-100 font-semibold">{new Date(line.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                  <span className="text-[10px] font-mono text-slate-400 ml-1.5">
+                    {new Date(line.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </td>
-                <td className="py-3.5 px-4 text-xs">
-                  <div className="font-mono text-foreground font-semibold">{new Date(line.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
-                  <div className="text-[10px] font-mono text-textMuted mt-0.5">
-                    {new Date(line.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </div>
-                </td>
-                <td className="py-3.5 px-4 text-center text-xs font-mono font-bold text-foreground">{line.qty}</td>
-                <td className="py-3.5 px-4 text-right text-xs font-mono text-foreground">₹{line.price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                <td className="py-3.5 px-4 text-right text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                <td className="py-2.5 px-3 text-center text-xs font-mono font-bold text-slate-900 dark:text-slate-100">{line.qty}</td>
+                <td className="py-2.5 px-3 text-center text-xs font-mono text-slate-900 dark:text-slate-100">₹{line.price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                <td className="py-2.5 px-3 text-center text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">
                   ₹{line.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </td>
-                <td className="py-3.5 px-4 text-right">
-                  <button className="text-xs bg-primary/10 hover:bg-primary hover:text-white border border-primary/20 text-primary px-2.5 py-1.5 rounded-lg font-bold transition-all active:scale-95 cursor-pointer flex items-center gap-1 ml-auto"
+                <td className="py-2.5 px-3 text-center">
+                  <button className="text-xs bg-primary/10 hover:bg-primary hover:text-white border border-primary/20 text-primary px-2.5 py-1 rounded-lg font-bold transition-all active:scale-95 cursor-pointer inline-flex items-center gap-1"
                     onClick={() => setPrintInvoice(line.rawSaleObj)}>
                     <i className="fa-solid fa-print text-[10px]"></i> Print
                   </button>
@@ -586,7 +596,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                     <span className="text-xs text-textMuted font-semibold">{cart.length} item(s) selected</span>
                   </h3>
                   
-                  <div className="space-y-2 overflow-y-auto max-h-[30vh] pr-1 scrollbar-thin border-b border-border/60 pb-3 mb-4">
+                  <div className="space-y-2 overflow-y-auto max-h-[42vh] pr-1 scrollbar-thin border-b border-border/60 pb-3 mb-4">
                     {cart.length === 0 ? (
                       <p className="text-xs text-textMuted text-center py-4 bg-background/20 rounded-lg border border-dashed border-border/50">No items selected yet. Click items on the left panel to add to cart.</p>
                     ) : cart.map((item) => {
@@ -855,7 +865,16 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                   </div>
 
                   <div>
-                    <label className="block text-xs text-textSecondary mb-1 font-semibold">Amount Collected for Today's Bill (₹)</label>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="block text-xs text-textSecondary font-semibold">Amount Collected for Today's Bill (₹)</label>
+                      <button
+                        type="button"
+                        onClick={() => setAmountCollectedInput(totalAmount.toString())}
+                        className="text-[10px] font-bold text-primary hover:text-primary/80 bg-primary/10 hover:bg-primary/20 px-2 py-0.5 rounded border border-primary/30 transition cursor-pointer flex items-center gap-1 active:scale-95"
+                      >
+                        ⚡ Auto-Fill Full (₹{totalAmount.toFixed(2)})
+                      </button>
+                    </div>
                     <input 
                       type="number"
                       step="any"

@@ -5,21 +5,63 @@ import { supabase } from '../../api/supabase';
 import type { Product, BusinessType } from '../../types/erp.types';
 import { t } from '../../utils/i18n';
 
+const DEFAULT_UNITS = [
+  'Nos', 'Box', 'Bundle', 'Packet', 'Bag', 'Kg', 'Gram', 'Feet', 'Meter', 'Inch',
+  'Roll', 'Can', 'Liter', 'ML', 'Sheet', 'Rod', 'Pipe', 'Coil', 'Set', 'Piece',
+  'Dozen', 'Carton', 'Bottle', 'Tube'
+];
+
 interface ProductsProps {
   tenantId: string;
   businessType: BusinessType;
+  mode?: 'catalog' | 'stock';
   autoOpenModal?: boolean;
   onModalClosed?: () => void;
 }
 
-export default function Products({ tenantId, businessType, autoOpenModal, onModalClosed }: ProductsProps) {
+export default function Products({ tenantId, businessType, mode = 'catalog', autoOpenModal, onModalClosed }: ProductsProps) {
   const { products, isLoading, saveProduct, deleteProduct } = useInventory(tenantId, businessType);
   const [search, setSearch] = useState('');
   const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [stockFilterTab, setStockFilterTab] = useState<'all' | 'low'>('all');
 
   // Modals
   const [modalOpen, setModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+
+  // Custom Unit State & List
+  const [customUnits, setCustomUnits] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('lk_custom_units');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  const allUnits = useMemo(() => {
+    const set = new Set([...DEFAULT_UNITS, ...customUnits]);
+    return Array.from(set);
+  }, [customUnits]);
+
+  const handleUnitDropdownChange = (field: 'p_unit' | 's_unit' | 'unit', value: string) => {
+    if (value === '__ADD_CUSTOM__') {
+      const input = window.prompt('Enter custom unit name (e.g. Drum, Gross, SqFt):');
+      if (input && input.trim()) {
+        const formatted = input.trim();
+        if (!customUnits.includes(formatted)) {
+          const next = [...customUnits, formatted];
+          setCustomUnits(next);
+          try {
+            localStorage.setItem('lk_custom_units', JSON.stringify(next));
+          } catch (e) {}
+        }
+        setFormData(prev => ({ ...prev, [field]: formatted }));
+      }
+    } else {
+      setFormData(prev => ({ ...prev, [field]: value }));
+    }
+  };
 
   useEffect(() => {
     if (autoOpenModal) {
@@ -56,11 +98,23 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
           .order('sale_date', { ascending: false });
 
         if (remoteSales && remoteSales.length > 0) {
-          const salesMap = new Map();
-          remoteSales.forEach(rs => salesMap.set(rs.invoice_number || rs.id, rs));
+          const salesMap = new Map<string, any>();
           salesList.forEach(ls => {
             const k = ls.invoice_number || ls.id;
-            if (k && !salesMap.has(k)) salesMap.set(k, ls);
+            if (k) salesMap.set(k, ls);
+          });
+          remoteSales.forEach(rs => {
+            const k = rs.invoice_number || rs.id;
+            if (k) {
+              const existingLocal = salesMap.get(k);
+              const rsItems = rs.items || rs.sales_items || [];
+              const localItems = existingLocal?.items || existingLocal?.sales_items || [];
+              salesMap.set(k, {
+                ...existingLocal,
+                ...rs,
+                items: rsItems.length > 0 ? rsItems : localItems
+              });
+            }
           });
           salesList = Array.from(salesMap.values());
         }
@@ -70,25 +124,43 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
     const matchedSales: any[] = [];
     salesList.forEach((invoice: any) => {
       const lineItems = invoice.items || invoice.sales_items || [];
-      lineItems.forEach((item: any) => {
-        const itemProdId = item.product_id || item.product?.id;
-        const itemProdName = item.product_name || item.product?.product_name;
-
+      if (!lineItems || lineItems.length === 0) {
+        const itemProdId = invoice.product_id;
+        const itemProdName = invoice.product_name;
         const isMatch = (itemProdId && String(itemProdId) === String(p.id)) ||
           (itemProdName && p.product_name && itemProdName.toLowerCase().trim() === p.product_name.toLowerCase().trim());
-
         if (isMatch) {
           matchedSales.push({
             date: invoice.sale_date || invoice.created_at || new Date().toISOString(),
             id: invoice.invoice_number || invoice.id,
             customer_name: invoice.customer_name || 'Walk-in Customer',
             payment_mode: invoice.payment_mode || 'Cash',
-            qty: Number(item.qty || item.quantity || 1),
-            rate: Number(item.rate || item.price || 0),
-            amount: Number(item.amount || (item.qty * item.rate))
+            qty: Number(invoice.qty || invoice.quantity || 1),
+            rate: Number(invoice.rate || invoice.price || 0),
+            amount: Number(invoice.amount || invoice.total_amount || 0)
           });
         }
-      });
+      } else {
+        lineItems.forEach((item: any) => {
+          const itemProdId = item.product_id || item.product?.id;
+          const itemProdName = item.product_name || item.product?.product_name;
+
+          const isMatch = (itemProdId && String(itemProdId) === String(p.id)) ||
+            (itemProdName && p.product_name && itemProdName.toLowerCase().trim() === p.product_name.toLowerCase().trim());
+
+          if (isMatch) {
+            matchedSales.push({
+              date: invoice.sale_date || invoice.created_at || new Date().toISOString(),
+              id: invoice.invoice_number || invoice.id,
+              customer_name: invoice.customer_name || 'Walk-in Customer',
+              payment_mode: invoice.payment_mode || 'Cash',
+              qty: Number(item.qty || item.quantity || 1),
+              rate: Number(item.rate || item.price || 0),
+              amount: Number(item.amount || (item.qty * item.rate))
+            });
+          }
+        });
+      }
     });
     matchedSales.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     setProdSalesHistory(matchedSales);
@@ -111,11 +183,23 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
           .order('purchase_date', { ascending: false });
 
         if (remotePurchases && remotePurchases.length > 0) {
-          const purchMap = new Map();
-          remotePurchases.forEach(rp => purchMap.set(rp.bill_number || rp.id, rp));
+          const purchMap = new Map<string, any>();
           purchasesList.forEach(lp => {
             const k = lp.bill_number || lp.id;
-            if (k && !purchMap.has(k)) purchMap.set(k, lp);
+            if (k) purchMap.set(k, lp);
+          });
+          remotePurchases.forEach(rp => {
+            const k = rp.bill_number || rp.id;
+            if (k) {
+              const existingLocal = purchMap.get(k);
+              const rpItems = rp.items || rp.purchase_items || [];
+              const localItems = existingLocal?.items || existingLocal?.purchase_items || [];
+              purchMap.set(k, {
+                ...existingLocal,
+                ...rp,
+                items: rpItems.length > 0 ? rpItems : localItems
+              });
+            }
           });
           purchasesList = Array.from(purchMap.values());
         }
@@ -125,26 +209,45 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
     const matchedPurchases: any[] = [];
     purchasesList.forEach((bill: any) => {
       const lineItems = bill.items || bill.purchase_items || [];
-      lineItems.forEach((item: any) => {
-        const itemProdId = item.product_id || item.product?.id;
-        const itemProdName = item.product_name || item.product?.product_name;
-
+      if (!lineItems || lineItems.length === 0) {
+        const itemProdId = bill.product_id;
+        const itemProdName = bill.product_name;
         const isMatch = (itemProdId && String(itemProdId) === String(p.id)) ||
           (itemProdName && p.product_name && itemProdName.toLowerCase().trim() === p.product_name.toLowerCase().trim());
-
         if (isMatch) {
           matchedPurchases.push({
             date: bill.purchase_date || bill.created_at || new Date().toISOString(),
-            bill_number: bill.bill_number || 'N/A',
-            supplier_name: bill.supplier_name || 'Generic Supplier',
-            payment_mode: bill.payment_mode || 'N/A',
-            qty: Number(item.qty || item.quantity || 1),
-            rate: Number(item.rate || item.price || 0),
-            selling_price: Number(item.selling_price || p.selling_price || 0),
-            amount: Number(item.amount || (item.qty * item.rate))
+            bill_number: bill.bill_number || bill.id || 'N/A',
+            supplier_name: bill.supplier_name || 'Vendor Supplier',
+            payment_mode: bill.payment_mode || 'Cash',
+            qty: Number(bill.qty || bill.quantity || 1),
+            rate: Number(bill.rate || bill.price || bill.purchase_price || 0),
+            selling_price: Number(bill.selling_price || p.selling_price || 0),
+            amount: Number(bill.amount || bill.total_amount || (bill.qty * bill.rate) || 0)
           });
         }
-      });
+      } else {
+        lineItems.forEach((item: any) => {
+          const itemProdId = item.product_id || item.product?.id;
+          const itemProdName = item.product_name || item.product?.product_name;
+
+          const isMatch = (itemProdId && String(itemProdId) === String(p.id)) ||
+            (itemProdName && p.product_name && itemProdName.toLowerCase().trim() === p.product_name.toLowerCase().trim());
+
+          if (isMatch) {
+            matchedPurchases.push({
+              date: bill.purchase_date || bill.created_at || new Date().toISOString(),
+              bill_number: bill.bill_number || bill.id || 'N/A',
+              supplier_name: bill.supplier_name || 'Generic Supplier',
+              payment_mode: bill.payment_mode || 'N/A',
+              qty: Number(item.qty || item.quantity || 1),
+              rate: Number(item.rate || item.price || 0),
+              selling_price: Number(item.selling_price || p.selling_price || 0),
+              amount: Number(item.amount || (item.qty * item.rate))
+            });
+          }
+        });
+      }
     });
 
     // Calculate total stock sold and total recorded inflows to reconstruct full history
@@ -153,21 +256,42 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
     const requiredTotalInflow = Number(p.current_stock || 0) + totalSoldQty;
     const initialOpeningQty = Math.max(0, requiredTotalInflow - totalRecordedInflowQty);
 
-    if (initialOpeningQty > 0 || matchedPurchases.length === 0) {
+    if (initialOpeningQty > 0) {
       matchedPurchases.push({
         date: (p as any).created_at || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
         bill_number: 'OPENING-STOCK',
         supplier_name: p.supplier_name || 'Store Catalog Inflow',
         payment_mode: 'Catalog Opening',
-        qty: initialOpeningQty > 0 ? initialOpeningQty : Number(p.current_stock || 0),
+        qty: initialOpeningQty,
         rate: Number(p.purchase_price || 0),
         selling_price: Number(p.selling_price || 0),
-        amount: (initialOpeningQty > 0 ? initialOpeningQty : Number(p.current_stock || 0)) * Number(p.purchase_price || 0)
+        amount: initialOpeningQty * Number(p.purchase_price || 0)
       });
     }
 
     matchedPurchases.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     setProdPurchaseHistory(matchedPurchases);
+
+    // Compute live net sum stock: total inflows minus total sales
+    const finalInflowsSum = matchedPurchases.reduce((sum, pb) => sum + Number(pb.qty || 0), 0);
+    const liveCalculatedStock = Math.max(0, finalInflowsSum - totalSoldQty);
+
+    // Reconcile and update product stock in state and local cache
+    const reconciledProduct = {
+      ...p,
+      current_stock: liveCalculatedStock
+    };
+    setSelectedHistoryProduct(reconciledProduct);
+
+    try {
+      const localProds = JSON.parse(localStorage.getItem('lk_products') || '[]');
+      const pIdx = localProds.findIndex((lp: any) => lp.id === p.id);
+      if (pIdx >= 0 && Number(localProds[pIdx].current_stock || 0) !== liveCalculatedStock) {
+        localProds[pIdx].current_stock = liveCalculatedStock;
+        localStorage.setItem('lk_products', JSON.stringify(localProds));
+        window.dispatchEvent(new Event('storage'));
+      }
+    } catch (e) {}
 
     setHistoryModalOpen(true);
   };
@@ -180,7 +304,7 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
     barcode: '',
     category_name: 'General',
     brand_name: 'Generic',
-    unit: 'Pcs',
+    unit: 'Nos',
     purchase_price: 0,
     selling_price: 0,
     dealer_price: 0,
@@ -196,14 +320,18 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
     size: '',
     weight: '',
     warehouse_location: '',
-    p_unit: 'Pcs',
-    s_unit: 'Pcs',
+    p_unit: 'Box',
+    s_unit: 'Nos',
     supplier_id: '',
     supplier_name: '',
     supplier_phone: '',
-    pieces_per_pack: 1,
+    pieces_per_pack: 100,
     piece_selling_price: 0,
-    additional_stock: 0
+    additional_stock: 0,
+    purchase_date: new Date().toISOString().slice(0, 10),
+    allow_decimal: false,
+    allow_purchase_unit_selling: true,
+    track_base_unit: true
   });
 
   const [isEditingBaseStock, setIsEditingBaseStock] = useState(false);
@@ -244,7 +372,7 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
       barcode: '',
       category_name: 'General',
       brand_name: 'Generic',
-      unit: 'Pcs',
+      unit: 'Nos',
       purchase_price: 0,
       selling_price: 0,
       dealer_price: 0,
@@ -260,17 +388,21 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
       size: '',
       weight: '',
       warehouse_location: '',
-      p_unit: 'Pcs',
-      s_unit: 'Pcs',
+      p_unit: 'Box',
+      s_unit: 'Nos',
       supplier_id: '',
       supplier_name: '',
       supplier_phone: '',
-      pieces_per_pack: 1,
+      pieces_per_pack: 100,
       piece_selling_price: 0,
-      additional_stock: 0
+      additional_stock: 0,
+      purchase_date: new Date().toISOString().slice(0, 10),
+      allow_decimal: false,
+      allow_purchase_unit_selling: true,
+      track_base_unit: true
     });
-    setIsEditingBaseStock(false);
-    setIsEditingTax(false);
+    setIsEditingBaseStock(true);
+    setIsEditingTax(true);
     setModalOpen(true);
   };
 
@@ -291,7 +423,7 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
       barcode: p.barcode || '',
       category_name: p.category_name,
       brand_name: p.brand_name,
-      unit: p.unit || 'Pcs',
+      unit: p.unit || p.s_unit || 'Nos',
       purchase_price: Number(p.purchase_price),
       selling_price: Number(p.selling_price),
       dealer_price: Number(p.dealer_price || 0),
@@ -307,14 +439,18 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
       size: p.size || '',
       weight: p.weight || '',
       warehouse_location: locationStr,
-      p_unit: p.p_unit || p.unit || 'Pcs',
-      s_unit: p.s_unit || p.unit || 'Pcs',
+      p_unit: p.p_unit || p.unit || 'Box',
+      s_unit: p.s_unit || p.unit || 'Nos',
       supplier_id: p.supplier_id || '',
       supplier_name: p.supplier_name || '',
       supplier_phone: p.supplier_phone || '',
       pieces_per_pack: p.pieces_per_pack || 1,
       piece_selling_price: p.piece_selling_price || 0,
-      additional_stock: 0
+      additional_stock: 0,
+      purchase_date: new Date().toISOString().slice(0, 10),
+      allow_decimal: p.allow_decimal ?? false,
+      allow_purchase_unit_selling: p.allow_purchase_unit_selling ?? true,
+      track_base_unit: p.track_base_unit ?? true
     });
     setModalOpen(true);
   };
@@ -460,7 +596,7 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
         barcode: formData.barcode || null,
         category_name: formData.category_name,
         brand_name: formData.brand_name,
-        unit: formData.s_unit || formData.unit,
+        unit: formData.unit || formData.s_unit || 'Nos',
         purchase_price: formData.purchase_price,
         selling_price: formData.selling_price,
         dealer_price: formData.dealer_price,
@@ -484,6 +620,9 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
         status: 'Active',
         pieces_per_pack: Number(formData.pieces_per_pack || 1),
         piece_selling_price: Number(formData.piece_selling_price || 0),
+        allow_decimal: formData.allow_decimal,
+        allow_purchase_unit_selling: formData.allow_purchase_unit_selling,
+        track_base_unit: formData.track_base_unit,
         ...(targetProductId && { id: targetProductId })
       };
 
@@ -535,12 +674,24 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
     const name = p?.product_name || '';
     const sku = p?.sku || '';
     const barcode = p?.barcode || '';
-    return (
+    const matchesSearch = (
       name.toLowerCase().includes(search.toLowerCase()) ||
       sku.toLowerCase().includes(search.toLowerCase()) ||
       barcode.includes(search)
     );
+
+    if (!matchesSearch) return false;
+    if (mode === 'stock') {
+      const currentStock = Number(p?.current_stock || 0);
+      const minStock = Number(p?.min_stock_level || 10);
+      if (stockFilterTab === 'low') return currentStock <= minStock;
+    }
+    return true;
   });
+
+  const lowStockCount = useMemo(() => {
+    return products.filter(p => Number(p?.current_stock || 0) <= Number(p?.min_stock_level || 10)).length;
+  }, [products]);
 
   return (
     <div className="bg-secondary border border-border rounded-xl p-4 sm:p-6 relative">
@@ -551,39 +702,116 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
           <span>{toastMessage}</span>
         </div>
       )}
+
+      {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 mb-6">
         <div>
-          <h2 className="text-xl font-bold text-foreground">{t('productCatalog')}</h2>
-          <p className="text-xs text-textMuted mt-1">Configure and manage standard product parameters</p>
+          <h2 className="text-xl font-bold text-foreground flex items-center gap-2">
+            <i className={`fa-solid ${mode === 'stock' ? 'fa-warehouse text-primary' : 'fa-boxes-stacked text-primary'}`}></i>
+            {mode === 'stock' ? 'Warehouse Inventory & Stock Control' : t('productCatalog')}
+          </h2>
+          <p className="text-xs text-textMuted mt-1">
+            {mode === 'stock' 
+              ? 'Real-time warehouse stock tracking, valuation cards, low stock alerts, and quick stock level adjustments'
+              : 'Configure hardware products, HSN codes, purchase rates, margin %, and dual unit conversions'}
+          </p>
         </div>
         <button className="w-full sm:w-auto px-4 py-2 bg-primary hover:bg-primary/90 text-white font-bold rounded-lg text-sm text-center shrink-0 shadow-md transition active:scale-95 cursor-pointer" onClick={handleOpenAdd}>
-          + {t('addProduct')}
+          + {mode === 'stock' ? 'Add Stock Item' : t('addProduct')}
         </button>
       </div>
 
+      {/* Inventory & Stock Valuation KPI Summary Bar */}
+      {mode === 'stock' && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div className="bg-background border border-border p-4 rounded-xl shadow-xs">
+            <div className="text-[10px] font-bold text-textMuted uppercase tracking-wider">Total Catalog Items</div>
+            <div className="text-xl font-black text-foreground font-mono mt-1">{products.length} Products</div>
+            <div className="text-[10px] text-textMuted mt-0.5 font-medium">Distinct inventory items</div>
+          </div>
+
+          <div className="bg-background border border-border p-4 rounded-xl shadow-xs">
+            <div className="text-[10px] font-bold text-blue-500 uppercase tracking-wider">Stock Valuation (At Cost)</div>
+            <div className="text-xl font-black text-blue-600 dark:text-blue-400 font-mono mt-1">
+              ₹{products.reduce((sum, p) => sum + (Number(p.current_stock || 0) * Number(p.purchase_price || 0)), 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+            </div>
+            <div className="text-[10px] text-textMuted mt-0.5 font-medium font-mono">Purchase cost valuation</div>
+          </div>
+
+          <div className="bg-background border border-border p-4 rounded-xl shadow-xs">
+            <div className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider">Estimated Retail Valuation</div>
+            <div className="text-xl font-black text-emerald-600 dark:text-emerald-400 font-mono mt-1">
+              ₹{products.reduce((sum, p) => sum + (Number(p.current_stock || 0) * Number(p.selling_price || 0)), 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+            </div>
+            <div className="text-[10px] text-textMuted mt-0.5 font-medium font-mono">Selling price valuation</div>
+          </div>
+
+          <div className="bg-background border border-border p-4 rounded-xl shadow-xs">
+            <div className="text-[10px] font-bold text-rose-500 uppercase tracking-wider">Low Stock Reorder Alerts</div>
+            <div className="text-xl font-black text-rose-600 dark:text-rose-400 font-mono mt-1">
+              {lowStockCount} Items
+            </div>
+            <div className="text-[10px] text-textMuted mt-0.5 font-medium">Below safety stock level</div>
+          </div>
+        </div>
+      )}
+
+      {/* Stock Filter Tabs in Stock Mode */}
+      {mode === 'stock' && (
+        <div className="flex border-b border-border text-xs font-bold gap-2 overflow-x-auto pb-1 mb-4">
+          <button
+            onClick={() => setStockFilterTab('all')}
+            className={`py-2 px-3.5 rounded-t-lg transition flex items-center gap-1.5 ${stockFilterTab === 'all' ? 'bg-secondary border-t-2 border-x border-primary text-primary' : 'text-textMuted hover:text-foreground'}`}
+          >
+            <span>📦 All Warehouse Stock</span>
+            <span className="bg-background px-1.5 py-0.5 rounded text-[10px] text-foreground font-mono">{products.length}</span>
+          </button>
+          <button
+            onClick={() => setStockFilterTab('low')}
+            className={`py-2 px-3.5 rounded-t-lg transition flex items-center gap-1.5 ${stockFilterTab === 'low' ? 'bg-secondary border-t-2 border-x border-rose-500 text-rose-500 font-bold' : 'text-textMuted hover:text-foreground'}`}
+          >
+            <span>⚠️ Low Stock Alerts</span>
+            <span className="bg-rose-500/10 text-rose-500 border border-rose-500/20 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold">
+              {lowStockCount}
+            </span>
+          </button>
+        </div>
+      )}
+
       <div className="mb-4">
-        <input type="text" className="w-full bg-background border border-border text-foreground rounded-lg p-3 text-sm focus:outline-none focus:border-primary font-semibold" placeholder={`🔍 ${t('searchPlaceholder')}`}
+        <input type="text" className="w-full bg-background border border-border text-foreground rounded-lg p-3 text-sm focus:outline-none focus:border-primary font-semibold shadow-inner" placeholder={`🔍 ${t('searchPlaceholder')}`}
           value={search} onChange={(e) => setSearch(e.target.value)} />
       </div>
 
-      <div className="bg-secondary border border-border/80 rounded-2xl shadow-sm overflow-x-auto">
-        <table className="w-full text-left text-sm text-textSecondary border-collapse">
+      <div className="bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-x-auto">
+        <table className="w-full text-left text-sm text-slate-700 dark:text-slate-200 border-collapse">
           <thead>
-            <tr className="border-b border-border/80 bg-slate-100/70 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 font-extrabold uppercase tracking-wider text-[11px]">
-              <th className="py-3.5 px-4">HSN Code</th>
-              <th className="py-3.5 px-4">Product Name</th>
-              <th className="py-3.5 px-4">Cost (₹)</th>
-              <th className="py-3.5 px-4">Margin</th>
-              <th className="py-3.5 px-4">Selling Price (₹)</th>
-              <th className="py-3.5 px-4">Available Stock</th>
-              <th className="py-3.5 px-4 text-right">Actions</th>
+            <tr className="border-b-2 border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/90 text-slate-700 dark:text-slate-200 font-extrabold uppercase tracking-wider text-[11px] divide-x divide-slate-200 dark:divide-slate-700 whitespace-nowrap">
+              <th className="py-3 px-3.5 text-center whitespace-nowrap">HSN Code</th>
+              <th className="py-3 px-3.5 text-center whitespace-nowrap">{mode === 'stock' ? 'Product Item & Location' : 'Product Name'}</th>
+              {mode === 'stock' ? (
+                <>
+                  <th className="py-3 px-3.5 text-center whitespace-nowrap">Safety Min</th>
+                  <th className="py-3 px-3.5 text-center whitespace-nowrap">Live Stock Level & Meter</th>
+                  <th className="py-3 px-3.5 text-center whitespace-nowrap">Valuation (Cost)</th>
+                  <th className="py-3 px-3.5 text-center whitespace-nowrap">Valuation (Retail)</th>
+                </>
+              ) : (
+                <>
+                  <th className="py-3 px-3.5 text-center whitespace-nowrap">Cost (₹)</th>
+                  <th className="py-3 px-3.5 text-center whitespace-nowrap">Margin</th>
+                  <th className="py-3 px-3.5 text-center whitespace-nowrap">Selling Price (₹)</th>
+                  <th className="py-3 px-3.5 text-center whitespace-nowrap">Available Stock</th>
+                </>
+              )}
+              <th className="py-3 px-3.5 text-center whitespace-nowrap">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-border/40">
+          <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
             {isLoading ? (
-              <tr><td colSpan={7} className="py-8 text-center text-textMuted text-xs font-medium">Retrieving catalog records...</td></tr>
+              <tr><td colSpan={7} className="py-8 text-center text-slate-400 text-xs font-medium">Retrieving inventory records...</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={7} className="py-8 text-center text-textMuted text-xs font-medium">No items configured in catalog.</td></tr>
+              <tr><td colSpan={7} className="py-8 text-center text-slate-400 text-xs font-medium">No matching stock items found.</td></tr>
             ) : filtered.map((p) => {
               const name = p?.product_name || 'Unnamed Product';
               const purchasePrice = Number(p?.purchase_price || 0);
@@ -594,110 +822,116 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
               const minStock = Number(p?.min_stock_level || 10);
               const unit = p?.s_unit || p?.unit || 'Pcs';
               const isLowStock = currentStock <= minStock;
+              const costValuation = currentStock * purchasePrice;
+              const retailValuation = currentStock * sellingPrice;
+              const stockRatio = Math.min(100, Math.max(5, (currentStock / (minStock * 2 || 20)) * 100));
 
-              // Find last purchase details of this product
-              const matchedPurchases: any[] = [];
-              purchases.forEach((bill: any) => {
-                (bill.items || []).forEach((item: any) => {
-                  if (item.product_id === p.id) {
-                    matchedPurchases.push({
-                      date: bill.purchase_date,
-                      supplier_name: bill.supplier_name || 'Generic Supplier',
-                      rate: item.rate
-                    });
-                  }
-                });
-              });
-              matchedPurchases.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-              const lastPurchase = matchedPurchases[0] || null;
-
-              // Find last sale details of this product
-              const matchedSales: any[] = [];
-              sales.forEach((invoice: any) => {
-                (invoice.items || []).forEach((item: any) => {
-                  if (item.product_id === p.id) {
-                    matchedSales.push({
-                      date: invoice.sale_date,
-                      rate: item.rate
-                    });
-                  }
-                });
-              });
-              matchedSales.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-              const lastSale = matchedSales[0] || null;
-              
               return (
-                <tr key={p.id} className="hover:bg-slate-500/5 transition-colors group">
-                  <td className="py-3.5 px-4 font-mono text-xs">
+                <tr key={p.id} className="odd:bg-white dark:odd:bg-slate-900 even:bg-slate-50/70 dark:even:bg-slate-800/30 hover:bg-blue-50/60 dark:hover:bg-slate-800/70 transition-colors divide-x divide-slate-200 dark:divide-slate-800">
+                  <td className="py-3.5 px-4 text-center font-mono text-xs">
                     <span className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded font-bold">
                       {p.hsn || '-'}
                     </span>
                   </td>
-                  <td className="py-3.5 px-4 font-bold uppercase cursor-pointer"
+                  <td className="py-3.5 px-4 text-center font-bold uppercase cursor-pointer"
                     onClick={() => handleShowHistory(p)}
                     title="Click to view transaction ledger details">
-                    <div className="flex flex-col">
-                      <span className="flex items-center gap-1.5 font-bold text-primary hover:underline text-xs">
+                    <div className="flex flex-col items-center justify-center">
+                      <span className="flex items-center justify-center gap-1.5 font-bold text-blue-600 dark:text-blue-400 hover:underline text-xs">
                         <i className="fa-solid fa-clock-rotate-left text-[10px]"></i>
                         {name}
                       </span>
-                      {(p.size || p.weight || p.description) && (
-                        <div className="text-[10px] text-textMuted font-medium mt-1 flex items-center flex-wrap gap-1.5 normal-case">
-                          {p.size && <span className="bg-slate-100 dark:bg-slate-800 border border-border px-1.5 py-0.5 rounded text-[9px]">📐 {p.size}</span>}
-                          {p.weight && <span className="bg-slate-100 dark:bg-slate-800 border border-border px-1.5 py-0.5 rounded text-[9px]">⚖️ {p.weight}</span>}
-                          {p.description && <span className="text-textMuted truncate max-w-[180px] text-[9px] font-normal" title={p.description}>📝 {p.description}</span>}
-                        </div>
-                      )}
-                      {(lastPurchase || lastSale) && (
-                        <div className="text-[10px] mt-1.5 space-y-0.5 border-t border-border/30 pt-1.5 normal-case font-medium">
-                          {lastPurchase && (
-                            <div className="text-blue-500 flex items-center gap-1 flex-wrap">
-                              <span>📥 Last Buy:</span>
-                              <span className="font-mono font-bold">₹{lastPurchase.rate.toFixed(2)}</span>
-                              <span className="text-[9px] text-textMuted truncate max-w-[150px] uppercase font-bold" title={lastPurchase.supplier_name}>({lastPurchase.supplier_name})</span>
-                            </div>
-                          )}
-                          {lastSale && (
-                            <div className="text-emerald-500 flex items-center gap-1 flex-wrap">
-                              <span>📤 Last Sell:</span>
-                              <span className="font-mono font-bold">₹{lastSale.rate.toFixed(2)}</span>
-                            </div>
-                          )}
+                      {(p.godown || p.rack_number || p.shelf_number || p.warehouse_location) && (
+                        <div className="text-[10px] text-textMuted font-mono mt-0.5 flex items-center justify-center gap-1">
+                          <i className="fa-solid fa-location-dot text-[9px] text-primary"></i>
+                          <span>{p.godown || p.warehouse_location || 'Main Store'} {p.rack_number ? `(Rack: ${p.rack_number})` : ''}</span>
                         </div>
                       )}
                     </div>
                   </td>
-                  <td className="py-3.5 px-4 font-mono text-xs text-foreground">₹{purchasePrice.toFixed(2)}</td>
-                  <td className="py-3.5 px-4">
-                    <div className="font-mono text-xs text-emerald-600 dark:text-emerald-400 font-bold">₹{marginAmount.toFixed(2)}</div>
-                    <div className="text-[10px] text-textMuted font-mono">({marginPercent.toFixed(1)}%)</div>
-                  </td>
-                  <td className="py-3.5 px-4 font-mono font-bold text-foreground text-xs">₹{sellingPrice.toFixed(2)}</td>
-                  <td className="py-3.5 px-4">
-                    <div className="flex flex-col">
-                      <div className="flex items-center gap-1.5">
-                        <span className={`font-mono font-bold text-xs ${isLowStock ? 'text-rose-500' : 'text-foreground'}`}>
-                          {currentStock.toFixed(2).replace(/\.00$/, '')}
-                        </span>
-                        <span className="text-[10px] text-textMuted font-bold uppercase">{unit}</span>
-                        {isLowStock && (
-                          <span className="text-[9px] px-1.5 py-0.5 bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 rounded-md font-bold" title="Low stock warning!">
-                            ⚠️ Low
-                          </span>
-                        )}
-                      </div>
-                      {Number(p.pieces_per_pack || 1) > 1 && (
-                        <div className="text-[10px] text-textMuted font-medium">
-                          ({(currentStock * Number(p.pieces_per_pack)).toLocaleString(undefined, { maximumFractionDigits: 0 })} loose pieces)
+
+                  {mode === 'stock' ? (
+                    <>
+                      <td className="py-3.5 px-4 text-center font-mono text-xs font-bold text-slate-600 dark:text-slate-400">
+                        {minStock} {unit}
+                      </td>
+                      <td className="py-3.5 px-4 text-center">
+                        <div className="flex flex-col gap-1 max-w-[200px] mx-auto">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className={`font-mono font-black text-xs ${isLowStock ? 'text-rose-600 dark:text-rose-400' : 'text-slate-900 dark:text-slate-100'}`}>
+                              {currentStock.toFixed(2).replace(/\.00$/, '')} {unit}
+                            </span>
+                            {isLowStock ? (
+                              <span className="text-[9px] px-1.5 py-0.2 bg-rose-500 text-white rounded font-black uppercase tracking-wider animate-pulse">
+                                ⚠️ Low Stock
+                              </span>
+                            ) : (
+                              <span className="text-[9px] px-1.5 py-0.2 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 rounded font-bold uppercase">
+                                ✓ Healthy
+                              </span>
+                            )}
+                          </div>
+                          {/* Stock Level Progress Meter */}
+                          <div className="w-full bg-slate-200 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                            <div 
+                              className={`h-full transition-all duration-500 ${isLowStock ? 'bg-rose-500' : stockRatio < 50 ? 'bg-amber-500' : 'bg-emerald-500'}`} 
+                              style={{ width: `${stockRatio}%` }}
+                            ></div>
+                          </div>
                         </div>
+                      </td>
+                      <td className="py-3.5 px-4 text-center font-mono font-bold text-blue-600 dark:text-blue-400 text-xs">
+                        ₹{costValuation.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="py-3.5 px-4 text-center font-mono font-bold text-emerald-600 dark:text-emerald-400 text-xs">
+                        ₹{retailValuation.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td className="py-3.5 px-4 text-center font-mono text-xs text-slate-900 dark:text-slate-100">₹{purchasePrice.toFixed(2)}</td>
+                      <td className="py-3.5 px-4 text-center">
+                        <div className="font-mono text-xs text-emerald-600 dark:text-emerald-400 font-bold">₹{marginAmount.toFixed(2)}</div>
+                        <div className="text-[10px] text-slate-400 font-mono">({marginPercent.toFixed(1)}%)</div>
+                      </td>
+                      <td className="py-3.5 px-4 text-center font-mono font-bold text-slate-900 dark:text-slate-100 text-xs">₹{sellingPrice.toFixed(2)}</td>
+                      <td className="py-3.5 px-4 text-center">
+                        <div className="flex flex-col items-center justify-center">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <span className={`font-mono font-bold text-xs ${isLowStock ? 'text-rose-600 dark:text-rose-400' : 'text-slate-900 dark:text-slate-100'}`}>
+                              {currentStock.toFixed(2).replace(/\.00$/, '')}
+                            </span>
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase">{unit}</span>
+                            {isLowStock && (
+                              <span className="text-[9px] px-1.5 py-0.5 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 rounded-md font-bold" title="Low stock warning!">
+                                ⚠️ Low
+                              </span>
+                            )}
+                          </div>
+                          {Number(p.pieces_per_pack || 1) > 1 && (
+                            <div className="text-[10px] text-slate-400 font-medium">
+                              ({(currentStock * Number(p.pieces_per_pack)).toLocaleString(undefined, { maximumFractionDigits: 0 })} loose pieces)
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    </>
+                  )}
+
+                  <td className="py-3.5 px-4 text-center">
+                    <div className="flex gap-1.5 justify-center">
+                      {mode === 'stock' && (
+                        <button 
+                          className="text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-black px-2.5 py-1.5 rounded-lg transition-all active:scale-95 cursor-pointer shadow-xs flex items-center gap-1"
+                          onClick={() => handleOpenEdit(p)}
+                          title="Restock or update inventory stock level"
+                        >
+                          ⚡ Restock Qty
+                        </button>
                       )}
-                    </div>
-                  </td>
-                  <td className="py-3.5 px-4 text-right">
-                    <div className="flex gap-1.5 justify-end">
-                      <button className="text-xs bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-border text-textSecondary hover:text-foreground px-2.5 py-1.5 rounded-lg transition-all active:scale-95 cursor-pointer font-semibold"
+                      <button className="text-xs bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 px-2.5 py-1.5 rounded-lg transition-all active:scale-95 cursor-pointer font-semibold"
                         onClick={() => handleOpenEdit(p)}>Edit</button>
-                      <button className="text-xs bg-rose-500/10 hover:bg-rose-500 hover:text-white border border-rose-500/20 text-rose-600 dark:text-rose-400 px-2.5 py-1.5 rounded-lg font-semibold transition-all active:scale-95 cursor-pointer"
+                      <button className="text-xs bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-600 hover:text-white border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 px-2.5 py-1.5 rounded-lg font-semibold transition-all active:scale-95 cursor-pointer"
                         onClick={() => handleDeleteProduct(p.id)}>Delete</button>
                     </div>
                   </td>
@@ -726,6 +960,226 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
 
             {/* Scrollable Form Body */}
             <form onSubmit={handleSaveProduct} className="flex-1 min-h-0 overflow-y-auto pr-2 space-y-4 scrollbar-thin">
+              {/* UNITS & STOCK CONFIGURATION CARD (TOP SECTION) */}
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-6 space-y-6 shadow-sm">
+                {/* Card Title Header */}
+                <div className="flex items-center gap-2.5 border-b border-slate-100 dark:border-slate-800 pb-3">
+                  <div className="w-8 h-8 rounded-xl bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
+                    <i className="fa-solid fa-boxes-stacked text-sm"></i>
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wide">Units & Stock Configuration</h4>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">Configure purchase, selling, and inventory base unit conversions</p>
+                  </div>
+                </div>
+
+                {/* Row 1: Unit Dropdowns */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1">
+                      Purchase Unit <span className="text-rose-500 font-bold">*</span>
+                    </label>
+                    <select
+                      className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 font-semibold focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 transition cursor-pointer"
+                      value={formData.p_unit}
+                      onChange={(e) => handleUnitDropdownChange('p_unit', e.target.value)}
+                    >
+                      {allUnits.map(u => (
+                        <option key={u} value={u}>{u}</option>
+                      ))}
+                      <option value="__ADD_CUSTOM__" className="font-bold text-blue-600">+ Add Custom Unit</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1">
+                      Selling Unit <span className="text-rose-500 font-bold">*</span>
+                    </label>
+                    <select
+                      className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 font-semibold focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 transition cursor-pointer"
+                      value={formData.s_unit}
+                      onChange={(e) => handleUnitDropdownChange('s_unit', e.target.value)}
+                    >
+                      {allUnits.map(u => (
+                        <option key={u} value={u}>{u}</option>
+                      ))}
+                      <option value="__ADD_CUSTOM__" className="font-bold text-blue-600">+ Add Custom Unit</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1">
+                      Base Stock Unit <span className="text-rose-500 font-bold">*</span>
+                    </label>
+                    <select
+                      className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 font-semibold focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 transition cursor-pointer"
+                      value={formData.unit}
+                      onChange={(e) => handleUnitDropdownChange('unit', e.target.value)}
+                    >
+                      {allUnits.map(u => (
+                        <option key={u} value={u}>{u}</option>
+                      ))}
+                      <option value="__ADD_CUSTOM__" className="font-bold text-blue-600">+ Add Custom Unit</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Row 2: Conversion Factor (Visually Highlighted) */}
+                <div className="bg-gradient-to-br from-blue-50/90 via-slate-50 to-indigo-50/80 dark:from-slate-800/90 dark:via-slate-800/50 dark:to-blue-950/40 border-2 border-blue-200 dark:border-blue-800/80 rounded-2xl p-4 sm:p-5 space-y-4 shadow-xs">
+                  <div className="flex justify-between items-center flex-wrap gap-2">
+                    <span className="text-xs font-extrabold text-blue-900 dark:text-blue-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <i className="fa-solid fa-calculator text-blue-600"></i> Conversion Factor
+                    </span>
+                    <span className="text-[11px] font-bold text-blue-600 bg-blue-100 dark:bg-blue-950 px-2.5 py-0.5 rounded-full border border-blue-300 dark:border-blue-700">
+                      Live Auto-Conversion
+                    </span>
+                  </div>
+
+                  {/* Visual Conversion Editor controls */}
+                  <div className="bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-800 rounded-xl p-3.5 flex flex-wrap items-center justify-center gap-3 shadow-sm">
+                    {/* 1 Purchase Unit */}
+                    <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700">
+                      <span className="font-black text-sm text-slate-900 dark:text-slate-100 font-mono">1</span>
+                      <select
+                        className="bg-transparent text-xs font-bold text-blue-600 dark:text-blue-400 focus:outline-none cursor-pointer"
+                        value={formData.p_unit}
+                        onChange={(e) => handleUnitDropdownChange('p_unit', e.target.value)}
+                      >
+                        {allUnits.map(u => (
+                          <option key={u} value={u}>{u}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Equals Sign */}
+                    <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm shadow-md shrink-0">
+                      =
+                    </div>
+
+                    {/* Conversion Factor Input & Base Unit */}
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        step="any"
+                        min="0.001"
+                        className="w-28 bg-blue-50/80 dark:bg-slate-800 border-2 border-blue-600 rounded-xl p-2 text-center text-base font-black text-blue-700 dark:text-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-600/30 shadow-inner font-mono"
+                        value={formData.pieces_per_pack}
+                        onChange={(e) => setFormData({ ...formData, pieces_per_pack: Number(e.target.value) || 1 })}
+                        placeholder="100"
+                      />
+                      <select
+                        className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-slate-200 p-2.5 rounded-lg focus:outline-none cursor-pointer"
+                        value={formData.unit}
+                        onChange={(e) => handleUnitDropdownChange('unit', e.target.value)}
+                      >
+                        {allUnits.map(u => (
+                          <option key={u} value={u}>{u}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Live Preview Display */}
+                  <div className="bg-blue-600 text-white text-center py-2 px-4 rounded-xl text-xs font-extrabold shadow-sm flex items-center justify-center gap-2">
+                    <i className="fa-solid fa-eye text-blue-200"></i>
+                    <span>Live Conversion Preview:</span>
+                    <span className="font-mono text-amber-300 font-black text-sm">
+                      1 {formData.p_unit} = {formData.pieces_per_pack} {formData.unit}
+                    </span>
+                  </div>
+
+                  {/* Hardware Store Examples Underneath */}
+                  <div className="space-y-1.5 pt-1">
+                    <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Examples (Click to quick preset):</span>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        { p: 'Box', u: 'Nos', f: 100 },
+                        { p: 'Bundle', u: 'Kg', f: 25 },
+                        { p: 'Roll', u: 'Meter', f: 90 },
+                        { p: 'Pipe', u: 'Feet', f: 20 },
+                        { p: 'Packet', u: 'Gram', f: 250 }
+                      ].map(preset => (
+                        <button
+                          key={preset.p}
+                          type="button"
+                          onClick={() => setFormData({
+                            ...formData,
+                            p_unit: preset.p,
+                            unit: preset.u,
+                            s_unit: preset.u,
+                            pieces_per_pack: preset.f
+                          })}
+                          className="text-[11px] font-bold bg-white dark:bg-slate-800 hover:bg-blue-600 hover:text-white border border-blue-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 px-3 py-1.5 rounded-lg transition font-mono cursor-pointer"
+                        >
+                          1 {preset.p} = {preset.f} {preset.u}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Row 3: Checkboxes */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
+                  <label className="flex items-start gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 hover:bg-slate-100/80 transition cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                      checked={formData.allow_decimal}
+                      onChange={(e) => setFormData({ ...formData, allow_decimal: e.target.checked })}
+                    />
+                    <div>
+                      <span className="block text-xs font-bold text-slate-900 dark:text-slate-100">☑ Allow Decimal Selling</span>
+                      <span className="block text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">e.g. 0.25 Kg, 0.5 Meter, 1.75 Feet</span>
+                    </div>
+                  </label>
+
+                  <label className="flex items-start gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 hover:bg-slate-100/80 transition cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                      checked={formData.allow_purchase_unit_selling}
+                      onChange={(e) => setFormData({ ...formData, allow_purchase_unit_selling: e.target.checked })}
+                    />
+                    <div>
+                      <span className="block text-xs font-bold text-slate-900 dark:text-slate-100">☑ Allow Selling in Purchase Unit</span>
+                      <span className="block text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">e.g. Sell full box also</span>
+                    </div>
+                  </label>
+
+                  <label className="flex items-start gap-3 p-3 rounded-xl border border-blue-200 dark:border-blue-900 bg-blue-50/30 dark:bg-blue-950/20 hover:bg-blue-50/60 transition cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                      checked={formData.track_base_unit}
+                      onChange={(e) => setFormData({ ...formData, track_base_unit: e.target.checked })}
+                    />
+                    <div>
+                      <span className="block text-xs font-bold text-blue-950 dark:text-blue-200">☑ Track Stock using Base Unit</span>
+                      <span className="block text-[10px] text-blue-600 dark:text-blue-400 font-semibold mt-0.5">(Default Enabled)</span>
+                    </div>
+                  </label>
+                </div>
+
+                {/* Helpful Information Card */}
+                <div className="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/80 rounded-xl p-4 text-xs text-blue-900 dark:text-blue-200 leading-relaxed flex items-start gap-3">
+                  <i className="fa-solid fa-circle-info text-blue-600 dark:text-blue-400 text-base shrink-0 mt-0.5"></i>
+                  <div className="space-y-2 w-full">
+                    <p className="font-bold text-blue-950 dark:text-blue-100">Stock Calculation Rule</p>
+                    <ul className="list-disc list-inside space-y-0.5 text-blue-800 dark:text-blue-300 text-[11px]">
+                      <li>Stock is always stored in Base Unit.</li>
+                      <li>Purchases are automatically converted into Base Unit.</li>
+                      <li>Sales deduct stock from Base Unit.</li>
+                    </ul>
+                    <div className="mt-2 pt-2 border-t border-blue-200/80 dark:border-blue-800/80 text-[11px] bg-white/80 dark:bg-slate-900/80 p-2.5 rounded-lg grid grid-cols-1 sm:grid-cols-3 gap-2 font-mono">
+                      <div><span className="text-slate-500 dark:text-slate-400">Purchase:</span> <strong className="text-slate-900 dark:text-slate-100">5 {formData.p_unit}</strong></div>
+                      <div><span className="text-slate-500 dark:text-slate-400">Conversion:</span> <strong className="text-slate-900 dark:text-slate-100">1 {formData.p_unit} = {formData.pieces_per_pack} {formData.unit}</strong></div>
+                      <div><span className="text-blue-600 dark:text-blue-400 font-bold">Available Stock:</span> <strong className="text-blue-700 dark:text-blue-300 font-black">{5 * (formData.pieces_per_pack || 1)} {formData.unit}</strong></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* PRODUCT DETAILS GRID */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="col-span-1 sm:col-span-2 relative">
                   <label className="block text-xs font-semibold text-textSecondary mb-1">Product Name *</label>
@@ -789,7 +1243,10 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
                     value={formData.barcode} onChange={(e) => setFormData({ ...formData, barcode: e.target.value })} />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-textSecondary mb-1">Cost (Purchase Price) *</label>
+                  <label className="block text-xs font-semibold text-textSecondary mb-1 flex items-center justify-between">
+                    <span>Cost (Purchase Price) *</span>
+                    <span className="text-[10px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-950 px-1.5 py-0.5 rounded border border-blue-200 dark:border-blue-800">per {formData.p_unit || 'Unit'}</span>
+                  </label>
                   <input type="number" step="any" className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none" required
                     value={formData.purchase_price === 0 ? '' : formData.purchase_price} 
                     placeholder="0"
@@ -797,7 +1254,10 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
                     onChange={(e) => setFormData({ ...formData, purchase_price: e.target.value === '' ? 0 : Number(e.target.value) })} />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-textSecondary mb-1">Selling Price *</label>
+                  <label className="block text-xs font-semibold text-textSecondary mb-1 flex items-center justify-between">
+                    <span>Selling Price *</span>
+                    <span className="text-[10px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-950 px-1.5 py-0.5 rounded border border-blue-200 dark:border-blue-800">per {formData.s_unit || 'Unit'}</span>
+                  </label>
                   <input type="number" step="any" className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none font-bold" required
                     value={formData.selling_price === 0 ? '' : formData.selling_price} 
                     placeholder="0"
@@ -862,13 +1322,16 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
                     <div className="col-span-1 sm:col-span-2 bg-primary/10 border border-primary/30 p-2.5 rounded-lg text-xs font-bold text-primary flex justify-between items-center flex-wrap gap-2">
                       <span>Updated Total Stock after saving:</span>
                       <span className="font-mono text-sm font-black">
-                        {formData.current_stock || 0} + {formData.additional_stock || 0} = {Number(formData.current_stock || 0) + Number(formData.additional_stock || 0)} {formData.s_unit || 'Pcs'}
+                        {formData.current_stock || 0} + {formData.additional_stock || 0} = {Number(formData.current_stock || 0) + Number(formData.additional_stock || 0)} {formData.unit || 'Nos'}
                       </span>
                     </div>
                   </>
                 ) : (
                   <div>
-                    <label className="block text-xs font-semibold text-textSecondary mb-1">Initial Stock *</label>
+                    <label className="block text-xs font-semibold text-textSecondary mb-1 flex items-center justify-between">
+                      <span>Initial Stock *</span>
+                      <span className="text-[10px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-950 px-1.5 py-0.5 rounded border border-blue-200 dark:border-blue-800">in {formData.unit || 'Base Unit'}</span>
+                    </label>
                     <input type="number" className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none font-mono" required
                       value={formData.current_stock === 0 ? '' : formData.current_stock} 
                       placeholder="0"
@@ -877,7 +1340,10 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
                   </div>
                 )}
                 <div>
-                  <label className="block text-xs font-semibold text-textSecondary mb-1">Min Stock Warning *</label>
+                  <label className="block text-xs font-semibold text-textSecondary mb-1 flex items-center justify-between">
+                    <span>Min Stock Warning *</span>
+                    <span className="text-[10px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-950 px-1.5 py-0.5 rounded border border-blue-200 dark:border-blue-800">in {formData.unit || 'Base Unit'}</span>
+                  </label>
                   <input type="number" className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none font-mono" required
                     value={formData.min_stock_level === 0 ? '' : formData.min_stock_level} 
                     placeholder="0"
@@ -935,61 +1401,26 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
                 </div>
               </div>
 
-              {/* Units & Stock Location Logistics */}
-              <div className="bg-background/40 p-4 border border-border rounded-lg space-y-4">
-                <h4 className="text-xs font-bold text-primary uppercase tracking-wide">Logistics & Units</h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-textSecondary mb-1">Purchase Unit (P. Unit)</label>
-                    <input type="text" className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none text-xs" placeholder="e.g. Bags, Bundles, Boxes"
-                      value={formData.p_unit} onChange={(e) => setFormData({ ...formData, p_unit: e.target.value })} />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-textSecondary mb-1">Sales Unit (S. Unit)</label>
-                    <input type="text" className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none text-xs" placeholder="e.g. Pcs, Bags, Kgs"
-                      value={formData.s_unit} onChange={(e) => setFormData({ ...formData, s_unit: e.target.value })} />
-                  </div>
-                </div>
 
-                {/* Stock Location Breakdown: Godown + Rack + Shelf */}
-                <div className="pt-3 border-t border-border/50">
-                  <label className="block text-xs font-bold text-textSecondary mb-2 uppercase tracking-wide">Stock Location (Warehouse / Shelf Breakdown)</label>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div>
-                      <label className="block text-[11px] font-semibold text-textMuted mb-1">Godown (Warehouse)</label>
-                      <input type="text" className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none text-xs font-medium" placeholder="e.g. Main Godown A"
-                        value={formData.godown} onChange={(e) => setFormData({ ...formData, godown: e.target.value })} />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-semibold text-textMuted mb-1">Rack Number</label>
-                      <input type="text" className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none text-xs font-medium" placeholder="e.g. Rack R-12"
-                        value={formData.rack_number} onChange={(e) => setFormData({ ...formData, rack_number: e.target.value })} />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-semibold text-textMuted mb-1">Shelf Number</label>
-                      <input type="text" className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none text-xs font-medium" placeholder="e.g. Shelf S-3"
-                        value={formData.shelf_number} onChange={(e) => setFormData({ ...formData, shelf_number: e.target.value })} />
-                    </div>
-                  </div>
-                </div>
-              </div>
 
-              {/* Pack conversion logistics */}
-              <div className="bg-background/40 p-4 border border-border rounded-lg space-y-3">
-                <h4 className="text-xs font-bold text-blue-450 uppercase tracking-wide">Packet to Loose Pieces Tracking</h4>
-                <p className="text-[10px] text-textMuted leading-normal">
-                  Configure this if you buy this product in packets/boxes but sometimes sell them in individual loose pieces.
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Stock Location Breakdown: Godown + Rack + Shelf */}
+              <div className="bg-background/40 p-4 border border-border rounded-xl space-y-3">
+                <label className="block text-xs font-bold text-textSecondary uppercase tracking-wide">Stock Location (Warehouse / Shelf Breakdown)</label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-xs font-semibold text-textSecondary mb-1">Pieces per Pack</label>
-                    <input type="number" className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none text-xs font-mono font-bold" placeholder="e.g. 100"
-                      value={formData.pieces_per_pack} onChange={(e) => setFormData({ ...formData, pieces_per_pack: Number(e.target.value) || 1 })} />
+                    <label className="block text-[11px] font-semibold text-textMuted mb-1">Godown (Warehouse)</label>
+                    <input type="text" className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none text-xs font-medium" placeholder="e.g. Main Godown A"
+                      value={formData.godown} onChange={(e) => setFormData({ ...formData, godown: e.target.value })} />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-textSecondary mb-1">Loose Price per Piece (₹)</label>
-                    <input type="number" step="any" className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none text-xs font-mono font-bold" placeholder="e.g. 2"
-                      value={formData.piece_selling_price} onChange={(e) => setFormData({ ...formData, piece_selling_price: Number(e.target.value) || 0 })} />
+                    <label className="block text-[11px] font-semibold text-textMuted mb-1">Rack Number</label>
+                    <input type="text" className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none text-xs font-medium" placeholder="e.g. Rack R-12"
+                      value={formData.rack_number} onChange={(e) => setFormData({ ...formData, rack_number: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-textMuted mb-1">Shelf Number</label>
+                    <input type="text" className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none text-xs font-medium" placeholder="e.g. Shelf S-3"
+                      value={formData.shelf_number} onChange={(e) => setFormData({ ...formData, shelf_number: e.target.value })} />
                   </div>
                 </div>
               </div>
@@ -1040,8 +1471,12 @@ export default function Products({ tenantId, businessType, autoOpenModal, onModa
                 <h3 className="text-lg font-black text-foreground uppercase mt-1">
                   {selectedHistoryProduct.product_name}
                 </h3>
-                <p className="text-xs text-textSecondary mt-0.5">
-                  HSN: {selectedHistoryProduct.hsn || 'N/A'} | Current Stock: <strong className="text-primary font-mono">{selectedHistoryProduct.current_stock} {selectedHistoryProduct.s_unit || 'Pcs'}</strong> | Cost: <span className="font-mono font-bold">₹{Number(selectedHistoryProduct.purchase_price || 0).toFixed(2)}</span> | Sell: <span className="font-mono font-bold text-primary">₹{Number(selectedHistoryProduct.selling_price || 0).toFixed(2)}</span>
+                <p className="text-xs text-textSecondary mt-1 flex items-center gap-3 flex-wrap">
+                  <span>HSN: <strong>{selectedHistoryProduct.hsn || 'N/A'}</strong></span>
+                  <span>Current Stock: <strong className="text-emerald-600 dark:text-emerald-400 font-mono text-sm font-black">{selectedHistoryProduct.current_stock} {selectedHistoryProduct.s_unit || selectedHistoryProduct.unit || 'Pcs'}</strong></span>
+                  <span className="text-[11px] text-slate-500 font-mono">(Inflows: {prodPurchaseHistory.reduce((sum, pb) => sum + Number(pb.qty || 0), 0)} Pcs | Billed Sales: {prodSalesHistory.reduce((sum, s) => sum + Number(s.qty || 0), 0)} Pcs)</span>
+                  <span>Cost: <span className="font-mono font-bold">₹{Number(selectedHistoryProduct.purchase_price || 0).toFixed(2)}</span></span>
+                  <span>Sell: <span className="font-mono font-bold text-primary">₹{Number(selectedHistoryProduct.selling_price || 0).toFixed(2)}</span></span>
                 </p>
               </div>
               <button className="text-textSecondary hover:text-foreground text-xs font-bold bg-background/50 hover:bg-background border border-border px-3 py-1.5 rounded-lg transition"

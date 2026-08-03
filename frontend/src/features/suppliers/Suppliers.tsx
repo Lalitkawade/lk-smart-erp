@@ -31,18 +31,92 @@ interface SuppliersProps {
   onModalClosed?: () => void;
 }
 
+const buildMasterSuppliersFromLocal = (): Supplier[] => {
+  try {
+    const localSupsStr = localStorage.getItem('lk_suppliers');
+    const localBillsStr = localStorage.getItem('lk_purchases');
+    const localProdsStr = localStorage.getItem('lk_products');
+
+    const localSups: any[] = localSupsStr ? JSON.parse(localSupsStr) : [];
+    const localBills: any[] = localBillsStr ? JSON.parse(localBillsStr) : [];
+    const localProds: any[] = localProdsStr ? JSON.parse(localProdsStr) : [];
+
+    const masterMap = new Map<string, Supplier>();
+
+    (Array.isArray(localSups) ? localSups : []).forEach((s: any) => {
+      if (s && s.supplier_name) {
+        const key = s.supplier_name.toUpperCase().trim();
+        const baseOut = s.initial_outstanding !== undefined ? Number(s.initial_outstanding) : Number(s.outstanding || 0);
+        masterMap.set(key, {
+          id: s.id || 'sup-' + Math.random().toString(36).substring(2, 7),
+          supplier_name: key,
+          phone: s.phone || '',
+          email: s.email || '',
+          address: s.address || '',
+          dob: s.dob || undefined,
+          establishment_date: s.establishment_date || undefined,
+          outstanding: Number(s.outstanding || 0),
+          initial_outstanding: baseOut,
+          created_at: s.created_at || new Date().toISOString()
+        });
+      }
+    });
+
+    (Array.isArray(localBills) ? localBills : []).forEach((b: any) => {
+      if (b && b.supplier_name) {
+        const key = b.supplier_name.toUpperCase().trim();
+        if (!masterMap.has(key)) {
+          masterMap.set(key, {
+            id: 'sup-' + Math.random().toString(36).substring(2, 7),
+            supplier_name: key,
+            phone: b.supplier_phone || '',
+            email: '',
+            address: '',
+            outstanding: Number(b.due_amount || 0),
+            initial_outstanding: 0,
+            created_at: b.purchase_date || new Date().toISOString()
+          });
+        }
+      }
+    });
+
+    (Array.isArray(localProds) ? localProds : []).forEach((p: any) => {
+      if (p && p.supplier_name) {
+        const key = p.supplier_name.toUpperCase().trim();
+        if (!masterMap.has(key)) {
+          masterMap.set(key, {
+            id: 'sup-' + Math.random().toString(36).substring(2, 7),
+            supplier_name: key,
+            phone: p.supplier_phone || '',
+            email: '',
+            address: '',
+            outstanding: 0,
+            initial_outstanding: 0,
+            created_at: p.created_at || new Date().toISOString()
+          });
+        }
+      }
+    });
+
+    return Array.from(masterMap.values());
+  } catch (e) {
+    return [];
+  }
+};
+
 export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersProps = {}) {
   const { tenant } = useAuth();
   const tenantId = tenant?.id || 'default-hardware-erp';
 
-  const [suppliers, setSuppliers] = useState<Supplier[]>(() => {
+  const [suppliers, setSuppliers] = useState<Supplier[]>(() => buildMasterSuppliersFromLocal());
+  const [payments, setPayments] = useState<SupplierPaymentRecord[]>(() => {
     try {
-      return JSON.parse(localStorage.getItem('lk_suppliers') || '[]');
+      return JSON.parse(localStorage.getItem('lk_supplier_payments') || '[]');
     } catch (e) {
       return [];
     }
   });
-  const [payments, setPayments] = useState<SupplierPaymentRecord[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(() => suppliers.length === 0);
   const [_products, setProducts] = useState<any[]>([]);
   const [search, setSearch] = useState('');
   
@@ -108,6 +182,7 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
 
       const currentPays = (paysData || []) as SupplierPaymentRecord[];
       setPayments(currentPays);
+      localStorage.setItem('lk_supplier_payments', JSON.stringify(currentPays));
 
       // 2. Build master unified supplier map
       const masterMap = new Map<string, Supplier>();
@@ -248,6 +323,8 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
       setProducts(allProds);
     } catch (e) {
       console.error('Failed to sync suppliers with Supabase:', e);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -280,7 +357,7 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
       address: s.address || '',
       dob: s.dob || '',
       establishment_date: s.establishment_date || '',
-      outstanding: s.outstanding
+      outstanding: s.outstanding || 0
     });
     setModalOpen(true);
   };
@@ -292,18 +369,18 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
     setTimeout(() => setToastMessage(null), 2500);
   };
 
-  const handleSaveSupplier = (e: React.FormEvent) => {
+  const handleSaveSupplier = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.supplier_name.trim()) return;
 
     const isUuid = (id: string) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-    const generateUuid = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'f' + Date.now().toString(16).padStart(31, '0').slice(0, 31);
+    const generateUuid = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 's' + Date.now().toString(16).padStart(31, '0').slice(0, 31);
 
-    const supId = (editingSupplier && isUuid(editingSupplier.id)) ? editingSupplier.id : generateUuid();
+    const suppId = (editingSupplier && isUuid(editingSupplier.id)) ? editingSupplier.id : generateUuid();
     const formattedName = formData.supplier_name.trim().toUpperCase();
 
     const newSupplierObj = {
-      id: supId,
+      id: suppId,
       tenant_id: isUuid(tenantId) ? tenantId : '00000000-0000-0000-0000-000000000000',
       supplier_name: formattedName,
       phone: formData.phone || null,
@@ -315,11 +392,11 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
       created_at: editingSupplier?.created_at || new Date().toISOString()
     };
 
-    // 1. Instant local state & localStorage update (0ms latency!)
+    // Instant local state & localStorage update (0ms latency!)
     try {
       const localStr = localStorage.getItem('lk_suppliers') || '[]';
       const localList = JSON.parse(localStr);
-      const existingIdx = localList.findIndex((s: any) => s.id === supId || (s.supplier_name && s.supplier_name.toUpperCase() === formattedName));
+      const existingIdx = localList.findIndex((s: any) => s.id === suppId || (s.supplier_name && s.supplier_name.toUpperCase() === formattedName));
       if (existingIdx >= 0) {
         localList[existingIdx] = newSupplierObj;
       } else {
@@ -329,12 +406,10 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
       setSuppliers(localList);
     } catch (err) {}
 
-    // Close modal & trigger toast notification IMMEDIATELY (0ms latency!)
     setModalOpen(false);
-    triggerToast('⚡ Supplier account saved successfully!');
+    triggerToast('⚡ Supplier profile saved successfully!');
     window.dispatchEvent(new Event('storage'));
 
-    // 2. Non-blocking asynchronous Supabase database upsert in background
     (async () => {
       try {
         await supabase.from('suppliers').upsert(newSupplierObj);
@@ -347,11 +422,11 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
   const handleDeleteSupplier = async (id: string) => {
     if (!window.confirm('Delete this supplier profile account?')) return;
     try {
-      // Remove from local storage cache
       try {
         const currentLocal = JSON.parse(localStorage.getItem('lk_suppliers') || '[]');
         const updatedLocal = currentLocal.filter((s: any) => s.id !== id);
         localStorage.setItem('lk_suppliers', JSON.stringify(updatedLocal));
+        setSuppliers(updatedLocal);
       } catch (e) {}
 
       const isValidUUID = (idStr: any) => typeof idStr === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idStr);
@@ -369,7 +444,7 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
   const handleOpenPayModal = (s: Supplier) => {
     setPayFormData({
       supplier_id: s.id,
-      amount: s.outstanding,
+      amount: Number(s.outstanding || 0),
       payment_mode: 'Bank Transfer',
       ref_number: ''
     });
@@ -384,34 +459,47 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
       const targetSupplier = suppliers.find(s => s.id === payFormData.supplier_id);
       if (!targetSupplier) return;
 
-      const newOutstanding = Math.max(0, targetSupplier.outstanding - payFormData.amount);
+      const paidAmt = Number(payFormData.amount);
+      const newOutstanding = Math.max(0, Number(targetSupplier.outstanding || 0) - paidAmt);
 
-      // 1. Log payout
-      const { error: logErr } = await supabase
-        .from('supplier_payments')
-        .insert({
-          tenant_id: tenantId,
-          supplier_id: payFormData.supplier_id,
-          amount: payFormData.amount,
-          payment_mode: payFormData.payment_mode,
-          ref_number: payFormData.ref_number || 'DIR-REC',
-          payment_date: new Date().toISOString()
-        });
+      const payRecordId = 'spay-' + Date.now();
+      const nowIso = new Date().toISOString();
 
-      if (logErr) throw logErr;
+      const newPaymentObj = {
+        id: payRecordId,
+        tenant_id: tenantId,
+        supplier_id: targetSupplier.id,
+        amount: paidAmt,
+        payment_mode: payFormData.payment_mode,
+        ref_number: payFormData.ref_number.trim() || 'DIR-REC',
+        payment_date: nowIso
+      };
 
-      // 2. Adjust outstanding payables
-      const { error: updErr } = await supabase
-        .from('suppliers')
-        .update({ outstanding: newOutstanding })
-        .eq('id', payFormData.supplier_id);
+      // Instant local state & localStorage update (0ms latency!)
+      const updatedSups = suppliers.map(s => 
+        s.id === targetSupplier.id || s.supplier_name === targetSupplier.supplier_name 
+          ? { ...s, outstanding: newOutstanding } 
+          : s
+      );
+      setSuppliers(updatedSups);
+      localStorage.setItem('lk_suppliers', JSON.stringify(updatedSups));
 
-      if (updErr) throw updErr;
+      const updatedPays = [newPaymentObj as any, ...payments];
+      setPayments(updatedPays);
+      localStorage.setItem('lk_supplier_payments', JSON.stringify(updatedPays));
 
-      await fetchSuppliersData();
-      window.dispatchEvent(new Event('storage'));
       setPayModalOpen(false);
-      alert(`Logged payment payout of ₹${payFormData.amount} to supplier. Ledger balance updated.`);
+      triggerToast(`✓ Logged payout of ₹${paidAmt.toFixed(2)} to ${targetSupplier.supplier_name}! Remaining dues: ₹${newOutstanding.toFixed(2)}`);
+      window.dispatchEvent(new Event('storage'));
+
+      (async () => {
+        try {
+          await supabase.from('supplier_payments').insert(newPaymentObj);
+          await supabase.from('suppliers').update({ outstanding: newOutstanding }).eq('id', targetSupplier.id);
+        } catch (e) {
+          console.warn('Background supplier payment note:', e);
+        }
+      })();
     } catch (e: any) {
       alert('Failed to record payment: ' + e.message);
     }
@@ -467,6 +555,54 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
     return ledger.sort((a, b) => new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime());
   }, [statementSupplier, payments]);
 
+  // Pre-calculate per-supplier stats (total purchases, last purchase date, last payment date)
+  const supplierStatsMap = useMemo(() => {
+    const map = new Map<string, { 
+      totalPurchases: number; 
+      realtimeOutstanding: number;
+      lastPurchaseDate: string | null; 
+      lastPaymentDate: string | null;
+    }>();
+
+    const localPurchs = localStorage.getItem('lk_purchases');
+    let allPurchs: any[] = [];
+    if (localPurchs) {
+      try { 
+        const parsed = JSON.parse(localPurchs); 
+        if (Array.isArray(parsed)) allPurchs = parsed.filter(p => p && typeof p === 'object');
+      } catch(e) {}
+    }
+
+    suppliers.forEach(s => {
+      const nameKey = (s.supplier_name || '').toUpperCase().trim();
+      const suppBills = allPurchs.filter(b => b.supplier_name && b.supplier_name.toUpperCase().trim() === nameKey);
+      const suppPays = payments.filter(p => p.supplier_id === s.id || ((p as any).supplier_name && (p as any).supplier_name.toUpperCase().trim() === nameKey));
+
+      const totalPurch = suppBills.reduce((acc, b) => acc + Number(b.total_amount || 0), 0);
+      
+      let lastPurchDate: string | null = null;
+      if (suppBills.length > 0) {
+        const sorted = [...suppBills].sort((a, b) => new Date(b.purchase_date || 0).getTime() - new Date(a.purchase_date || 0).getTime());
+        lastPurchDate = sorted[0].purchase_date || null;
+      }
+
+      let lastPayDate: string | null = null;
+      if (suppPays.length > 0) {
+        const sortedP = [...suppPays].sort((a, b) => new Date(b.payment_date || 0).getTime() - new Date(a.payment_date || 0).getTime());
+        lastPayDate = sortedP[0].payment_date || null;
+      }
+
+      map.set(s.id, {
+        totalPurchases: totalPurch,
+        realtimeOutstanding: Number(s.outstanding || 0),
+        lastPurchaseDate: lastPurchDate,
+        lastPaymentDate: lastPayDate
+      });
+    });
+
+    return map;
+  }, [suppliers, payments]);
+
   const getVendorCode = (s: Supplier, idx?: number) => {
     if ((s as any).supplier_code) return (s as any).supplier_code;
     if (s.id && s.id.startsWith('VND-')) return s.id;
@@ -511,117 +647,130 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
       </div>
 
       <div className="mb-4">
-        <input type="text" className="w-full bg-secondary border border-border text-foreground rounded-lg p-3 text-sm focus:outline-none focus:border-primary font-semibold"
+        <input type="text" className="w-full bg-secondary border border-border text-foreground rounded-xl p-3 text-sm focus:outline-none focus:border-primary font-semibold shadow-inner"
           placeholder="Search by vendor name, code (VND-001) or contact number..."
           value={search} onChange={(e) => setSearch(e.target.value)} />
       </div>
 
-      <div className="bg-secondary border border-border/80 rounded-2xl shadow-sm overflow-x-auto">
-        <table className="w-full text-left text-sm text-textSecondary border-collapse">
+      <div className="bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-x-auto">
+        <table className="w-full text-left text-sm text-slate-700 dark:text-slate-200 border-collapse">
           <thead>
-            <tr className="border-b border-border/80 bg-slate-100/70 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 font-extrabold uppercase tracking-wider text-[11px]">
-              <th className="py-3.5 px-4">Vendor ID</th>
-              <th className="py-3.5 px-4">Vendor Profile</th>
-              <th className="py-3.5 px-4">Contact Details</th>
-              <th className="py-3.5 px-4">Office Address</th>
-              <th className="py-3.5 px-4 text-right">Outstanding (₹)</th>
-              <th className="py-3.5 px-4 text-right">Actions</th>
+            <tr className="border-b-2 border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/90 text-slate-700 dark:text-slate-200 font-extrabold uppercase tracking-wider text-[11px] divide-x divide-slate-200 dark:divide-slate-700 whitespace-nowrap">
+              <th className="py-3 px-3.5 text-center whitespace-nowrap">Vendor ID</th>
+              <th className="py-3 px-3.5 text-center whitespace-nowrap">Vendor Name</th>
+              <th className="py-3 px-3.5 text-center whitespace-nowrap">Phone</th>
+              <th className="py-3 px-3.5 text-center whitespace-nowrap">Purchases</th>
+              <th className="py-3 px-3.5 text-center whitespace-nowrap">Pending Payable</th>
+              <th className="py-3 px-3.5 text-center whitespace-nowrap">Last Buy</th>
+              <th className="py-3 px-3.5 text-center whitespace-nowrap">Last Paid</th>
+              <th className="py-3 px-3.5 text-center whitespace-nowrap">Status</th>
+              <th className="py-3 px-3.5 text-center whitespace-nowrap">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-border/40">
-            {filteredSuppliers.length === 0 ? (
+          <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+            {isLoading ? (
               <tr>
-                <td colSpan={6} className="py-8 text-center text-textMuted text-xs font-medium">
+                <td colSpan={9} className="py-12 text-center text-slate-400 text-xs font-medium">
+                  <div className="flex flex-col items-center justify-center gap-2">
+                    <i className="fa-solid fa-circle-notch fa-spin text-2xl text-primary"></i>
+                    <span>Loading vendor accounts & ledger records...</span>
+                  </div>
+                </td>
+              </tr>
+            ) : filteredSuppliers.length === 0 ? (
+              <tr>
+                <td colSpan={9} className="py-8 text-center text-slate-400 text-xs font-medium">
                   <i className="fa-solid fa-truck-ramp-box text-2xl text-slate-400 mb-2 block"></i>
                   No matching vendor records found.
                 </td>
               </tr>
             ) : filteredSuppliers.map((s, idx) => {
               const code = getVendorCode(s, idx);
-              const initials = s.supplier_name ? s.supplier_name.slice(0, 2).toUpperCase() : 'VN';
-              const isOutstanding = Number(s.outstanding || 0) > 0;
+              const stats = supplierStatsMap.get(s.id) || { totalPurchases: 0, realtimeOutstanding: Number(s.outstanding || 0), lastPurchaseDate: null, lastPaymentDate: null };
+              const hasPayable = stats.realtimeOutstanding > 0;
 
               return (
-                <tr key={s.id} className="hover:bg-slate-500/5 transition-colors group">
-                  <td className="py-3.5 px-4">
+                <tr key={s.id} className="odd:bg-white dark:odd:bg-slate-900 even:bg-slate-50/70 dark:even:bg-slate-800/30 hover:bg-blue-50/60 dark:hover:bg-slate-800/70 transition-colors divide-x divide-slate-200 dark:divide-slate-800">
+                  <td className="py-3.5 px-4 text-center">
                     <span className="font-mono text-[11px] font-extrabold bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-md inline-block">
                       {code}
                     </span>
                   </td>
-                  <td className="py-3.5 px-4">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 font-bold text-xs flex items-center justify-center shrink-0">
-                        {initials}
-                      </div>
-                      <div className="flex flex-col">
-                        <div className="font-bold text-foreground uppercase text-xs flex items-center gap-1.5 flex-wrap">
-                          {s.supplier_name}
-                          {s.establishment_date && (
-                            <span className="text-[10px] bg-blue-500/15 text-blue-500 border border-blue-500/30 px-1.5 py-0.2 rounded font-mono font-bold" title={`Established: ${s.establishment_date}`}>
-                              🏛️ Est. {new Date(s.establishment_date).getFullYear()}
-                            </span>
-                          )}
-                          {s.dob && (
-                            <span className="text-[10px] bg-pink-500/15 text-pink-500 border border-pink-500/30 px-1.5 py-0.2 rounded font-mono font-bold" title={`Contact Birthday: ${new Date(s.dob).toLocaleDateString()}`}>
-                              🎂 {new Date(s.dob).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-                            </span>
-                          )}
-                        </div>
-                      </div>
+                  <td className="py-3.5 px-4 text-center">
+                    <div className="flex flex-col items-center justify-center">
+                      <span className="font-bold text-slate-900 dark:text-slate-100 uppercase text-xs">
+                        {s.supplier_name}
+                      </span>
+                      <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-[180px]">{s.address || 'No office address'}</div>
                     </div>
                   </td>
-                  <td className="py-3.5 px-4 text-xs">
-                    {s.phone || s.email ? (
-                      <div className="flex flex-col gap-0.5">
-                        {s.phone && (
-                          <div className="font-semibold text-foreground flex items-center gap-1.5">
-                            <span>{s.phone}</span>
-                            <a href={`tel:${s.phone}`} className="px-1.5 py-0.2 bg-primary/10 text-primary border border-primary/30 hover:bg-primary hover:text-white rounded text-[9px] font-black uppercase inline-flex items-center gap-1 transition" title="Call Vendor">
-                              <i className="fa-solid fa-phone text-[8px]"></i> Call
-                            </a>
-                          </div>
-                        )}
-                        {s.email && <div className="text-textMuted text-[11px] truncate max-w-[160px]">{s.email}</div>}
+                  <td className="py-3.5 px-4 text-center text-xs font-mono font-bold text-slate-900 dark:text-slate-100">
+                    {s.phone ? (
+                      <div className="flex items-center justify-center gap-1.5">
+                        <span>{s.phone}</span>
+                        <a 
+                          href={`tel:${s.phone}`} 
+                          className="w-6 h-6 bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/30 hover:bg-blue-600 hover:text-white rounded-md flex items-center justify-center transition shadow-xs active:scale-95 cursor-pointer shrink-0" 
+                          title={`Call ${s.supplier_name} (${s.phone})`}
+                        >
+                          <i className="fa-solid fa-phone text-[10px]"></i>
+                        </a>
                       </div>
-                    ) : (
-                      <span className="text-textMuted text-xs">-</span>
-                    )}
+                    ) : '-'}
                   </td>
-                  <td className="py-3.5 px-4 text-xs text-textSecondary max-w-[200px] truncate" title={s.address || '-'}>
-                    {s.address ? (
-                      <span className="flex items-center gap-1">
-                        <i className="fa-solid fa-location-dot text-textMuted text-[10px]"></i>
-                        {s.address}
-                      </span>
-                    ) : (
-                      <span className="text-textMuted">-</span>
-                    )}
+                  <td className="py-3.5 px-4 text-center font-mono font-bold text-slate-900 dark:text-slate-100 text-xs">
+                    ₹{stats.totalPurchases.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                   </td>
-                  <td className="py-3.5 px-4 text-right">
-                    <span className={`font-mono font-bold text-xs px-2.5 py-1 rounded-full border inline-block ${isOutstanding ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20' : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'}`}>
-                      ₹{Number(s.outstanding || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  <td className="py-3.5 px-4 text-center font-mono text-xs">
+                    <span className={`font-bold inline-block px-2.5 py-0.5 rounded-lg ${hasPayable ? 'text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800' : 'text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800'}`}>
+                      ₹{stats.realtimeOutstanding.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </span>
                   </td>
-                  <td className="py-3.5 px-4 text-right">
-                    <div className="flex gap-1.5 justify-end items-center">
-                      <button className="text-xs bg-primary/10 hover:bg-primary hover:text-white border border-primary/20 text-primary px-2.5 py-1.5 rounded-lg font-bold transition-all active:scale-95 cursor-pointer flex items-center gap-1"
-                        onClick={() => setStatementSupplier(s)}>
-                        <i className="fa-solid fa-file-invoice text-[10px]"></i> Statement
-                      </button>
-                      {s.outstanding > 0 && (
-                        <button className="text-xs bg-amber-500/10 hover:bg-amber-500 hover:text-white border border-amber-500/20 text-amber-600 dark:text-amber-400 px-2.5 py-1.5 rounded-lg font-bold transition-all active:scale-95 cursor-pointer flex items-center gap-1"
-                          onClick={() => handleOpenPayModal(s)}>
-                          💸 Pay
+                  <td className="py-3.5 px-4 text-center text-xs font-mono text-slate-600 dark:text-slate-300">
+                    {stats.lastPurchaseDate ? new Date(stats.lastPurchaseDate).toLocaleDateString('en-IN') : '-'}
+                  </td>
+                  <td className="py-3.5 px-4 text-center text-xs font-mono text-slate-600 dark:text-slate-300">
+                    {stats.lastPaymentDate ? new Date(stats.lastPaymentDate).toLocaleDateString('en-IN') : '-'}
+                  </td>
+                  <td className="py-3.5 px-4 text-center">
+                    <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold border inline-block ${hasPayable ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800' : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'}`}>
+                      {hasPayable ? '⚠️ Pending' : '✓ Clean'}
+                    </span>
+                  </td>
+                  <td className="py-3.5 px-4 text-center">
+                    <div className="flex flex-col items-center justify-center gap-1.5 min-w-[260px] max-w-[300px] mx-auto">
+                      {hasPayable && (
+                        <button 
+                          className="w-full text-[11px] bg-emerald-600 hover:bg-emerald-500 text-white font-black py-1 px-2 rounded-lg transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1 shadow-xs"
+                          onClick={() => handleOpenPayModal(s)}
+                          title="Record payment payout to vendor"
+                        >
+                          💵 Pay Vendor (₹{stats.realtimeOutstanding.toLocaleString()})
                         </button>
                       )}
-                      <button className="text-xs bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-border text-textSecondary hover:text-foreground px-2.5 py-1.5 rounded-lg transition-all active:scale-95 cursor-pointer"
-                        onClick={() => handleOpenEdit(s)}>
-                        Edit
-                      </button>
-                      <button className="text-xs bg-rose-500/10 hover:bg-rose-500 hover:text-white border border-rose-500/20 text-rose-600 dark:text-rose-400 px-2.5 py-1.5 rounded-lg font-semibold transition-all active:scale-95 cursor-pointer"
-                        onClick={() => handleDeleteSupplier(s.id)}>
-                        Delete
-                      </button>
+                      <div className="grid grid-cols-3 gap-1 w-full">
+                        <button 
+                          className="text-[10px] bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 py-1 px-1 rounded-lg font-bold transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1"
+                          onClick={() => setStatementSupplier(s)}
+                          title="View vendor ledger statement"
+                        >
+                          <i className="fa-solid fa-file-invoice text-[9px]"></i> Statement
+                        </button>
+                        <button 
+                          className="text-[10px] bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 py-1 px-1 rounded-lg font-bold transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1"
+                          onClick={() => handleOpenEdit(s)}
+                          title="Edit vendor profile"
+                        >
+                          <i className="fa-solid fa-pen-to-square text-[9px]"></i> Edit
+                        </button>
+                        <button 
+                          className="text-[10px] bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-600 hover:text-white border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 py-1 px-1 rounded-lg font-bold transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1"
+                          onClick={() => handleDeleteSupplier(s.id)}
+                          title="Delete vendor record"
+                        >
+                          <i className="fa-solid fa-trash-can text-[9px]"></i> Delete
+                        </button>
+                      </div>
                     </div>
                   </td>
                 </tr>

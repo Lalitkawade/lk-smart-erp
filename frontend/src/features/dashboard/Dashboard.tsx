@@ -664,27 +664,27 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
           {/* Table: Top 5 Low Stock Items */}
           <div className="space-y-3 pt-2">
             <div className="text-xs font-bold text-foreground uppercase tracking-wider">Critical Restock Checklist</div>
-            <div className="overflow-x-auto border border-border rounded-lg bg-background">
-              <table className="w-full text-left text-xs text-textSecondary">
+            <div className="overflow-x-auto bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm">
+              <table className="w-full text-left text-xs text-slate-700 dark:text-slate-200 border-collapse">
                 <thead>
-                  <tr className="border-b border-border bg-background text-textMuted uppercase font-bold">
-                    <th className="p-2.5">Product</th>
-                    <th className="p-2.5 text-center">Stock</th>
-                    <th className="p-2.5 text-center">Min. Warning</th>
-                    <th className="p-2.5">Vendor</th>
-                    <th className="p-2.5 text-right">Action</th>
+                  <tr className="border-b-2 border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/90 text-slate-700 dark:text-slate-200 font-extrabold uppercase tracking-wider text-[11px] divide-x divide-slate-200 dark:divide-slate-700 whitespace-nowrap">
+                    <th className="py-2.5 px-3 text-center">Product</th>
+                    <th className="py-2.5 px-3 text-center">Stock</th>
+                    <th className="py-2.5 px-3 text-center">Min. Warning</th>
+                    <th className="py-2.5 px-3 text-center">Vendor</th>
+                    <th className="py-2.5 px-3 text-center">Action</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                   {lowStockAlerts.length === 0 ? (
-                    <tr><td colSpan={5} className="p-4 text-center text-textMuted">No products under warning. Stock looks healthy!</td></tr>
+                    <tr><td colSpan={5} className="py-4 text-center text-slate-400">No products under warning. Stock looks healthy!</td></tr>
                   ) : lowStockAlerts.slice(0, 5).map(p => (
-                    <tr key={p.id} className="border-b border-border/60 hover:bg-slate-100/5">
-                      <td className="p-2.5 font-semibold text-foreground uppercase truncate max-w-[120px]" title={p.product_name}>{p.product_name}</td>
-                      <td className="p-2.5 text-center font-mono font-bold text-rose-500">{p.current_stock}</td>
-                      <td className="p-2.5 text-center font-mono text-textMuted">{p.min_stock_level}</td>
-                      <td className="p-2.5 truncate max-w-[100px] text-textSecondary uppercase font-medium">{p.vendorName}</td>
-                      <td className="p-2.5 text-right">
+                    <tr key={p.id} className="odd:bg-white dark:odd:bg-slate-900 even:bg-slate-50/70 dark:even:bg-slate-800/30 hover:bg-blue-50/60 dark:hover:bg-slate-800/70 transition-colors divide-x divide-slate-200 dark:divide-slate-800">
+                      <td className="py-2.5 px-3 text-center font-semibold text-slate-900 dark:text-slate-100 uppercase truncate max-w-[120px]" title={p.product_name}>{p.product_name}</td>
+                      <td className="py-2.5 px-3 text-center font-mono font-bold text-rose-600 dark:text-rose-400">{p.current_stock}</td>
+                      <td className="py-2.5 px-3 text-center font-mono text-slate-500">{p.min_stock_level}</td>
+                      <td className="py-2.5 px-3 text-center truncate max-w-[100px] text-slate-700 dark:text-slate-300 uppercase font-medium">{p.vendorName}</td>
+                      <td className="py-2.5 px-3 text-center">
                         <a href={`tel:${p.vendorPhone}`} className="px-2.5 py-1 bg-primary hover:bg-primary/90 text-white font-bold rounded text-[10px] uppercase transition shadow-md inline-flex items-center gap-1 cursor-pointer">
                           <i className="fa-solid fa-phone"></i> Call
                         </a>
@@ -787,42 +787,42 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
             </button>
           </div>
 
-          <div className="max-h-[255px] overflow-y-auto border border-border rounded-xl bg-background scrollbar-thin">
-            <table className="w-full text-left text-xs text-textSecondary relative">
-              <thead className="sticky top-0 bg-background z-10 border-b border-border shadow-xs">
-                <tr className="text-textMuted uppercase font-bold text-[10px]">
-                  <th className="p-2.5">Transaction</th>
-                  <th className="p-2.5">Party (Customer/Vendor)</th>
-                  <th className="p-2.5">Type</th>
-                  <th className="p-2.5">Date</th>
-                  <th className="p-2.5 text-right">Amount</th>
-                  <th className="p-2.5 text-center">Status</th>
+          <div className="max-h-[255px] overflow-y-auto bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm scrollbar-thin">
+            <table className="w-full text-left text-xs text-slate-700 dark:text-slate-200 border-collapse relative">
+              <thead className="sticky top-0 bg-slate-100 dark:bg-slate-800 z-10 border-b-2 border-slate-200 dark:border-slate-700 shadow-xs">
+                <tr className="text-slate-700 dark:text-slate-200 uppercase font-extrabold text-[10px] divide-x divide-slate-200 dark:divide-slate-700 whitespace-nowrap">
+                  <th className="py-2.5 px-3 text-center">Transaction</th>
+                  <th className="py-2.5 px-3 text-center">Party (Customer/Vendor)</th>
+                  <th className="py-2.5 px-3 text-center">Type</th>
+                  <th className="py-2.5 px-3 text-center">Date</th>
+                  <th className="py-2.5 px-3 text-center">Amount</th>
+                  <th className="py-2.5 px-3 text-center">Status</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                 {recentTransactions.length === 0 ? (
-                  <tr><td colSpan={6} className="p-4 text-center text-textMuted">No recent logs recorded.</td></tr>
+                  <tr><td colSpan={6} className="py-4 text-center text-slate-400">No recent logs recorded.</td></tr>
                 ) : recentTransactions.map((tx, idx) => (
                   <tr 
                     key={idx} 
                     onClick={() => setSelectedTxDetail(tx)}
-                    className="border-b border-border/60 hover:bg-primary/10 cursor-pointer transition duration-150 group"
+                    className="odd:bg-white dark:odd:bg-slate-900 even:bg-slate-50/70 dark:even:bg-slate-800/30 hover:bg-blue-50/60 dark:hover:bg-slate-800/70 transition-colors divide-x divide-slate-200 dark:divide-slate-800 cursor-pointer group"
                     title="Click to view full transaction breakdown"
                   >
-                    <td className="p-2 font-mono text-xs text-foreground font-bold group-hover:text-primary flex items-center gap-1.5">
-                      <i className="fa-solid fa-receipt text-[10px] text-textMuted group-hover:text-primary"></i>
+                    <td className="py-2.5 px-3 text-center font-mono text-xs text-slate-900 dark:text-slate-100 font-bold group-hover:text-primary flex items-center justify-center gap-1.5">
+                      <i className="fa-solid fa-receipt text-[10px] text-slate-400 group-hover:text-primary"></i>
                       {tx.invoice_number}
                     </td>
-                    <td className="p-2 font-semibold text-foreground truncate max-w-[150px] uppercase text-xs">{tx.party_name}</td>
-                    <td className="p-2">
-                      <span className={`px-2 py-0.5 rounded-md text-[9px] font-extrabold uppercase tracking-wider ${tx.type === 'Sale' ? 'bg-primary/10 text-primary border border-primary/20' : 'bg-purple-500/10 text-purple-400 border border-purple-500/20'}`}>
+                    <td className="py-2.5 px-3 text-center font-semibold text-slate-900 dark:text-slate-100 truncate max-w-[150px] uppercase text-xs">{tx.party_name}</td>
+                    <td className="py-2.5 px-3 text-center">
+                      <span className={`px-2 py-0.5 rounded-md text-[9px] font-extrabold uppercase tracking-wider inline-block ${tx.type === 'Sale' ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800' : 'bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-800'}`}>
                         {tx.type}
                       </span>
                     </td>
-                    <td className="p-2 text-xs text-textSecondary">{new Date(tx.date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}</td>
-                    <td className="p-2 text-right font-mono font-extrabold text-foreground text-xs">₹{tx.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                    <td className="p-2 text-center">
-                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${tx.status === 'Paid' ? 'bg-primary/10 text-primary border border-primary/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'}`}>
+                    <td className="py-2.5 px-3 text-center text-xs font-mono text-slate-600 dark:text-slate-300">{new Date(tx.date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}</td>
+                    <td className="py-2.5 px-3 text-center font-mono font-extrabold text-slate-900 dark:text-slate-100 text-xs">₹{tx.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className="py-2.5 px-3 text-center">
+                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider inline-block ${tx.status === 'Paid' ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800' : 'bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800'}`}>
                         {tx.status}
                       </span>
                     </td>
@@ -910,21 +910,21 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
             {/* Line Items Table */}
             <div>
               <h4 className="text-xs font-extrabold text-foreground uppercase mb-2">Itemized Breakdown</h4>
-              <div className="overflow-x-auto border border-border rounded-xl bg-background">
-                <table className="w-full text-left text-xs text-textSecondary">
+              <div className="overflow-x-auto bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm">
+                <table className="w-full text-left text-xs text-slate-700 dark:text-slate-200 border-collapse">
                   <thead>
-                    <tr className="border-b border-border bg-background text-textPrimary uppercase font-extrabold">
-                      <th className="p-2.5">Sr.</th>
-                      <th className="p-2.5">Item Name</th>
-                      <th className="p-2.5 text-center">Qty</th>
-                      <th className="p-2.5 text-right">Rate</th>
-                      <th className="p-2.5 text-right">Total</th>
+                    <tr className="border-b-2 border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/90 text-slate-700 dark:text-slate-200 font-extrabold uppercase tracking-wider text-[11px] divide-x divide-slate-200 dark:divide-slate-700 whitespace-nowrap">
+                      <th className="py-2.5 px-3 text-center">Sr.</th>
+                      <th className="py-2.5 px-3 text-center">Item Name</th>
+                      <th className="py-2.5 px-3 text-center">Qty</th>
+                      <th className="py-2.5 px-3 text-center">Rate</th>
+                      <th className="py-2.5 px-3 text-center">Total</th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                     {(!selectedTxDetail.items || selectedTxDetail.items.length === 0) ? (
                       <tr>
-                        <td colSpan={5} className="p-4 text-center text-textMuted">No line items breakdown recorded for this transaction.</td>
+                        <td colSpan={5} className="py-4 text-center text-slate-400">No line items breakdown recorded for this transaction.</td>
                       </tr>
                     ) : (
                       selectedTxDetail.items.map((item: any, idx: number) => {
@@ -934,12 +934,12 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
                         const rate = Number(item.rate || item.price || item.unit_price || 0);
                         const total = item.amount ? Number(item.amount) : (qty * rate);
                         return (
-                          <tr key={idx} className="border-b border-border/60 hover:bg-slate-100/5">
-                            <td className="p-2.5 font-mono text-foreground font-bold">{idx + 1}</td>
-                            <td className="p-2.5 font-semibold text-foreground uppercase">{name}</td>
-                            <td className="p-2.5 text-center font-mono font-bold text-foreground">{qty}</td>
-                            <td className="p-2.5 text-right font-mono text-foreground">₹{rate.toFixed(2)}</td>
-                            <td className="p-2.5 text-right font-mono font-bold text-primary">₹{total.toFixed(2)}</td>
+                          <tr key={idx} className="odd:bg-white dark:odd:bg-slate-900 even:bg-slate-50/70 dark:even:bg-slate-800/30 hover:bg-blue-50/60 dark:hover:bg-slate-800/70 transition-colors divide-x divide-slate-200 dark:divide-slate-800">
+                            <td className="py-2.5 px-3 text-center font-mono text-slate-900 dark:text-slate-100 font-bold">{idx + 1}</td>
+                            <td className="py-2.5 px-3 text-center font-semibold text-slate-900 dark:text-slate-100 uppercase">{name}</td>
+                            <td className="py-2.5 px-3 text-center font-mono font-bold text-slate-900 dark:text-slate-100">{qty}</td>
+                            <td className="py-2.5 px-3 text-center font-mono text-slate-900 dark:text-slate-100">₹{rate.toFixed(2)}</td>
+                            <td className="py-2.5 px-3 text-center font-mono font-bold text-primary">₹{total.toFixed(2)}</td>
                           </tr>
                         );
                       })

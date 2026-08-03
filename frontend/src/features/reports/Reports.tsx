@@ -103,23 +103,23 @@ export default function Reports({ tenantId, sales, purchases }: ReportsProps) {
         </div>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-xs text-textSecondary">
+      <div className="bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-x-auto">
+        <table className="w-full text-left text-sm text-slate-700 dark:text-slate-200 border-collapse">
           <thead>
-            <tr className="border-b border-border text-textPrimary font-extrabold uppercase tracking-wide">
-              <th className="py-3">Month</th>
-              <th className="py-3">Material Selling (Sales Amount)</th>
-              <th className="py-3">Material Purchasing (Purchase Amount)</th>
-              <th className="py-3 text-right">Profit / Loss Surplus</th>
+            <tr className="border-b-2 border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/90 text-slate-700 dark:text-slate-200 font-extrabold uppercase tracking-wider text-[11px] divide-x divide-slate-200 dark:divide-slate-700 whitespace-nowrap">
+              <th className="py-3 px-3.5 text-center whitespace-nowrap">Month</th>
+              <th className="py-3 px-3.5 text-center whitespace-nowrap">Material Selling (Sales Amount)</th>
+              <th className="py-3 px-3.5 text-center whitespace-nowrap">Material Purchasing (Purchase Amount)</th>
+              <th className="py-3 px-3.5 text-center whitespace-nowrap">Profit / Loss Surplus</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
             {monthlyTotals.map((m, idx) => (
-              <tr key={idx} className="border-b border-border hover:bg-slate-100/10 dark:hover:bg-slate-800/10">
-                <td className="py-3.5 font-bold text-foreground">{m.monthName}</td>
-                <td className="py-3.5 font-mono text-foreground font-bold">₹{m.sales.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                <td className="py-3.5 font-mono text-textSecondary font-semibold">₹{m.purchases.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                <td className={`py-3.5 text-right font-mono font-bold ${m.netValue >= 0 ? 'text-primary' : 'text-rose-400'}`}>
+              <tr key={idx} className="odd:bg-white dark:odd:bg-slate-900 even:bg-slate-50/70 dark:even:bg-slate-800/30 hover:bg-blue-50/60 dark:hover:bg-slate-800/70 transition-colors divide-x divide-slate-200 dark:divide-slate-800">
+                <td className="py-3.5 px-4 text-center font-bold text-slate-900 dark:text-slate-100 text-xs uppercase">{m.monthName}</td>
+                <td className="py-3.5 px-4 text-center font-mono text-slate-900 dark:text-slate-100 font-bold text-xs">₹{m.sales.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                <td className="py-3.5 px-4 text-center font-mono text-slate-600 dark:text-slate-300 font-semibold text-xs">₹{m.purchases.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                <td className={`py-3.5 px-4 text-center font-mono font-bold text-xs ${m.netValue >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                   {m.netValue >= 0 ? '+' : ''}₹{m.netValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </td>
               </tr>

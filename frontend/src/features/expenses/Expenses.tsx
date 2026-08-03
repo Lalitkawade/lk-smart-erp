@@ -188,41 +188,41 @@ export default function Expenses({ autoOpenModal, onModalClosed }: ExpensesProps
               value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
 
-          <div className="bg-secondary border border-border/80 rounded-2xl shadow-sm overflow-x-auto">
-            <table className="w-full text-left text-sm text-textSecondary border-collapse">
+          <div className="bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-x-auto">
+            <table className="w-full text-left text-sm text-slate-700 dark:text-slate-200 border-collapse">
               <thead>
-                <tr className="border-b border-border/80 bg-slate-100/70 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 font-extrabold uppercase tracking-wider text-[11px]">
-                  <th className="py-3.5 px-4">Expense Date</th>
-                  <th className="py-3.5 px-4">Category</th>
-                  <th className="py-3.5 px-4">Description</th>
-                  <th className="py-3.5 px-4 text-right">Outflow Amount (₹)</th>
-                  <th className="py-3.5 px-4 text-right">Actions</th>
+                <tr className="border-b-2 border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/90 text-slate-700 dark:text-slate-200 font-extrabold uppercase tracking-wider text-[11px] divide-x divide-slate-200 dark:divide-slate-700 whitespace-nowrap">
+                  <th className="py-3 px-3.5 text-center whitespace-nowrap">Expense Date</th>
+                  <th className="py-3 px-3.5 text-center whitespace-nowrap">Category</th>
+                  <th className="py-3 px-3.5 text-center whitespace-nowrap">Description</th>
+                  <th className="py-3 px-3.5 text-center whitespace-nowrap">Outflow Amount (₹)</th>
+                  <th className="py-3 px-3.5 text-center whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border/40">
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-8 text-center text-textMuted text-xs font-medium">
+                    <td colSpan={5} className="py-8 text-center text-slate-400 text-xs font-medium">
                       <i className="fa-solid fa-hand-holding-dollar text-2xl text-slate-400 mb-2 block"></i>
                       No matching expense logs found.
                     </td>
                   </tr>
                 ) : filtered.map((e) => (
-                  <tr key={e.id} className="hover:bg-slate-500/5 transition-colors group">
-                    <td className="py-3.5 px-4 font-mono text-xs text-foreground font-medium">
+                  <tr key={e.id} className="odd:bg-white dark:odd:bg-slate-900 even:bg-slate-50/70 dark:even:bg-slate-800/30 hover:bg-blue-50/60 dark:hover:bg-slate-800/70 transition-colors divide-x divide-slate-200 dark:divide-slate-800">
+                    <td className="py-3.5 px-4 text-center font-mono text-xs font-semibold text-slate-900 dark:text-slate-100">
                       {new Date(e.expense_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
                     </td>
-                    <td className="py-3.5 px-4">
-                      <span className="text-[11px] px-2.5 py-1 bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 rounded-full font-mono font-bold uppercase">
+                    <td className="py-3.5 px-4 text-center">
+                      <span className="text-[11px] px-2.5 py-1 bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800 rounded-full font-mono font-bold uppercase inline-block">
                         {e.category}
                       </span>
                     </td>
-                    <td className="py-3.5 px-4 text-xs text-textSecondary max-w-[220px] truncate" title={e.description}>{e.description || '-'}</td>
-                    <td className="py-3.5 px-4 text-right font-mono font-bold text-rose-600 dark:text-rose-400 text-xs">
+                    <td className="py-3.5 px-4 text-center text-xs text-slate-600 dark:text-slate-300 max-w-[220px] truncate" title={e.description}>{e.description || '-'}</td>
+                    <td className="py-3.5 px-4 text-center font-mono font-bold text-rose-600 dark:text-rose-400 text-xs">
                       ₹{e.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </td>
-                    <td className="py-3.5 px-4 text-right">
-                      <button className="text-xs bg-rose-500/10 hover:bg-rose-500 hover:text-white border border-rose-500/20 text-rose-600 dark:text-rose-400 px-2.5 py-1.5 rounded-lg font-semibold transition-all active:scale-95 cursor-pointer ml-auto"
+                    <td className="py-3.5 px-4 text-center">
+                      <button className="text-xs bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-600 hover:text-white border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 px-2.5 py-1 rounded-lg font-bold transition-all active:scale-95 cursor-pointer"
                         onClick={() => handleDeleteExpense(e.id)}>Delete</button>
                     </td>
                   </tr>

@@ -555,9 +555,9 @@ export default function App() {
       )}
 
       {/* Sidebar Navigation */}
-      <aside className={`bg-sidebar border-r border-border flex flex-col justify-between h-screen fixed md:sticky top-0 left-0 z-50 transition-transform duration-300 md:translate-x-0 ${
+      <aside className={`bg-sidebar border-r border-border flex flex-col justify-between h-screen fixed md:sticky top-0 left-0 z-50 transition-all duration-300 md:translate-x-0 ${
         mobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
-      } ${sidebarCollapsed ? 'w-20' : 'w-64'}`}>
+      } ${sidebarCollapsed ? 'w-[84px]' : 'w-64'}`}>
         <div className="overflow-y-auto flex-1 select-none scrollbar-none">
           {/* Sidebar Top branding */}
           {!sidebarCollapsed ? (
@@ -586,10 +586,10 @@ export default function App() {
               </div>
             </div>
           ) : (
-            <div className="p-4 border-b border-border/40 flex flex-col justify-center items-center h-16">
+            <div className="p-3 border-b border-border/40 flex justify-center items-center h-16">
               <button 
                 onClick={() => setSidebarCollapsed(false)} 
-                className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-400 font-extrabold text-sm border border-slate-700 shadow-sm transition active:scale-95 cursor-pointer flex items-center justify-center" 
+                className="w-11 h-11 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-amber-400 font-extrabold text-base border border-slate-700/80 shadow-md transition-all duration-200 active:scale-95 cursor-pointer flex items-center justify-center hover:scale-105" 
                 title="Expand sidebar menu"
               >
                 <i className="fa-solid fa-outdent"></i>
@@ -608,7 +608,7 @@ export default function App() {
             </div>
           ) : (
             <div className="p-3 border-b border-border/40 flex justify-center my-2">
-              <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-xs uppercase border border-primary/30" title={`${profile?.username || 'Owner'} (${profile?.role || 'Staff'})`}>
+              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary to-blue-700 flex items-center justify-center text-white font-black text-sm uppercase border-2 border-white/20 shadow-md hover:scale-105 transition-all cursor-pointer" title={`${profile?.username || 'Owner'} (${profile?.role || 'Staff'})`}>
                 {profile?.username?.slice(0, 2) || 'OP'}
               </div>
             </div>
@@ -624,7 +624,7 @@ export default function App() {
                     !sidebarCollapsed ? (
                       <span className={`px-3 text-[9.5px] font-black text-textMuted block pt-2 pb-1 ${lang === 'mr' ? 'tracking-normal font-bold text-xs text-amber-400' : 'tracking-widest uppercase'}`}>{section.title}</span>
                     ) : (
-                      <div className="border-t border-border/40 my-2 mx-2"></div>
+                      <div className="border-t border-border/40 my-2.5 mx-3"></div>
                     )
                   )}
                   {visibleItems.map(item => {
@@ -638,14 +638,14 @@ export default function App() {
                             setMobileMenuOpen(false);
                           }}
                           title={item.label}
-                          className={`relative flex justify-center items-center w-12 h-10 mx-auto rounded-xl transition-all ${
+                          className={`relative flex justify-center items-center w-14 h-12 mx-auto rounded-xl transition-all duration-200 ${
                             isActive
-                              ? 'bg-primary text-white shadow-md shadow-primary/20'
-                              : 'text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-active'
+                              ? 'bg-primary text-white shadow-lg shadow-primary/30 scale-[1.04] border border-blue-400/30'
+                              : 'text-sidebar-text hover:bg-sidebar-hover hover:text-white hover:scale-105'
                           }`}
                         >
-                          <i className={`fa-solid ${item.icon} ${item.iconColor || ''} text-sm`}></i>
-                          {isActive && <div className="absolute right-1 top-1 w-2 h-2 rounded-full bg-rose-500"></div>}
+                          <i className={`fa-solid ${item.icon} ${isActive ? 'text-white' : item.iconColor || ''} text-base sm:text-lg`}></i>
+                          {isActive && <div className="absolute right-1.5 top-1.5 w-2.5 h-2.5 rounded-full bg-rose-400 ring-2 ring-sidebar shadow-sm animate-pulse"></div>}
                         </button>
                       );
                     }
@@ -689,9 +689,13 @@ export default function App() {
               signOut();
             }} 
             title="Log out of system" 
-            className="flex items-center gap-2.5 w-full px-3.5 py-2.5 rounded-xl text-xs font-bold text-sidebar-text hover:text-rose-400 hover:bg-rose-500/10 border border-transparent hover:border-rose-500/20 transition duration-150"
+            className={`flex items-center rounded-xl text-xs font-bold text-sidebar-text hover:text-rose-400 hover:bg-rose-500/15 border border-transparent hover:border-rose-500/30 transition duration-150 ${
+              sidebarCollapsed 
+                ? 'justify-center w-14 h-12 mx-auto text-base text-rose-400 bg-slate-800/60 hover:bg-rose-500/20' 
+                : 'gap-2.5 w-full px-3.5 py-2.5'
+            }`}
           >
-            <i className="fa-solid fa-arrow-right-from-bracket text-xs"></i>
+            <i className={`fa-solid fa-arrow-right-from-bracket ${sidebarCollapsed ? 'text-base' : 'text-xs'}`}></i>
             {!sidebarCollapsed && <span>Log out</span>}
           </button>
 
@@ -905,27 +909,29 @@ export default function App() {
               <Dashboard tenantId={tenant?.id || 'default-hardware-erp'} sales={sales} purchases={purchases} expenses={expenses} onNavigate={setActiveTab} />
             )}
             {activeTab === 'new-entry' && (
-              <div className="space-y-6 animate-fade-in max-w-5xl mx-auto my-4">
-                <div className="bg-secondary border border-border p-4 sm:p-6 rounded-xl shadow-md">
-                  <h2 className="text-lg font-black text-foreground uppercase tracking-tight">New Entry Quick Action Desk</h2>
-                  <p className="text-xs text-textMuted mt-1">Select an entry card below to log new transactions, inventory, vendors, customers, or expenses</p>
+              <div className="space-y-6 animate-fade-in w-full max-w-[1600px] mx-auto my-4 transition-all duration-300">
+                <div className="bg-secondary border border-border p-5 sm:p-6 rounded-2xl shadow-md">
+                  <h2 className="text-xl font-black text-foreground uppercase tracking-tight flex items-center gap-2.5">
+                    <i className="fa-solid fa-table-cells-large text-primary"></i> New Entry Quick Action Desk
+                  </h2>
+                  <p className="text-xs sm:text-sm text-textMuted mt-1">Select an entry card below to log new transactions, inventory, vendors, customers, or expenses</p>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
                   {/* 1. Sale Entry */}
                   <button 
                     onClick={() => {
                       setSalesAutoOpen(true);
                       setActiveTab('sales');
                     }}
-                    className="bg-secondary border border-border hover:border-primary rounded-xl p-5 sm:p-6 flex flex-col items-center justify-center text-center gap-3 group transition shadow-md cursor-pointer"
+                    className="bg-secondary border border-border hover:border-primary/60 rounded-2xl p-6 sm:p-7 flex flex-col items-center justify-center text-center gap-4 group transition-all duration-200 shadow-md hover:shadow-xl hover:-translate-y-1 cursor-pointer min-h-[200px]"
                   >
-                    <div className="w-14 h-14 rounded-full bg-primary/10 text-primary flex items-center justify-center border border-primary/30 group-hover:scale-110 transition duration-150">
-                      <i className="fa-solid fa-file-invoice-dollar text-xl"></i>
+                    <div className="w-16 h-16 sm:w-18 sm:h-18 rounded-2xl bg-primary/10 text-primary flex items-center justify-center border border-primary/30 group-hover:scale-110 group-hover:bg-primary group-hover:text-white transition-all duration-200 shadow-sm">
+                      <i className="fa-solid fa-file-invoice-dollar text-2xl sm:text-3xl"></i>
                     </div>
                     <div>
-                      <h3 className="text-sm font-bold text-foreground group-hover:text-primary transition uppercase">a. POS Sales Invoice</h3>
-                      <p className="text-xs text-textMuted mt-1">Checkout shopping cart and create retail sales invoice</p>
+                      <h3 className="text-base sm:text-lg font-black text-foreground group-hover:text-primary transition-colors uppercase tracking-tight">a. POS Sales Invoice</h3>
+                      <p className="text-xs sm:text-sm text-textMuted mt-1 leading-relaxed">Checkout shopping cart and create retail sales invoice</p>
                     </div>
                   </button>
 
@@ -935,14 +941,14 @@ export default function App() {
                       setPurchaseAutoOpen(true);
                       setActiveTab('purchases');
                     }}
-                    className="bg-secondary border border-border hover:border-blue-500 rounded-xl p-5 sm:p-6 flex flex-col items-center justify-center text-center gap-3 group transition shadow-md cursor-pointer"
+                    className="bg-secondary border border-border hover:border-blue-500/60 rounded-2xl p-6 sm:p-7 flex flex-col items-center justify-center text-center gap-4 group transition-all duration-200 shadow-md hover:shadow-xl hover:-translate-y-1 cursor-pointer min-h-[200px]"
                   >
-                    <div className="w-14 h-14 rounded-full bg-blue-500/10 text-blue-400 flex items-center justify-center border border-blue-500/30 group-hover:scale-110 transition duration-150">
-                      <i className="fa-solid fa-cart-shopping text-xl"></i>
+                    <div className="w-16 h-16 sm:w-18 sm:h-18 rounded-2xl bg-blue-500/10 text-blue-400 flex items-center justify-center border border-blue-500/30 group-hover:scale-110 group-hover:bg-blue-500 group-hover:text-white transition-all duration-200 shadow-sm">
+                      <i className="fa-solid fa-cart-shopping text-2xl sm:text-3xl"></i>
                     </div>
                     <div>
-                      <h3 className="text-sm font-bold text-foreground group-hover:text-blue-400 transition uppercase">b. Procurement Bill</h3>
-                      <p className="text-xs text-textMuted mt-1">Record supplier purchase bills and update material stock</p>
+                      <h3 className="text-base sm:text-lg font-black text-foreground group-hover:text-blue-400 transition-colors uppercase tracking-tight">b. Procurement Bill</h3>
+                      <p className="text-xs sm:text-sm text-textMuted mt-1 leading-relaxed">Record supplier purchase bills and update material stock</p>
                     </div>
                   </button>
 
@@ -952,14 +958,14 @@ export default function App() {
                       setProductAutoOpen(true);
                       setActiveTab('products');
                     }}
-                    className="bg-secondary border border-border hover:border-amber-500 rounded-xl p-5 sm:p-6 flex flex-col items-center justify-center text-center gap-3 group transition shadow-md cursor-pointer"
+                    className="bg-secondary border border-border hover:border-amber-500/60 rounded-2xl p-6 sm:p-7 flex flex-col items-center justify-center text-center gap-4 group transition-all duration-200 shadow-md hover:shadow-xl hover:-translate-y-1 cursor-pointer min-h-[200px]"
                   >
-                    <div className="w-14 h-14 rounded-full bg-amber-500/10 text-amber-400 flex items-center justify-center border border-amber-500/30 group-hover:scale-110 transition duration-150">
-                      <i className="fa-solid fa-boxes-stacked text-xl"></i>
+                    <div className="w-16 h-16 sm:w-18 sm:h-18 rounded-2xl bg-amber-500/10 text-amber-400 flex items-center justify-center border border-amber-500/30 group-hover:scale-110 group-hover:bg-amber-500 group-hover:text-white transition-all duration-200 shadow-sm">
+                      <i className="fa-solid fa-boxes-stacked text-2xl sm:text-3xl"></i>
                     </div>
                     <div>
-                      <h3 className="text-sm font-bold text-foreground group-hover:text-amber-400 transition uppercase">c. Add New Product</h3>
-                      <p className="text-xs text-textMuted mt-1">Configure new inventory product, price rates, and shelf locations</p>
+                      <h3 className="text-base sm:text-lg font-black text-foreground group-hover:text-amber-400 transition-colors uppercase tracking-tight">c. Add New Product</h3>
+                      <p className="text-xs sm:text-sm text-textMuted mt-1 leading-relaxed">Configure new inventory product, price rates, and shelf locations</p>
                     </div>
                   </button>
 
@@ -969,14 +975,14 @@ export default function App() {
                       setExpenseAutoOpen(true);
                       setActiveTab('expenses');
                     }}
-                    className="bg-secondary border border-border hover:border-rose-500 rounded-xl p-5 sm:p-6 flex flex-col items-center justify-center text-center gap-3 group transition shadow-md cursor-pointer"
+                    className="bg-secondary border border-border hover:border-rose-500/60 rounded-2xl p-6 sm:p-7 flex flex-col items-center justify-center text-center gap-4 group transition-all duration-200 shadow-md hover:shadow-xl hover:-translate-y-1 cursor-pointer min-h-[200px]"
                   >
-                    <div className="w-14 h-14 rounded-full bg-rose-500/10 text-rose-400 flex items-center justify-center border border-rose-500/30 group-hover:scale-110 transition duration-150">
-                      <i className="fa-solid fa-hand-holding-dollar text-xl"></i>
+                    <div className="w-16 h-16 sm:w-18 sm:h-18 rounded-2xl bg-rose-500/10 text-rose-400 flex items-center justify-center border border-rose-500/30 group-hover:scale-110 group-hover:bg-rose-500 group-hover:text-white transition-all duration-200 shadow-sm">
+                      <i className="fa-solid fa-hand-holding-dollar text-2xl sm:text-3xl"></i>
                     </div>
                     <div>
-                      <h3 className="text-sm font-bold text-foreground group-hover:text-rose-400 transition uppercase">d. Log Shop Expense</h3>
-                      <p className="text-xs text-textMuted mt-1">Audit daily shop operating costs, rent, electricity, and salaries</p>
+                      <h3 className="text-base sm:text-lg font-black text-foreground group-hover:text-rose-400 transition-colors uppercase tracking-tight">d. Log Shop Expense</h3>
+                      <p className="text-xs sm:text-sm text-textMuted mt-1 leading-relaxed">Audit daily shop operating costs, rent, electricity, and salaries</p>
                     </div>
                   </button>
 
@@ -986,14 +992,14 @@ export default function App() {
                       setCustomerAutoOpen(true);
                       setActiveTab('customers');
                     }}
-                    className="bg-secondary border border-border hover:border-purple-500 rounded-xl p-5 sm:p-6 flex flex-col items-center justify-center text-center gap-3 group transition shadow-md cursor-pointer"
+                    className="bg-secondary border border-border hover:border-purple-500/60 rounded-2xl p-6 sm:p-7 flex flex-col items-center justify-center text-center gap-4 group transition-all duration-200 shadow-md hover:shadow-xl hover:-translate-y-1 cursor-pointer min-h-[200px]"
                   >
-                    <div className="w-14 h-14 rounded-full bg-purple-500/10 text-purple-400 flex items-center justify-center border border-purple-500/30 group-hover:scale-110 transition duration-150">
-                      <i className="fa-solid fa-user-plus text-xl"></i>
+                    <div className="w-16 h-16 sm:w-18 sm:h-18 rounded-2xl bg-purple-500/10 text-purple-400 flex items-center justify-center border border-purple-500/30 group-hover:scale-110 group-hover:bg-purple-500 group-hover:text-white transition-all duration-200 shadow-sm">
+                      <i className="fa-solid fa-user-plus text-2xl sm:text-3xl"></i>
                     </div>
                     <div>
-                      <h3 className="text-sm font-bold text-foreground group-hover:text-purple-400 transition uppercase">e. Register Customer</h3>
-                      <p className="text-xs text-textMuted mt-1">Create new customer profile and setup credit limit ledgers</p>
+                      <h3 className="text-base sm:text-lg font-black text-foreground group-hover:text-purple-400 transition-colors uppercase tracking-tight">e. Register Customer</h3>
+                      <p className="text-xs sm:text-sm text-textMuted mt-1 leading-relaxed">Create new customer profile and setup credit limit ledgers</p>
                     </div>
                   </button>
 
@@ -1003,21 +1009,21 @@ export default function App() {
                       setSupplierAutoOpen(true);
                       setActiveTab('suppliers');
                     }}
-                    className="bg-secondary border border-border hover:border-primary rounded-xl p-5 sm:p-6 flex flex-col items-center justify-center text-center gap-3 group transition shadow-md cursor-pointer"
+                    className="bg-secondary border border-border hover:border-emerald-500/60 rounded-2xl p-6 sm:p-7 flex flex-col items-center justify-center text-center gap-4 group transition-all duration-200 shadow-md hover:shadow-xl hover:-translate-y-1 cursor-pointer min-h-[200px]"
                   >
-                    <div className="w-14 h-14 rounded-full bg-primary/10 text-primary flex items-center justify-center border border-primary/30 group-hover:scale-110 transition duration-150">
-                      <i className="fa-solid fa-truck-ramp-box text-xl"></i>
+                    <div className="w-16 h-16 sm:w-18 sm:h-18 rounded-2xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center border border-emerald-500/30 group-hover:scale-110 group-hover:bg-emerald-500 group-hover:text-white transition-all duration-200 shadow-sm">
+                      <i className="fa-solid fa-truck-ramp-box text-2xl sm:text-3xl"></i>
                     </div>
                     <div>
-                      <h3 className="text-sm font-bold text-foreground group-hover:text-primary transition uppercase">f. Register Vendor</h3>
-                      <p className="text-xs text-textMuted mt-1">Add material supplier profiles and establishment details</p>
+                      <h3 className="text-base sm:text-lg font-black text-foreground group-hover:text-emerald-400 transition-colors uppercase tracking-tight">f. Register Vendor</h3>
+                      <p className="text-xs sm:text-sm text-textMuted mt-1 leading-relaxed">Add material supplier profiles and establishment details</p>
                     </div>
                   </button>
                 </div>
               </div>
             )}
             {activeTab === 'products' && (
-              <Products tenantId={tenant?.id || 'default-hardware-erp'} businessType={businessType as any} autoOpenModal={productAutoOpen} onModalClosed={() => setProductAutoOpen(false)} />
+              <Products tenantId={tenant?.id || 'default-hardware-erp'} businessType={businessType as any} mode="catalog" autoOpenModal={productAutoOpen} onModalClosed={() => setProductAutoOpen(false)} />
             )}
             {activeTab === 'sales' && (
               <Sales 
@@ -1049,7 +1055,7 @@ export default function App() {
               <Expenses autoOpenModal={expenseAutoOpen} onModalClosed={() => setExpenseAutoOpen(false)} />
             )}
             {activeTab === 'inventory-stock' && (
-              <Products tenantId={tenant?.id || 'default-hardware-erp'} businessType={businessType as any} autoOpenModal={productAutoOpen} onModalClosed={() => setProductAutoOpen(false)} />
+              <Products tenantId={tenant?.id || 'default-hardware-erp'} businessType={businessType as any} mode="stock" autoOpenModal={productAutoOpen} onModalClosed={() => setProductAutoOpen(false)} />
             )}
             {activeTab === 'reports' && (
               <Reports tenantId={tenant?.id || 'default-hardware-erp'} sales={sales} purchases={purchases} />

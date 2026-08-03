@@ -34,8 +34,28 @@ export function useInventory(tenantId: string, businessType?: string) {
         try { localList = JSON.parse(localStr); } catch (e) {}
 
         const prodMap = new Map<string, Product>();
-        remoteProducts.forEach(p => { if (p && p.id) prodMap.set(p.id, p); });
-        localList.forEach(p => { if (p && p.id && !prodMap.has(p.id)) prodMap.set(p.id, p); });
+        // 1. Load local products first
+        localList.forEach(p => { if (p && p.id) prodMap.set(p.id, p); });
+
+        // 2. Intelligently merge remote DB products without wiping local stock updates
+        remoteProducts.forEach(rp => {
+          if (rp && rp.id) {
+            const localItem = prodMap.get(rp.id);
+            if (localItem) {
+              const stockVal = (rp.current_stock === 0 && Number(localItem.current_stock || 0) > 0)
+                ? Number(localItem.current_stock)
+                : Number(rp.current_stock ?? localItem.current_stock ?? 0);
+
+              prodMap.set(rp.id, {
+                ...rp,
+                ...localItem,
+                current_stock: stockVal
+              });
+            } else {
+              prodMap.set(rp.id, rp);
+            }
+          }
+        });
 
         const combined = Array.from(prodMap.values());
         setProducts(combined);
@@ -88,7 +108,10 @@ export function useInventory(tenantId: string, businessType?: string) {
       p_unit: productPayload.p_unit || 'Pcs',
       s_unit: productPayload.s_unit || 'Pcs',
       pieces_per_pack: Number(productPayload.pieces_per_pack || 1),
-      piece_selling_price: Number(productPayload.piece_selling_price || 0)
+      piece_selling_price: Number(productPayload.piece_selling_price || 0),
+      allow_decimal: Boolean(productPayload.allow_decimal),
+      allow_purchase_unit_selling: productPayload.allow_purchase_unit_selling !== undefined ? Boolean(productPayload.allow_purchase_unit_selling) : true,
+      track_base_unit: productPayload.track_base_unit !== undefined ? Boolean(productPayload.track_base_unit) : true
     };
 
     // 1. Instant local cache and UI state update (0ms latency!)
@@ -114,15 +137,32 @@ export function useInventory(tenantId: string, businessType?: string) {
           // Fallback core fields if extra custom columns fail schema check
           const corePayload = {
             id: cleanPayload.id,
+            tenant_id: activeTenantId,
             product_name: cleanPayload.product_name,
+            sku: cleanPayload.sku || null,
+            barcode: cleanPayload.barcode || null,
+            category_name: cleanPayload.category_name || 'General',
+            brand_name: cleanPayload.brand_name || 'Generic',
+            unit: cleanPayload.unit || 'Pcs',
             purchase_price: cleanPayload.purchase_price,
             selling_price: cleanPayload.selling_price,
             current_stock: cleanPayload.current_stock,
             min_stock_level: cleanPayload.min_stock_level,
-            unit: cleanPayload.unit || 'Pcs',
+            status: 'Active',
             hsn: cleanPayload.hsn || null
           };
-          await supabase.from('products').upsert(corePayload);
+          const { error: coreErr } = await supabase.from('products').upsert(corePayload);
+          if (coreErr) {
+            const ultraMinimalPayload = {
+              id: cleanPayload.id,
+              tenant_id: activeTenantId,
+              product_name: cleanPayload.product_name,
+              purchase_price: cleanPayload.purchase_price,
+              selling_price: cleanPayload.selling_price,
+              current_stock: cleanPayload.current_stock
+            };
+            await supabase.from('products').upsert(ultraMinimalPayload);
+          }
         }
       } catch (err) {
         console.warn('Supabase remote background save note:', err);

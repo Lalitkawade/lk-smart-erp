@@ -50,13 +50,7 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
   
   // Modals
   const [modalOpen, setModalOpen] = useState(false);
-
-  useEffect(() => {
-    if (autoOpenModal) {
-      setModalOpen(true);
-      if (onModalClosed) onModalClosed();
-    }
-  }, [autoOpenModal]);
+  const [autoFilledNotice, setAutoFilledNotice] = useState<string | null>(null);
 
   // Form State
   const [supplierId, setSupplierId] = useState('');
@@ -73,6 +67,89 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
   const [productRowSearch, setProductRowSearch] = useState<{ [key: number]: string }>({});
   const [openProductRowDropdown, setOpenProductRowDropdown] = useState<number | null>(null);
 
+  // Dynamic rows of items
+  const [billItems, setBillItems] = useState<Array<{ product_id: string; qty: number; rate: number }>>([
+    { product_id: '', qty: 1, rate: 0 }
+  ]);
+
+  const loadTodayStockInflows = () => {
+    try {
+      const localP = JSON.parse(localStorage.getItem('lk_purchases') || '[]');
+      const todayStr = new Date().toISOString().slice(0, 10);
+
+      // Find stock inflows logged today or stock inflows that start with 'STOCK-IN-'
+      const todayInflows = localP.filter((b: any) => {
+        const bDate = (b.purchase_date || b.created_at || '').slice(0, 10);
+        const isStockIn = b.bill_number && b.bill_number.startsWith('STOCK-IN-');
+        return isStockIn || bDate === todayStr;
+      });
+
+      if (todayInflows.length === 0) {
+        setAutoFilledNotice(null);
+        return false;
+      }
+
+      const itemsMap = new Map<string, { product_id: string; qty: number; rate: number }>();
+      let autoVendorName = '';
+
+      todayInflows.forEach((bill: any) => {
+        if (!autoVendorName && bill.supplier_name && !bill.supplier_name.includes('Direct Stock Inflow')) {
+          autoVendorName = bill.supplier_name;
+        }
+        const lineItems = bill.items || bill.purchase_items || [];
+        if (lineItems.length > 0) {
+          lineItems.forEach((item: any) => {
+            const pId = item.product_id || item.product?.id;
+            if (pId) {
+              const existing = itemsMap.get(pId);
+              const qty = Number(item.qty || item.quantity || 1);
+              const rate = Number(item.rate || item.price || 0);
+              if (existing) {
+                existing.qty += qty;
+                if (rate > 0) existing.rate = rate;
+              } else {
+                itemsMap.set(pId, { product_id: pId, qty, rate });
+              }
+            }
+          });
+        }
+      });
+
+      const itemsArray = Array.from(itemsMap.values());
+      if (itemsArray.length > 0) {
+        setBillItems(itemsArray);
+
+        // Auto select supplier if matched
+        if (autoVendorName && suppliers.length > 0) {
+          const matchSup = suppliers.find(s => s.supplier_name.toUpperCase().trim() === autoVendorName.toUpperCase().trim());
+          if (matchSup) {
+            setSupplierId(matchSup.id);
+            setVendorSearchQuery(matchSup.supplier_name);
+          }
+        }
+
+        setAutoFilledNotice(`⚡ Auto-loaded ${itemsArray.length} item(s) from today's stock entries! Simply enter Supplier Bill No. and save.`);
+        return true;
+      }
+    } catch (e) {}
+    return false;
+  };
+
+  useEffect(() => {
+    if (autoOpenModal) {
+      setModalOpen(true);
+      if (onModalClosed) onModalClosed();
+    }
+  }, [autoOpenModal]);
+
+  useEffect(() => {
+    if (modalOpen) {
+      if (billItems.length === 0 || (billItems.length === 1 && !billItems[0].product_id)) {
+        loadTodayStockInflows();
+      }
+    }
+  }, [modalOpen]);
+
   const selectedSup = useMemo(() => {
     return suppliers.find(s => s.id === supplierId);
   }, [suppliers, supplierId]);
@@ -86,6 +163,20 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
     );
   }, [suppliers, vendorSearchQuery]);
 
+  const todayUnbilledInflows = useMemo(() => {
+    try {
+      const localP = JSON.parse(localStorage.getItem('lk_purchases') || '[]');
+      const todayStr = new Date().toISOString().slice(0, 10);
+      return localP.filter((b: any) => {
+        const bDate = (b.purchase_date || b.created_at || '').slice(0, 10);
+        const isStockIn = b.bill_number && b.bill_number.startsWith('STOCK-IN-');
+        return isStockIn || bDate === todayStr;
+      });
+    } catch (e) {
+      return [];
+    }
+  }, [bills, modalOpen]);
+
   // Quick Vendor Registration State
   const [quickVendorModalOpen, setQuickVendorModalOpen] = useState(false);
   const [quickVendorFormData, setQuickVendorFormData] = useState({
@@ -96,11 +187,6 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
     dob: '',
     establishment_date: ''
   });
-
-  // Dynamic rows of items
-  const [billItems, setBillItems] = useState<Array<{ product_id: string; qty: number; rate: number }>>([
-    { product_id: '', qty: 1, rate: 0 }
-  ]);
 
   // Math totals
   const totalAmount = billItems.reduce((acc, curr) => acc + curr.qty * curr.rate, 0);
@@ -447,53 +533,74 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
         </button>
       </div>
 
+      {todayUnbilledInflows.length > 0 && (
+        <div className="bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-primary/10 border border-blue-500/30 p-4 rounded-xl shadow-xs flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4 animate-fade-in">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-blue-500/20 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold text-base shrink-0">
+              <i className="fa-solid fa-bolt text-amber-400"></i>
+            </div>
+            <div>
+              <h4 className="text-xs font-black uppercase text-foreground">Today's Stock Additions Ready for Billing</h4>
+              <p className="text-[11px] text-textMuted mt-0.5">Found stock inflows logged today. Auto-fill them directly into a new purchase bill with 1 click.</p>
+            </div>
+          </div>
+          <button 
+            type="button"
+            onClick={() => {
+              setModalOpen(true);
+              setTimeout(loadTodayStockInflows, 50);
+            }}
+            className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs rounded-lg shadow-sm transition active:scale-95 cursor-pointer whitespace-nowrap flex items-center gap-1.5"
+          >
+            <i className="fa-solid fa-bolt text-amber-300"></i> Create Purchase Bill with Today's Items
+          </button>
+        </div>
+      )}
+
       <div className="mb-4">
         <input type="text" className="w-full bg-secondary border border-border text-foreground rounded-lg p-3 text-sm focus:outline-none focus:border-primary font-semibold"
           placeholder="Search by product name, vendor name or HSN..."
           value={search} onChange={(e) => setSearch(e.target.value)} />
       </div>
 
-      <div className="bg-secondary border border-border/80 rounded-2xl shadow-sm overflow-x-auto">
-        <table className="w-full text-left text-sm text-textSecondary border-collapse">
+      <div className="bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-x-auto">
+        <table className="w-full text-left text-sm text-slate-700 dark:text-slate-200 border-collapse">
           <thead>
-            <tr className="border-b border-border/80 bg-slate-100/70 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 font-extrabold uppercase tracking-wider text-[11px]">
-              <th className="py-3.5 px-4">HSN Code</th>
-              <th className="py-3.5 px-4">Product Name</th>
-              <th className="py-3.5 px-4">Vendor Supplier</th>
-              <th className="py-3.5 px-4">Purchase Date</th>
-              <th className="py-3.5 px-4 text-center">Units</th>
-              <th className="py-3.5 px-4 text-right">Unit Rate (₹)</th>
-              <th className="py-3.5 px-4 text-right">Total Amount (₹)</th>
+            <tr className="border-b-2 border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/90 text-slate-700 dark:text-slate-200 font-extrabold uppercase tracking-wider text-[11px] divide-x divide-slate-200 dark:divide-slate-700 whitespace-nowrap">
+              <th className="py-2.5 px-3 text-center whitespace-nowrap">HSN Code</th>
+              <th className="py-2.5 px-3 text-center whitespace-nowrap">Product Name</th>
+              <th className="py-2.5 px-3 text-center whitespace-nowrap">Vendor Supplier</th>
+              <th className="py-2.5 px-3 text-center whitespace-nowrap">Purchase Date</th>
+              <th className="py-2.5 px-3 text-center whitespace-nowrap">Units</th>
+              <th className="py-2.5 px-3 text-center whitespace-nowrap">Unit Rate (₹)</th>
+              <th className="py-2.5 px-3 text-center whitespace-nowrap">Total Amount (₹)</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-border/40">
+          <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
             {filteredLines.length === 0 ? (
               <tr>
-                <td colSpan={7} className="py-8 text-center text-textMuted text-xs font-medium">
+                <td colSpan={7} className="py-8 text-center text-slate-400 text-xs font-medium">
                   <i className="fa-solid fa-cart-flatbed text-2xl text-slate-400 mb-2 block"></i>
                   No matching purchase records found.
                 </td>
               </tr>
             ) : filteredLines.map((line: any, idx: number) => (
-              <tr key={idx} className="hover:bg-slate-500/5 transition-colors group">
-                <td className="py-3.5 px-4 font-mono text-xs">
+              <tr key={idx} className="odd:bg-white dark:odd:bg-slate-900 even:bg-slate-50/70 dark:even:bg-slate-800/30 hover:bg-blue-50/60 dark:hover:bg-slate-800/70 transition-colors divide-x divide-slate-200 dark:divide-slate-800">
+                <td className="py-2.5 px-3 text-center font-mono text-xs">
                   <span className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded font-bold">
                     {line.hsn}
                   </span>
                 </td>
-                <td className="py-3.5 px-4 text-xs font-bold text-foreground uppercase">{line.product_name}</td>
-                <td className="py-3.5 px-4 text-xs">
-                  <span className="font-bold text-blue-600 dark:text-blue-400 uppercase flex items-center gap-1">
-                    <i className="fa-solid fa-building text-[10px] text-slate-400"></i>
-                    {line.vendor_name}
-                  </span>
+                <td className="py-2.5 px-3 text-center text-xs font-bold text-slate-900 dark:text-slate-100 uppercase">{line.product_name}</td>
+                <td className="py-2.5 px-3 text-center text-xs font-bold text-blue-600 dark:text-blue-400 uppercase">
+                  {line.vendor_name}
                 </td>
-                <td className="py-3.5 px-4 text-xs font-mono text-textSecondary">
+                <td className="py-2.5 px-3 text-center text-xs font-mono text-slate-900 dark:text-slate-100 font-semibold">
                   {new Date(line.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
                 </td>
-                <td className="py-3.5 px-4 text-center text-xs font-mono font-bold text-foreground">{line.qty}</td>
-                <td className="py-3.5 px-4 text-right text-xs font-mono text-foreground">₹{line.rate.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                <td className="py-3.5 px-4 text-right text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                <td className="py-2.5 px-3 text-center text-xs font-mono font-bold text-slate-900 dark:text-slate-100">{line.qty}</td>
+                <td className="py-2.5 px-3 text-center text-xs font-mono text-slate-900 dark:text-slate-100">₹{line.rate.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                <td className="py-2.5 px-3 text-center text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">
                   ₹{line.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </td>
               </tr>
@@ -525,6 +632,23 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
             {/* Scrollable Form Body */}
             <form onSubmit={handleSubmitBill} className="flex-1 min-h-0 overflow-y-auto pr-2 space-y-6 scrollbar-thin">
               
+              {/* Auto-filled notice banner */}
+              {autoFilledNotice && (
+                <div className="bg-blue-500/10 border border-blue-500/30 text-blue-600 dark:text-blue-400 px-4 py-2.5 rounded-xl text-xs font-bold flex items-center justify-between gap-2 animate-fade-in">
+                  <div className="flex items-center gap-2">
+                    <i className="fa-solid fa-bolt text-amber-400 text-sm"></i>
+                    <span>{autoFilledNotice}</span>
+                  </div>
+                  <button 
+                    type="button" 
+                    onClick={() => setAutoFilledNotice(null)}
+                    className="text-[10px] underline font-extrabold hover:text-foreground cursor-pointer"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              )}
+
               {/* Supplier and info */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div>
@@ -655,9 +779,19 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
                   <h4 className="text-xs font-bold text-textSecondary uppercase tracking-wider">Product Inventory Procured</h4>
-                  <button type="button" className="text-xs text-primary hover:text-primary/80 font-bold cursor-pointer" onClick={handleAddItemRow}>
-                    + Add Product Line
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <button 
+                      type="button" 
+                      onClick={loadTodayStockInflows}
+                      className="text-xs text-blue-600 dark:text-blue-400 font-extrabold hover:underline flex items-center gap-1 cursor-pointer"
+                      title="Auto-fill items added to stock today"
+                    >
+                      <i className="fa-solid fa-bolt text-amber-400"></i> Auto-Fill Today's Inflows
+                    </button>
+                    <button type="button" className="text-xs text-primary hover:text-primary/80 font-bold cursor-pointer" onClick={handleAddItemRow}>
+                      + Add Product Line
+                    </button>
+                  </div>
                 </div>
 
                 {/* Explicit Header Labels */}

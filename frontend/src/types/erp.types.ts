@@ -14,6 +14,9 @@ export type Product = Database['public']['Tables']['products']['Row'] & {
   size?: string | null;
   weight?: string | null;
   description?: string | null;
+  allow_decimal?: boolean | null;
+  allow_purchase_unit_selling?: boolean | null;
+  track_base_unit?: boolean | null;
 };
 export type SalesInvoice = Database['public']['Tables']['sales_invoices']['Row'];
 export type SalesItem = Database['public']['Tables']['sales_items']['Row'];
