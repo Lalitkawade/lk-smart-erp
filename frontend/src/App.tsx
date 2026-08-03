@@ -414,10 +414,13 @@ export default function App() {
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
         <div className="w-full max-w-md bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-2xl space-y-6">
           <div className="text-center space-y-2">
-            <h1 className="text-2xl font-bold text-white tracking-tight flex items-center justify-center gap-2">
-              <i className="fa-solid fa-building text-primary"></i> Enterprise Portal
+            <div className="flex justify-center mb-1">
+              <img src="/logo.png" alt="LK Smart ERP Logo" className="w-24 h-24 object-contain drop-shadow-2xl rounded-full border-2 border-amber-500/30 p-1 bg-slate-950" />
+            </div>
+            <h1 className="text-2xl font-black text-white tracking-tight">
+              LK Smart ERP
             </h1>
-            <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Inventory & Billing Management</p>
+            <p className="text-xs text-amber-400/90 font-bold uppercase tracking-widest">Inventory & Billing Management</p>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-4">
@@ -564,7 +567,8 @@ export default function App() {
             <div className="p-4 border-b border-border/40 flex justify-between items-center h-16">
               <div className="truncate pr-2">
                 <h2 className="text-xs font-black text-sidebar-active truncate uppercase tracking-widest flex items-center gap-2">
-                  <i className="fa-solid fa-building text-primary text-sm"></i> {companyName}
+                  <img src="/logo.png" alt="LK Logo" className="w-5 h-5 rounded-full object-cover shrink-0 border border-amber-500/40" />
+                  <span className="truncate">{companyName}</span>
                 </h2>
                 <span className="text-[9px] text-sidebar-text font-bold tracking-widest uppercase block mt-0.5">{businessType}</span>
               </div>
