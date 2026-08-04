@@ -32,7 +32,6 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
   // Purchase Bill Modal State
-  const [purchaseModalOpen, setPurchaseModalOpen] = useState(false);
   const [supplierId, setSupplierId] = useState('');
   const [billNumber, setBillNumber] = useState('');
   const [purchaseDate, setPurchaseDate] = useState(new Date().toISOString().slice(0, 10));
@@ -42,12 +41,8 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
   const [isPartialPayment, setIsPartialPayment] = useState(false);
   const [vendorSearchQuery, setVendorSearchQuery] = useState('');
   const [vendorDropdownOpen, setVendorDropdownOpen] = useState(false);
-  const [productRowSearch, setProductRowSearch] = useState<{ [key: number]: string }>({});
-  const [openProductRowDropdown, setOpenProductRowDropdown] = useState<number | null>(null);
-  const [billItems, setBillItems] = useState<Array<{ product_id: string; qty: number; rate: number }>>([
-    { product_id: '', qty: 1, rate: 0 }
-  ]);
-  const [autoFilledNotice, setAutoFilledNotice] = useState<string | null>(null);
+
+
 
   // Quick Vendor Registration State
   const [quickVendorModalOpen, setQuickVendorModalOpen] = useState(false);
@@ -73,88 +68,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
     );
   }, [suppliers, vendorSearchQuery]);
 
-  const todayUnbilledInflows = useMemo(() => {
-    try {
-      const localP = JSON.parse(localStorage.getItem('lk_purchases') || '[]');
-      return localP.filter((b: any) => Boolean(b.bill_number && String(b.bill_number).toUpperCase().startsWith('STOCK-IN')));
-    } catch (e) {
-      return [];
-    }
-  }, [purchaseModalOpen]);
 
-  const totalBillAmount = billItems.reduce((acc, curr) => acc + curr.qty * curr.rate, 0);
-  const effectivePaidAmount = isPartialPayment ? Math.min(totalBillAmount, Math.max(0, paidAmount)) : totalBillAmount;
-  const dueBillAmount = Math.max(0, totalBillAmount - effectivePaidAmount);
-
-  const loadTodayStockInflows = () => {
-    try {
-      const localP = JSON.parse(localStorage.getItem('lk_purchases') || '[]');
-      const todayInflows = localP.filter((b: any) => Boolean(b.bill_number && String(b.bill_number).toUpperCase().startsWith('STOCK-IN')));
-
-      if (todayInflows.length === 0) {
-        setAutoFilledNotice(null);
-        return false;
-      }
-
-      const itemsMap = new Map<string, { product_id: string; qty: number; rate: number }>();
-      const searchMap: Record<number, string> = {};
-      let autoVendorName = '';
-
-      todayInflows.forEach((bill: any) => {
-        if (!autoVendorName && bill.supplier_name && !bill.supplier_name.includes('Direct Stock Inflow')) {
-          autoVendorName = bill.supplier_name;
-        }
-        const lineItems = bill.items || bill.purchase_items || [];
-        if (lineItems.length > 0) {
-          lineItems.forEach((item: any) => {
-            const rawId = item.product_id || item.product?.id;
-            const rawName = item.product_name || item.product?.product_name || '';
-
-            const matched = products.find(p => 
-              (rawId && p.id === rawId) || 
-              (rawName && p.product_name && p.product_name.trim().toLowerCase() === rawName.trim().toLowerCase())
-            );
-
-            const canonicalId = matched ? matched.id : (rawId || rawName);
-            if (canonicalId) {
-              const existing = itemsMap.get(canonicalId);
-              const qty = Number(item.qty || item.quantity || 1);
-              const rate = Number(item.rate || item.price || (matched ? Number(matched.purchase_price) : 0));
-              if (existing) {
-                existing.qty += qty;
-                if (rate > 0) existing.rate = rate;
-              } else {
-                itemsMap.set(canonicalId, { product_id: canonicalId, qty, rate });
-              }
-            }
-          });
-        }
-      });
-
-      const itemsArray = Array.from(itemsMap.values());
-      if (itemsArray.length > 0) {
-        itemsArray.forEach((it, idx) => {
-          const matched = products.find(p => p.id === it.product_id || (p.product_name && p.product_name.trim().toLowerCase() === it.product_id.trim().toLowerCase()));
-          searchMap[idx] = matched ? matched.product_name : it.product_id;
-        });
-
-        setBillItems(itemsArray);
-        setProductRowSearch(searchMap);
-
-        if (autoVendorName && suppliers.length > 0) {
-          const matchSup = suppliers.find(s => s.supplier_name.toUpperCase().trim() === autoVendorName.toUpperCase().trim());
-          if (matchSup) {
-            setSupplierId(matchSup.id);
-            setVendorSearchQuery(matchSup.supplier_name);
-          }
-        }
-
-        setAutoFilledNotice(`⚡ Auto-loaded ${itemsArray.length} item(s) from today's stock entries! Enter Supplier Bill No. & Save.`);
-        return true;
-      }
-    } catch (e) {}
-    return false;
-  };
 
   const [hasBillDetails, setHasBillDetails] = useState(false);
 
@@ -173,47 +87,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
     setModalOpen(true);
   };
 
-  const handleAddItemRow = () => {
-    setBillItems(prev => [...prev, { product_id: '', qty: 1, rate: 0 }]);
-  };
 
-  const handleRemoveItemRow = (idx: number) => {
-    if (billItems.length === 1) return;
-    setBillItems(prev => prev.filter((_, i) => i !== idx));
-  };
-
-  const handleItemChange = (idx: number, field: string, val: string | number) => {
-    setBillItems(prev => prev.map((item, i) => {
-      if (i === idx) {
-        const newItem = { ...item, [field]: val };
-        if (field === 'product_id') {
-          const match = products.find(p => p.id === val || (p.product_name && p.product_name.trim().toLowerCase() === String(val).trim().toLowerCase()));
-          if (match) {
-            newItem.product_id = match.id;
-            newItem.rate = Number(match.purchase_price || 0);
-            setProductRowSearch(prevSearch => ({ ...prevSearch, [idx]: match.product_name }));
-          }
-        }
-        return newItem;
-      }
-      return item;
-    }));
-  };
-
-  const handleSelectProduct = (idx: number, product: Product) => {
-    setBillItems(prev => prev.map((item, i) => {
-      if (i === idx) {
-        return {
-          ...item,
-          product_id: product.id,
-          rate: Number(product.purchase_price || 0)
-        };
-      }
-      return item;
-    }));
-    setProductRowSearch(prev => ({ ...prev, [idx]: product.product_name }));
-    setOpenProductRowDropdown(null);
-  };
 
   const handleQuickCreateVendor = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -272,163 +146,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
     triggerToast(`Vendor "${formattedName}" registered & selected!`);
   };
 
-  const handleSubmitBill = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    let activeSup = suppliers.find(s => s.id === supplierId);
-    if (!activeSup) {
-      const fallbackName = vendorSearchQuery.trim().toUpperCase() || 'GENERAL VENDOR';
-      activeSup = suppliers.find(s => s.supplier_name.toUpperCase() === fallbackName) || {
-        id: 'sup-gen-' + Date.now(),
-        supplier_name: fallbackName,
-        phone: '',
-        outstanding: 0
-      };
-    }
 
-    const rawDate = purchaseDate ? new Date(purchaseDate) : new Date();
-    const safeIsoDate = isNaN(rawDate.getTime()) ? new Date().toISOString() : rawDate.toISOString();
-
-    const newBillObj = {
-      id: 'pb-' + Date.now(),
-      bill_number: billNumber.trim() || 'PB-' + Date.now().toString().slice(-5),
-      supplier_name: activeSup.supplier_name,
-      payment_mode: paymentMode,
-      ref_number: transactionId.trim() || null,
-      transaction_id: transactionId.trim() || null,
-      total_amount: totalBillAmount,
-      paid_amount: effectivePaidAmount,
-      due_amount: dueBillAmount,
-      purchase_date: safeIsoDate,
-      is_offline_draft: true,
-      items: billItems.map((item, idx) => {
-        const typedName = (productRowSearch[idx] || '').trim();
-        const p = products.find(prod => prod.id === item.product_id || (prod.product_name && typedName && prod.product_name.trim().toLowerCase() === typedName.toLowerCase()));
-        return {
-          product_id: p ? p.id : (item.product_id || 'prod-' + Date.now()),
-          product_name: p ? p.product_name : (typedName || 'Procured Material Item'),
-          qty: Number(item.qty || 1),
-          rate: Number(item.rate || 0)
-        };
-      })
-    };
-
-    try {
-      const localP = JSON.parse(localStorage.getItem('lk_purchases') || '[]');
-      const cleanedP = localP.filter((b: any) => !(b.bill_number && String(b.bill_number).toUpperCase().startsWith('STOCK-IN')));
-      localStorage.setItem('lk_purchases', JSON.stringify([newBillObj, ...cleanedP]));
-
-      const localProds: Product[] = JSON.parse(localStorage.getItem('lk_products') || '[]');
-      billItems.forEach((item, idx) => {
-        const typedName = (productRowSearch[idx] || '').trim();
-        const typedLower = typedName.toLowerCase();
-        const pIdx = localProds.findIndex(p => {
-          if (!p) return false;
-          if (p.id && item.product_id && p.id === item.product_id) return true;
-          if (p.product_name && item.product_id && p.product_name.trim().toLowerCase() === item.product_id.trim().toLowerCase()) return true;
-          if (p.product_name && typedLower && p.product_name.trim().toLowerCase() === typedLower) return true;
-          return false;
-        });
-
-        if (pIdx >= 0) {
-          localProds[pIdx].current_stock = Number(localProds[pIdx].current_stock || 0) + item.qty;
-          if (item.rate > 0) localProds[pIdx].purchase_price = item.rate;
-        } else if (typedName) {
-          const newProdObj: any = {
-            id: 'prod-' + Date.now() + '-' + idx,
-            tenant_id: tenantId,
-            product_name: typedName,
-            category_name: 'General',
-            brand_name: 'Generic',
-            unit: 'Nos',
-            purchase_price: item.rate,
-            selling_price: Math.round(item.rate * 1.2),
-            current_stock: item.qty,
-            min_stock_level: 10,
-            status: 'Active',
-            p_unit: 'Box',
-            s_unit: 'Nos',
-            pieces_per_pack: 1
-          };
-          localProds.unshift(newProdObj);
-        }
-      });
-      localStorage.setItem('lk_products', JSON.stringify(localProds));
-      window.dispatchEvent(new Event('storage'));
-      window.dispatchEvent(new Event('lk_inventory_updated'));
-
-      if (dueBillAmount > 0) {
-        const localSups = JSON.parse(localStorage.getItem('lk_suppliers') || '[]');
-        const sIdx = localSups.findIndex((s: any) => s.id === activeSup.id);
-        if (sIdx >= 0) {
-          localSups[sIdx].outstanding = Number(localSups[sIdx].outstanding || 0) + dueBillAmount;
-        }
-        localStorage.setItem('lk_suppliers', JSON.stringify(localSups));
-      }
-    } catch (e) {}
-
-    try {
-      await supabase.from('purchase_bills').delete().ilike('bill_number', 'STOCK-IN%');
-    } catch (e) {}
-
-    const isValidUUID = (id: any) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-    if (isValidUUID(tenantId)) {
-      try {
-        const { data: billRes } = await supabase
-          .from('purchase_bills')
-          .insert({
-            tenant_id: tenantId,
-            bill_number: newBillObj.bill_number,
-            supplier_name: activeSup.supplier_name,
-            payment_mode: paymentMode,
-            ref_number: transactionId.trim() || null,
-            transaction_id: transactionId.trim() || null,
-            total_amount: totalBillAmount,
-            paid_amount: effectivePaidAmount,
-            due_amount: dueBillAmount,
-            purchase_date: newBillObj.purchase_date
-          })
-          .select()
-          .single();
-
-        if (billRes && billRes.id) {
-          const localProds: Product[] = JSON.parse(localStorage.getItem('lk_products') || '[]');
-          for (const item of newBillObj.items) {
-            const validProdId = isValidUUID(item.product_id) ? item.product_id : null;
-            await supabase.from('purchase_items').insert({
-              bill_id: billRes.id,
-              product_id: validProdId,
-              qty: item.qty,
-              rate: item.rate,
-              amount: item.qty * item.rate
-            });
-
-            if (validProdId) {
-              const pObj = localProds.find(p => p.id === validProdId);
-              if (pObj) {
-                await supabase
-                  .from('products')
-                  .update({ current_stock: Number(pObj.current_stock || 0), purchase_price: Number(pObj.purchase_price || 0) })
-                  .eq('id', validProdId);
-              }
-            }
-          }
-        }
-      } catch (err) {}
-    }
-
-    setPurchaseModalOpen(false);
-    setBillItems([{ product_id: '', qty: 1, rate: 0 }]);
-    setProductRowSearch({});
-    setSupplierId('');
-    setVendorSearchQuery('');
-    setBillNumber('');
-    setTransactionId('');
-    setPaidAmount(0);
-    setIsPartialPayment(false);
-    setAutoFilledNotice(null);
-    triggerToast('Procurement Bill saved! Stock levels & vendor ledgers updated.');
-  };
 
   useEffect(() => {
     if (autoOpenPurchaseModal) {
@@ -506,7 +224,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
             const k = rs.invoice_number || rs.id;
             if (k) {
               const existingLocal = salesMap.get(k);
-              const rsItems = rs.items || rs.sales_items || [];
+              const rsItems = rs.items || (rs as any).sales_items || [];
               const localItems = existingLocal?.items || existingLocal?.sales_items || [];
               salesMap.set(k, {
                 ...existingLocal,
@@ -591,7 +309,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
             const k = rp.bill_number || rp.id;
             if (k) {
               const existingLocal = purchMap.get(k);
-              const rpItems = rp.items || rp.purchase_items || [];
+              const rpItems = rp.items || (rp as any).purchase_items || [];
               const localItems = existingLocal?.items || existingLocal?.purchase_items || [];
               purchMap.set(k, {
                 ...existingLocal,
@@ -779,8 +497,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
     }
   };
 
-  // Shorthand reference to active item (e.g. productItems[0])
-  const formData = productItems[0] || createDefaultProductItem();
+
 
   const [isEditingBaseStock, setIsEditingBaseStock] = useState(false);
   const [isEditingTax, setIsEditingTax] = useState(false);
@@ -868,7 +585,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
   };
 
   const [purchases, setPurchases] = useState<any[]>([]);
-  const [sales, setSales] = useState<any[]>([]);
+  const [_sales, setSales] = useState<any[]>([]);
 
   useEffect(() => {
     const loadTransactions = () => {
@@ -961,17 +678,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
     setModalOpen(true);
   };
 
-  // Detect matching/similar products in catalog for duplicate prevention & live suggestions
-  const similarProducts = useMemo(() => {
-    if (editingProduct || !formData.product_name.trim() || formData.product_name.trim().length < 2) return [];
-    const query = formData.product_name.trim().toLowerCase();
-    return products.filter(p => {
-      const pName = p.product_name.toLowerCase();
-      const barcode = p.barcode?.toLowerCase() || '';
-      const sku = p.sku?.toLowerCase() || '';
-      return pName.includes(query) || barcode.includes(query) || sku.includes(query);
-    }).slice(0, 5);
-  }, [formData.product_name, products, editingProduct]);
+
 
   // Log stock inflow history for product transaction ledger
   const logInflowPurchaseHistory = async (
@@ -1074,26 +781,36 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
           }
         }
 
-        const oldStock = editingProduct ? Number(editingProduct.current_stock || 0) : 0;
-        const directStockIncrease = editingProduct ? Math.max(0, Number(item.current_stock || 0) - oldStock) : 0;
-        const additionalInput = Number(item.additional_stock || 0);
-
-        const addedStockInflow = editingProduct
-          ? (additionalInput > 0 ? additionalInput : directStockIncrease)
-          : (isMergeOperation ? Number(item.current_stock || 0) + additionalInput : Number(item.current_stock || 0));
-
-        const finalStock = editingProduct
-          ? (additionalInput > 0 ? (oldStock + additionalInput) : Number(item.current_stock || 0))
-          : (isMergeOperation ? (existingStock + addedStockInflow) : addedStockInflow);
-
         const conversionFactor = Math.max(1, Number(item.pieces_per_pack || 1));
-        const pPrice = Number(item.purchase_price || 0); // Price per Purchase Unit (e.g. ₹100 / Box)
-        const sPrice = Number(item.selling_price || 0);   // Price per Selling Unit (e.g. ₹2 / Nos)
+        const pPrice = Number(item.purchase_price || 0); // Price per Purchase Unit (e.g. ₹300 / Box)
+        const sPrice = Number(item.selling_price || 0);   // Price per Selling Unit (e.g. ₹5 / Pcs)
         const calculatedBaseUnitCost = conversionFactor > 0 ? (pPrice / conversionFactor) : pPrice;
 
-        const itemPurchaseRate = pPrice;
-        // Total Bill Cost for purchase inflow = (Added Base Units / Conversion Factor) * Purchase Price per Purchase Unit
-        const itemLineCost = (addedStockInflow / conversionFactor) * pPrice;
+        const currentBaseStockInDb = editingProduct ? Number(editingProduct.current_stock || 0) : (isMergeOperation ? existingStock : 0);
+        
+        // Purchase Quantity entered in Purchase Unit (e.g. 1 Box)
+        const purchaseQtyInput = Number(item.additional_stock || 0);
+        // Base Stock units added = Purchase Qty * Conversion Factor
+        const baseUnitsAdded = purchaseQtyInput * conversionFactor;
+
+        // When creating a new product, if user didn't enter additional_stock, check item.current_stock (which is also in Purchase Units)
+        const rawNewProductPurchaseQty = Number(item.current_stock || 0);
+        const newProductBaseStockAdded = purchaseQtyInput > 0 ? baseUnitsAdded : (rawNewProductPurchaseQty * conversionFactor);
+
+        const finalStock = editingProduct
+          ? (purchaseQtyInput > 0 
+              ? (currentBaseStockInDb + baseUnitsAdded) 
+              : Number(item.current_stock || currentBaseStockInDb))
+          : (isMergeOperation 
+              ? (existingStock + newProductBaseStockAdded) 
+              : newProductBaseStockAdded);
+
+        const addedStockInflowBaseUnits = purchaseQtyInput > 0 
+          ? baseUnitsAdded 
+          : (editingProduct ? Math.max(0, finalStock - currentBaseStockInDb) : finalStock);
+
+        const purchasePacksAdded = conversionFactor > 0 ? (addedStockInflowBaseUnits / conversionFactor) : addedStockInflowBaseUnits;
+        const itemLineCost = purchasePacksAdded * pPrice;
         totalBillCost += itemLineCost;
 
         const productPayload = {
@@ -1136,23 +853,24 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
 
         const savedProd = saveProduct(productPayload as any);
         const effectiveProdId = savedProd?.id || targetProductId;
+        const packSellingRate = sPrice * conversionFactor;
 
         savedBillItems.push({
           product_id: effectiveProdId || 'prod-' + Date.now() + '-' + i,
           product_name: item.product_name,
-          qty: addedStockInflow,
-          rate: itemPurchaseRate,
+          qty: addedStockInflowBaseUnits,
+          rate: pPrice,
           amount: itemLineCost
         });
 
-        if (effectiveProdId && (addedStockInflow > 0 || (editingProduct && editingProduct.purchase_price !== item.purchase_price))) {
+        if (effectiveProdId && (addedStockInflowBaseUnits > 0 || (editingProduct && editingProduct.purchase_price !== item.purchase_price))) {
           logInflowPurchaseHistory(
             tenantId,
             effectiveProdId,
             item.product_name,
-            addedStockInflow,
-            item.purchase_price,
-            packPrice,
+            addedStockInflowBaseUnits,
+            pPrice,
+            packSellingRate,
             activeSup ? activeSup.supplier_name : 'Direct Stock Inflow'
           ).catch(() => {});
         }
@@ -1197,18 +915,20 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
 
         const isValidUUID = (id: any) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
         if (isValidUUID(tenantId)) {
-          supabase.from('purchase_bills').insert({
-            tenant_id: tenantId,
-            bill_number: newBillObj.bill_number,
-            supplier_name: activeSup.supplier_name,
-            payment_mode: paymentMode,
-            ref_number: transactionId.trim() || null,
-            transaction_id: transactionId.trim() || null,
-            total_amount: totalBillCost,
-            paid_amount: effectivePaid,
-            due_amount: dueAmount,
-            purchase_date: newBillObj.purchase_date
-          }).select().single().then(({ data: billRes }) => {
+          try {
+            const { data: billRes } = await supabase.from('purchase_bills').insert({
+              tenant_id: tenantId,
+              bill_number: newBillObj.bill_number,
+              supplier_name: activeSup.supplier_name,
+              payment_mode: paymentMode,
+              ref_number: transactionId.trim() || null,
+              transaction_id: transactionId.trim() || null,
+              total_amount: totalBillCost,
+              paid_amount: effectivePaid,
+              due_amount: dueAmount,
+              purchase_date: newBillObj.purchase_date
+            }).select().single();
+
             if (billRes && billRes.id) {
               const rows = savedBillItems.map(bi => ({
                 bill_id: billRes.id,
@@ -1217,9 +937,9 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                 rate: bi.rate,
                 amount: bi.amount
               }));
-              supabase.from('purchase_items').insert(rows);
+              await supabase.from('purchase_items').insert(rows);
             }
-          }).catch(() => {});
+          } catch (e) {}
         }
       }
 
@@ -1649,7 +1369,6 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
               const name = p?.product_name || 'Unnamed Product';
               const pUnit = p.p_unit || 'Box';
               const sUnit = p.s_unit || p.unit || 'Nos';
-              const baseUnit = p.unit || p.s_unit || 'Nos';
               const piecesPerPack = Math.max(1, Number(p.pieces_per_pack || 1));
 
               const isDualUnit = piecesPerPack > 1 || (pUnit && sUnit && pUnit.toLowerCase() !== sUnit.toLowerCase());
@@ -1822,6 +1541,16 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                         >
                           <i className="fa-solid fa-pen-to-square text-[11px]"></i>
                           <span>Edit</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteProduct(p.id)}
+                          className="text-xs bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-600 hover:text-white border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 font-extrabold px-2.5 py-1.5 rounded-lg transition inline-flex items-center gap-1 cursor-pointer shadow-2xs"
+                          title="Delete this product item"
+                        >
+                          <i className="fa-solid fa-trash text-[11px]"></i>
+                          <span>Delete</span>
                         </button>
                       </div>
                     </td>
@@ -2360,8 +2089,6 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                   const costPerSellingUnit = isDualUnit ? (item.purchase_price / piecesPerPack) : item.purchase_price;
                   const marginPerSellingUnit = item.selling_price - costPerSellingUnit;
                   const marginPercent = costPerSellingUnit > 0 ? (marginPerSellingUnit / costPerSellingUnit) * 100 : 0;
-                  const totalProfitPerPack = isDualUnit ? (marginPerSellingUnit * piecesPerPack) : marginPerSellingUnit;
-
                   // Collapsed View Card
                   if (item.isCollapsed) {
                     return (
@@ -2714,7 +2441,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                             <div>
                               <div className="flex justify-between items-center mb-1">
                                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                                  Current Base Stock {isEditingBaseStock ? '(Correction Mode)' : ''}
+                                  Current Base Stock {isEditingBaseStock ? '(Direct Audit Correction)' : ''}
                                 </label>
                                 <button
                                   type="button"
@@ -2722,59 +2449,157 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                                   className="text-[10px] font-extrabold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer"
                                 >
                                   <i className={`fa-solid ${isEditingBaseStock ? 'fa-lock' : 'fa-pen-to-square'}`}></i> 
-                                  {isEditingBaseStock ? 'Lock Field' : '✏️ Correct / Edit Base Stock'}
+                                  {isEditingBaseStock ? 'Lock Field' : '✏️ Audit Base Stock Correction'}
                                 </button>
                               </div>
-                              <input 
-                                type="number" 
-                                step="any"
-                                disabled={!isEditingBaseStock}
-                                className={`w-full border rounded-xl p-2.5 font-mono font-bold transition text-xs ${
-                                  isEditingBaseStock 
-                                    ? 'bg-white dark:bg-slate-900 border-blue-600 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-600/20' 
-                                    : 'bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-500 cursor-not-allowed opacity-80'
-                                }`}
-                                value={item.current_stock === 0 ? '' : item.current_stock} 
-                                placeholder="0"
-                                onFocus={(e) => e.target.select()}
-                                onChange={(e) => updateProductItem(index, { current_stock: e.target.value === '' ? 0 : Number(e.target.value) })} 
-                              />
+                              <div className="relative">
+                                <input 
+                                  type="number" 
+                                  step="any"
+                                  disabled={!isEditingBaseStock}
+                                  className={`w-full border rounded-xl p-2.5 font-mono font-bold transition text-xs pr-14 ${
+                                    isEditingBaseStock 
+                                      ? 'bg-white dark:bg-slate-900 border-blue-600 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-600/20' 
+                                      : 'bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-500 cursor-not-allowed opacity-80'
+                                  }`}
+                                  value={item.current_stock === 0 ? '' : item.current_stock} 
+                                  placeholder="0"
+                                  onFocus={(e) => e.target.select()}
+                                  onChange={(e) => updateProductItem(index, { current_stock: e.target.value === '' ? 0 : Number(e.target.value) })} 
+                                />
+                                <span className="absolute right-3 top-2.5 text-xs font-bold text-slate-400 font-mono uppercase">
+                                  {item.unit || 'Pcs'}
+                                </span>
+                              </div>
                             </div>
+
                             <div>
-                              <label className="block text-xs font-extrabold text-blue-600 dark:text-blue-400 mb-1">➕ Add New Inflow Stock</label>
-                              <input 
-                                type="number" 
-                                step="any" 
-                                min="0" 
-                                className="w-full bg-white dark:bg-slate-900 border border-blue-500 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none font-mono font-extrabold shadow-xs"
-                                placeholder="Enter qty to add (e.g. 20)..."
-                                value={item.additional_stock === 0 ? '' : item.additional_stock} 
-                                onFocus={(e) => e.target.select()}
-                                onChange={(e) => updateProductItem(index, { additional_stock: e.target.value === '' ? 0 : Number(e.target.value) })} 
-                              />
+                              <label className="block text-xs font-extrabold text-blue-600 dark:text-blue-400 mb-1 flex items-center justify-between">
+                                <span>➕ Purchase Quantity (Stock Inward)</span>
+                                <span className="text-[10px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-950 px-1.5 py-0.5 rounded border border-blue-200 dark:border-blue-800 uppercase">
+                                  in {item.p_unit || 'Box'}
+                                </span>
+                              </label>
+                              <div className="relative">
+                                <input 
+                                  type="number" 
+                                  step="any" 
+                                  min="0" 
+                                  className="w-full bg-white dark:bg-slate-900 border-2 border-blue-500 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none font-mono font-extrabold shadow-xs pr-16"
+                                  placeholder={`Enter qty in ${item.p_unit || 'Box'} (e.g. 1)...`}
+                                  value={item.additional_stock === 0 ? '' : item.additional_stock} 
+                                  onFocus={(e) => e.target.select()}
+                                  onChange={(e) => updateProductItem(index, { additional_stock: e.target.value === '' ? 0 : Number(e.target.value) })} 
+                                />
+                                <span className="absolute right-3 top-2.5 text-xs font-black text-blue-600 dark:text-blue-400 font-mono uppercase">
+                                  {item.p_unit || 'Box'}
+                                </span>
+                              </div>
                             </div>
-                            <div className="col-span-1 sm:col-span-2 bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 p-2.5 rounded-xl text-xs font-bold text-blue-900 dark:text-blue-200 flex justify-between items-center flex-wrap gap-2">
-                              <span>Updated Total Stock after saving:</span>
-                              <span className="font-mono text-sm font-black text-blue-700 dark:text-blue-300">
-                                {item.current_stock || 0} + {item.additional_stock || 0} = {Number(item.current_stock || 0) + Number(item.additional_stock || 0)} {item.unit || 'Nos'}
-                              </span>
+
+                            {/* Live Calculation Preview Card for Editing Stock */}
+                            <div className="col-span-1 sm:col-span-2 bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white border-2 border-blue-500/40 p-3.5 rounded-2xl space-y-2.5 font-mono text-xs shadow-md">
+                              <div className="flex justify-between items-center border-b border-blue-500/30 pb-2 flex-wrap gap-2">
+                                <span className="font-extrabold text-blue-300 uppercase tracking-wide flex items-center gap-2 text-[11px]">
+                                  <i className="fa-solid fa-boxes-packing text-amber-400"></i> Purchase Inward Stock Calculation
+                                </span>
+                                <span className="text-[10px] font-bold text-emerald-300 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-500/40">
+                                  Purchase Qty × Conversion Factor
+                                </span>
+                              </div>
+
+                              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center text-[11px]">
+                                <div className="bg-slate-800/90 p-2 rounded-xl border border-slate-700">
+                                  <span className="text-slate-400 block text-[9.5px] font-sans">Current Stock:</span>
+                                  <strong className="text-slate-100 text-xs">{Number(item.current_stock || 0)} {item.unit || 'Pcs'}</strong>
+                                </div>
+
+                                <div className="bg-slate-800/90 p-2 rounded-xl border border-slate-700">
+                                  <span className="text-slate-400 block text-[9.5px] font-sans">Purchase:</span>
+                                  <strong className="text-blue-300 text-xs">+{Number(item.additional_stock || 0)} {item.p_unit || 'Box'}</strong>
+                                </div>
+
+                                <div className="bg-slate-800/90 p-2 rounded-xl border border-slate-700">
+                                  <span className="text-slate-400 block text-[9.5px] font-sans">Conversion:</span>
+                                  <strong className="text-amber-300 text-xs">1 {item.p_unit || 'Box'} = {item.pieces_per_pack || 1} {item.unit || 'Pcs'}</strong>
+                                </div>
+
+                                <div className="bg-slate-800/90 p-2 rounded-xl border border-slate-700">
+                                  <span className="text-slate-400 block text-[9.5px] font-sans">Stock Added:</span>
+                                  <strong className="text-emerald-400 text-xs">
+                                    +{Number(item.additional_stock || 0) * Number(item.pieces_per_pack || 1)} {item.unit || 'Pcs'}
+                                  </strong>
+                                </div>
+
+                                <div className="col-span-2 sm:col-span-1 bg-emerald-950/80 p-2 rounded-xl border border-emerald-500/60">
+                                  <span className="text-emerald-300 block text-[9.5px] font-sans font-bold">Updated Stock:</span>
+                                  <strong className="text-emerald-400 text-xs font-black">
+                                    {Number(item.current_stock || 0) + (Number(item.additional_stock || 0) * Number(item.pieces_per_pack || 1))} {item.unit || 'Pcs'}
+                                  </strong>
+                                </div>
+                              </div>
                             </div>
                           </>
                         ) : (
-                          <div>
-                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
-                              <span>Initial Stock *</span>
-                              <span className="text-[10px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-950 px-1.5 py-0.5 rounded border border-blue-200 dark:border-blue-800">in {item.unit || 'Base Unit'}</span>
-                            </label>
-                            <input 
-                              type="number" 
-                              className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none font-mono font-bold shadow-xs" 
-                              required
-                              value={item.current_stock === 0 ? '' : item.current_stock} 
-                              placeholder="0"
-                              onFocus={(e) => e.target.select()}
-                              onChange={(e) => updateProductItem(index, { current_stock: e.target.value === '' ? 0 : Number(e.target.value) })} 
-                            />
+                          <div className="col-span-1 sm:col-span-2 space-y-3">
+                            <div>
+                              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
+                                <span>📦 Purchase Quantity (Opening Stock) *</span>
+                                <span className="text-[10px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-950 px-1.5 py-0.5 rounded border border-blue-200 dark:border-blue-800 uppercase">
+                                  in {item.p_unit || 'Box'}
+                                </span>
+                              </label>
+                              <div className="relative">
+                                <input 
+                                  type="number" 
+                                  step="any"
+                                  min="0"
+                                  className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none font-mono font-bold shadow-xs pr-16" 
+                                  required
+                                  value={item.additional_stock || item.current_stock || ''} 
+                                  placeholder={`Enter opening qty in ${item.p_unit || 'Box'}...`}
+                                  onFocus={(e) => e.target.select()}
+                                  onChange={(e) => {
+                                    const val = e.target.value === '' ? 0 : Number(e.target.value);
+                                    updateProductItem(index, { additional_stock: val, current_stock: val });
+                                  }} 
+                                />
+                                <span className="absolute right-3 top-2.5 text-xs font-bold text-slate-500 font-mono uppercase">
+                                  {item.p_unit || 'Box'}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Live Conversion Preview Card for New Product */}
+                            <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white border border-blue-500/40 p-3.5 rounded-2xl space-y-2 font-mono text-xs shadow-md">
+                              <div className="flex justify-between items-center border-b border-blue-500/30 pb-1.5 flex-wrap gap-2">
+                                <span className="font-extrabold text-blue-300 uppercase tracking-wide flex items-center gap-2 text-[11px]">
+                                  <i className="fa-solid fa-calculator text-amber-400"></i> Opening Base Stock Calculation
+                                </span>
+                                <span className="text-[10px] font-bold text-emerald-300 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-500/40">
+                                  Purchase Qty × Conversion Factor
+                                </span>
+                              </div>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-center text-[11px]">
+                                <div className="bg-slate-800/90 p-2 rounded-xl border border-slate-700">
+                                  <span className="text-slate-400 block text-[9.5px] font-sans">Purchase Quantity:</span>
+                                  <strong className="text-blue-300 text-xs">{Number(item.additional_stock || item.current_stock || 0)} {item.p_unit || 'Box'}</strong>
+                                </div>
+
+                                <div className="bg-slate-800/90 p-2 rounded-xl border border-slate-700">
+                                  <span className="text-slate-400 block text-[9.5px] font-sans">Conversion Rule:</span>
+                                  <strong className="text-amber-300 text-xs">1 {item.p_unit || 'Box'} = {item.pieces_per_pack || 1} {item.unit || 'Pcs'}</strong>
+                                </div>
+
+                                <div className="bg-emerald-950/80 p-2 rounded-xl border border-emerald-500/60">
+                                  <span className="text-emerald-300 block text-[9.5px] font-sans font-bold">Initial Base Stock Saved:</span>
+                                  <strong className="text-emerald-400 text-xs font-black">
+                                    {Number(item.additional_stock || item.current_stock || 0) * Number(item.pieces_per_pack || 1)} {item.unit || 'Pcs'}
+                                  </strong>
+                                </div>
+                              </div>
+                            </div>
                           </div>
                         )}
                         <div>
@@ -2957,37 +2782,83 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
               </button>
             </div>
 
-            {/* Stock Inflows & Purchases History Table */}
+            {/* History Tab Selector */}
+            <div className="flex items-center gap-2 border-b border-border pb-2">
+              <button
+                type="button"
+                onClick={() => setHistoryTab('purchases')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition cursor-pointer ${
+                  historyTab === 'purchases'
+                    ? 'bg-primary text-white shadow-xs'
+                    : 'bg-background text-textSecondary hover:text-foreground border border-border'
+                }`}
+              >
+                📦 Purchase Inflows ({prodPurchaseHistory.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setHistoryTab('sales')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition cursor-pointer ${
+                  historyTab === 'sales'
+                    ? 'bg-primary text-white shadow-xs'
+                    : 'bg-background text-textSecondary hover:text-foreground border border-border'
+                }`}
+              >
+                🛒 Sales Outflows ({prodSalesHistory.length})
+              </button>
+            </div>
+
+            {/* Stock Inflows & Sales History Table */}
             <div className="overflow-x-auto border border-border rounded-xl bg-background/25">
               <table className="w-full text-left text-xs text-textSecondary">
                 <thead>
                   <tr className="border-b border-border bg-background/50 text-textPrimary uppercase font-extrabold">
                     <th className="p-3">Sr. No.</th>
-                    <th className="p-3">Inflow Date</th>
-                    <th className="p-3">Ref No.</th>
-                    <th className="p-3">Qty Added</th>
-                    <th className="p-3">Purchase Price (Cost)</th>
-                    <th className="p-3">Selling Price (Retail)</th>
-                    <th className="p-3">Vendor / Source</th>
+                    <th className="p-3">{historyTab === 'purchases' ? 'Inflow Date' : 'Sale Date'}</th>
+                    <th className="p-3">Ref / Invoice No.</th>
+                    <th className="p-3">{historyTab === 'purchases' ? 'Qty Added' : 'Qty Sold'}</th>
+                    <th className="p-3">Rate (₹)</th>
+                    <th className="p-3">Total Amount</th>
+                    <th className="p-3">{historyTab === 'purchases' ? 'Vendor / Source' : 'Customer / Mode'}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {prodPurchaseHistory.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="p-6 text-center text-textMuted font-medium">No purchase inflow history logged for this product.</td>
-                    </tr>
-                  ) : (
-                    prodPurchaseHistory.map((h, i) => (
-                      <tr key={i} className="border-b border-border hover:bg-slate-100/5 transition font-medium">
-                        <td className="p-3 font-mono font-bold text-foreground">{i + 1}</td>
-                        <td className="p-3">{new Date(h.date).toLocaleString()}</td>
-                        <td className="p-3 font-mono text-[11px] text-textMuted">{h.bill_number}</td>
-                        <td className="p-3 font-mono font-extrabold text-primary">+{h.qty} {selectedHistoryProduct.s_unit || 'Pcs'}</td>
-                        <td className="p-3 font-mono font-bold text-foreground">₹{Number(h.rate || 0).toFixed(2)}</td>
-                        <td className="p-3 font-mono font-bold text-primary">₹{Number(h.selling_price || selectedHistoryProduct.selling_price).toFixed(2)}</td>
-                        <td className="p-3 font-semibold uppercase text-foreground">{h.supplier_name}</td>
+                  {historyTab === 'purchases' ? (
+                    prodPurchaseHistory.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="p-6 text-center text-textMuted font-medium">No purchase inflow history logged for this product.</td>
                       </tr>
-                    ))
+                    ) : (
+                      prodPurchaseHistory.map((h, i) => (
+                        <tr key={i} className="border-b border-border hover:bg-slate-100/5 transition font-medium">
+                          <td className="p-3 font-mono font-bold text-foreground">{i + 1}</td>
+                          <td className="p-3">{new Date(h.date).toLocaleString()}</td>
+                          <td className="p-3 font-mono text-[11px] text-textMuted">{h.bill_number}</td>
+                          <td className="p-3 font-mono font-extrabold text-primary">+{h.qty} {selectedHistoryProduct.s_unit || 'Pcs'}</td>
+                          <td className="p-3 font-mono font-bold text-foreground">₹{Number(h.rate || 0).toFixed(2)}</td>
+                          <td className="p-3 font-mono font-bold text-primary">₹{Number(h.amount || (h.qty * h.rate)).toFixed(2)}</td>
+                          <td className="p-3 font-semibold uppercase text-foreground">{h.supplier_name}</td>
+                        </tr>
+                      ))
+                    )
+                  ) : (
+                    prodSalesHistory.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="p-6 text-center text-textMuted font-medium">No sales invoice history logged for this product.</td>
+                      </tr>
+                    ) : (
+                      prodSalesHistory.map((s, i) => (
+                        <tr key={i} className="border-b border-border hover:bg-slate-100/5 transition font-medium">
+                          <td className="p-3 font-mono font-bold text-foreground">{i + 1}</td>
+                          <td className="p-3">{new Date(s.date).toLocaleString()}</td>
+                          <td className="p-3 font-mono text-[11px] text-textMuted">{s.id}</td>
+                          <td className="p-3 font-mono font-extrabold text-rose-500">-{s.qty} {selectedHistoryProduct.s_unit || 'Pcs'}</td>
+                          <td className="p-3 font-mono font-bold text-foreground">₹{Number(s.rate || 0).toFixed(2)}</td>
+                          <td className="p-3 font-mono font-bold text-emerald-600 dark:text-emerald-400">₹{Number(s.amount || (s.qty * s.rate)).toFixed(2)}</td>
+                          <td className="p-3 font-semibold uppercase text-foreground">{s.customer_name} ({s.payment_mode})</td>
+                        </tr>
+                      ))
+                    )
                   )}
                 </tbody>
               </table>

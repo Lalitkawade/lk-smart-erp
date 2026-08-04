@@ -33,6 +33,8 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
     setTransactionId,
     addToCart,
     updateCartQty,
+    updateCartRate,
+    updateCartUnit,
     removeFromCart,
     processCheckout,
     sales
@@ -578,37 +580,59 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                 ) : (
                   <div className="grid grid-cols-1 gap-2.5 max-h-[60vh] overflow-y-auto pr-1 scrollbar-thin">
                     {filteredPOSProducts.map(p => {
-                      const { piecesPerPack, piecePrice, packPrice } = getProductUnitRates(p);
-                      const hasLoose = piecesPerPack > 1;
-                      const stockVal = Number(p.current_stock || 0);
-                      const unitLabel = p.s_unit || p.unit || 'Pcs';
+                      const pUnit = p.p_unit || 'Box';
+                      const sUnit = p.s_unit || p.unit || 'Pcs';
+                      const baseUnit = p.unit || p.s_unit || 'Pcs';
+                      const piecesPerPack = Math.max(1, Number(p.pieces_per_pack || 1));
+                      const isDualUnit = piecesPerPack > 1 || (pUnit.toLowerCase() !== sUnit.toLowerCase());
+
+                      const { piecePrice, packPrice } = getProductUnitRates(p);
+                      const stockVal = Number(p.current_stock || 0); // Stock in Base Stock Unit
+                      const packsStockVal = piecesPerPack > 0 ? (stockVal / piecesPerPack) : stockVal;
+
                       return (
-                        <div key={p.id} className="p-3 bg-background/40 border border-border rounded-lg flex justify-between items-center transition gap-2 hover:border-primary/40">
-                          <div>
-                            <div className="text-xs font-bold text-foreground uppercase truncate max-w-[180px]" title={p.product_name}>{p.product_name}</div>
-                            <div className="flex gap-2 items-center text-[10px] text-textMuted font-semibold mt-0.5">
-                              <span>Stock: <span className="font-bold text-foreground">{stockVal.toFixed(2).replace(/\.00$/, '')}</span> {unitLabel}</span>
-                            </div>
-                            <div className="flex gap-2 text-xs font-extrabold mt-1">
-                              <span className="text-primary">Pack: ₹{packPrice.toFixed(2)}</span>
-                              {hasLoose && (
-                                <span className="text-blue-400 text-[10px]">
-                                  Pce: ₹{piecePrice.toFixed(2)}
-                                </span>
-                              )}
+                        <div key={p.id} className="p-3 bg-background/40 border border-border rounded-xl space-y-2 hover:border-primary/40 transition shadow-xs">
+                          <div className="flex justify-between items-start gap-2">
+                            <div>
+                              <div className="text-xs font-black text-foreground uppercase truncate max-w-[200px]" title={p.product_name}>{p.product_name}</div>
+                              <div className="flex gap-2 items-center text-[10px] text-textMuted font-semibold mt-0.5 font-mono">
+                                <span>Stock: <strong className="text-emerald-600 dark:text-emerald-400 font-bold">{stockVal.toFixed(0)} {baseUnit}</strong></span>
+                                {isDualUnit && piecesPerPack > 1 && (
+                                  <span className="text-[9.5px] text-blue-500 font-bold">
+                                    ({packsStockVal.toFixed(1).replace(/\.0$/, '')} {pUnit})
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </div>
-                          <div className="flex gap-1.5">
-                            <button type="button" className="py-1 px-2.5 bg-primary hover:bg-primary/90 text-white font-extrabold rounded-lg text-[10px] uppercase transition shadow-sm active:scale-95 cursor-pointer"
-                              onClick={() => handleCartAdd(p, false)}>
-                              + Pack
-                            </button>
-                            {hasLoose && (
-                              <button type="button" className="py-1 px-2 bg-blue-500 hover:bg-blue-400 text-slate-950 font-extrabold rounded-lg text-[10px] uppercase transition shadow-sm active:scale-95"
-                                onClick={() => handleCartAdd(p, true)}>
-                                + Pce
+
+                          <div className="flex justify-between items-center text-[11px] font-mono border-t border-border/40 pt-1.5 flex-wrap gap-1">
+                            <span className="text-primary font-bold">Pack: ₹{packPrice.toFixed(2)} / {pUnit}</span>
+                            {isDualUnit && (
+                              <span className="text-blue-500 font-bold">Piece: ₹{piecePrice.toFixed(2)} / {sUnit}</span>
+                            )}
+                          </div>
+
+                          {/* Dynamic Action Buttons */}
+                          <div className="flex items-center gap-1.5 pt-1">
+                            {isDualUnit && (
+                              <button 
+                                type="button" 
+                                className="flex-1 py-1.5 px-2.5 bg-primary hover:bg-primary/90 text-white font-extrabold rounded-lg text-[10px] uppercase transition shadow-sm active:scale-95 cursor-pointer font-mono text-center truncate"
+                                onClick={() => handleCartAdd(p, false)}
+                                title={`Add 1 ${pUnit} (${piecesPerPack} ${sUnit})`}
+                              >
+                                + 1 {pUnit}
                               </button>
                             )}
+                            <button 
+                              type="button" 
+                              className="flex-1 py-1.5 px-2 bg-blue-600 hover:bg-blue-500 text-white font-extrabold rounded-lg text-[10px] uppercase transition shadow-sm active:scale-95 cursor-pointer font-mono text-center truncate"
+                              onClick={() => handleCartAdd(p, true)}
+                              title={`Add 1 ${sUnit}`}
+                            >
+                              + 1 {sUnit}
+                            </button>
                           </div>
                         </div>
                       );
@@ -629,23 +653,88 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                     {cart.length === 0 ? (
                       <p className="text-xs text-textMuted text-center py-4 bg-background/20 rounded-lg border border-dashed border-border/50">No items selected yet. Click items on the left panel to add to cart.</p>
                     ) : cart.map((item) => {
-                      const compoundKey = `${item.product.id}-${item.isLoose ? 'loose' : 'pack'}`;
-                      const unitLabel = item.isLoose ? 'Piece' : (item.product.s_unit || item.product.unit || 'Pack');
+                      const isLoose = item.isLoose ?? true;
+                      const compoundKey = `${item.product.id}-${isLoose ? 'loose' : 'pack'}`;
+                      const pUnit = item.product.p_unit || 'Box';
+                      const sUnit = item.product.s_unit || item.product.unit || 'Pcs';
+                      const unitName = (item as any).unitName || (isLoose ? sUnit : pUnit);
+                      const piecesPerPack = Math.max(1, Number(item.product.pieces_per_pack || 1));
+                      const isDualUnit = piecesPerPack > 1 || (pUnit.toLowerCase() !== sUnit.toLowerCase());
+
                       return (
-                        <div key={compoundKey} className="flex justify-between items-center bg-background/60 p-2.5 rounded-lg border border-border">
-                          <div className="flex-grow pr-2">
-                            <div className="text-xs font-bold text-foreground truncate max-w-[240px] uppercase">{item.product.product_name}</div>
-                            <div className="flex gap-3 items-center text-[10px] text-textSecondary mt-0.5 font-semibold">
-                              <span>₹{item.rate.toFixed(2)} / {unitLabel}</span>
-                              <span className="font-mono text-[9px] text-textMuted">HSN: {item.product.hsn || '-'}</span>
-                              <span className="text-primary font-bold">Total: ₹{(item.rate * item.qty).toFixed(2)}</span>
+                        <div key={compoundKey} className="p-3 bg-background/60 rounded-xl border border-border space-y-2 shadow-xs">
+                          <div className="flex justify-between items-start">
+                            <div className="flex-grow pr-2">
+                              <div className="text-xs font-black text-foreground uppercase truncate max-w-[240px]">{item.product.product_name}</div>
+                              <div className="flex items-center gap-2 text-[10px] text-textSecondary mt-1 font-semibold">
+                                <span>Selling Unit:</span>
+                                {isDualUnit ? (
+                                  <select
+                                    value={isLoose ? 's_unit' : 'p_unit'}
+                                    onChange={(e) => {
+                                      const targetIsLoose = e.target.value === 's_unit';
+                                      try {
+                                        updateCartUnit(item.product.id, isLoose, targetIsLoose);
+                                      } catch (err: any) {
+                                        alert(err.message || 'Cannot switch unit');
+                                      }
+                                    }}
+                                    className="bg-primary/10 border border-primary/30 text-primary font-bold text-[10px] px-1.5 py-0.5 rounded cursor-pointer uppercase focus:outline-none"
+                                  >
+                                    <option value="s_unit">{sUnit}</option>
+                                    <option value="p_unit">{pUnit} (1 {pUnit} = {piecesPerPack} {sUnit})</option>
+                                  </select>
+                                ) : (
+                                  <span className="font-bold text-primary bg-primary/10 px-2 py-0.5 rounded border border-primary/30 uppercase text-[10px]">
+                                    {unitName}
+                                  </span>
+                                )}
+                              </div>
                             </div>
+
+                            <button 
+                              type="button" 
+                              className="text-rose-500 hover:text-rose-400 text-base font-bold p-1 cursor-pointer" 
+                              onClick={() => removeFromCart(item.product.id, isLoose)} 
+                              title="Remove item"
+                            >
+                              &times;
+                            </button>
                           </div>
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-[10px] font-extrabold text-slate-900 dark:text-slate-100 uppercase">Qty:</span>
-                            <input type="number" className="w-14 bg-background border border-border rounded text-center text-xs text-foreground p-1 font-mono font-bold focus:outline-none focus:border-primary"
-                              value={item.qty} onChange={(e) => handleQtyChange(item.product.id, parseInt(e.target.value) || 1, !!item.isLoose)} title="Quantity" />
-                            <button type="button" className="text-rose-500 hover:text-rose-400 text-sm font-bold px-1" onClick={() => removeFromCart(item.product.id, !!item.isLoose)} title="Remove item">&times;</button>
+
+                          <div className="flex justify-between items-center text-xs font-mono bg-background/40 p-2 rounded-lg border border-border/50 flex-wrap gap-2">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-textMuted text-[10px] font-sans font-bold">Qty:</span>
+                              <input 
+                                type="number" 
+                                step="any"
+                                min="1"
+                                className="w-16 bg-background border border-border rounded text-center text-xs text-foreground p-1 font-mono font-black focus:outline-none focus:border-primary shadow-inner"
+                                value={item.qty} 
+                                onChange={(e) => handleQtyChange(item.product.id, parseInt(e.target.value) || 1, isLoose)} 
+                                title="Quantity" 
+                              />
+                              <span className="text-[10px] font-bold text-foreground uppercase">{unitName}</span>
+                            </div>
+
+                            <div className="flex items-center gap-1">
+                              <span className="text-textMuted text-[10px] font-sans font-bold">Rate: ₹</span>
+                              <input
+                                type="number"
+                                step="any"
+                                className="w-20 bg-background border border-border rounded text-center text-xs text-foreground p-1 font-mono font-bold focus:outline-none focus:border-primary shadow-inner"
+                                value={item.rate}
+                                onChange={(e) => updateCartRate(item.product.id, parseFloat(e.target.value) || 0, isLoose)}
+                                title="Rate per Unit"
+                              />
+                            </div>
+
+                            <div className="flex items-center gap-1">
+                              <span className="text-textMuted text-[10px] font-sans font-bold">Total:</span>
+                              <strong className="text-xs font-black text-primary">
+                                ₹{(item.rate * item.qty).toFixed(2)}
+                              </strong>
+                            </div>
                           </div>
                         </div>
                       );

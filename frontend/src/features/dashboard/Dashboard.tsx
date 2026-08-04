@@ -27,26 +27,36 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
   const [selectedTxDetail, setSelectedTxDetail] = useState<any | null>(null);
 
   // Load suppliers and customers dynamically from localStorage
-  const loadLocals = () => {
-    const s = localStorage.getItem('lk_suppliers');
-    const c = localStorage.getItem('lk_customers');
-    let parsedS: any[] = [];
-    let parsedC: any[] = [];
-    if (s) {
-      try { parsedS = JSON.parse(s); } catch (e) {}
+  const safeParseArray = (key: string): any[] => {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+      return [];
     }
-    if (c) {
-      try { parsedC = JSON.parse(c); } catch (e) {}
-    }
+  };
 
-    setSuppliers(parsedS);
-    setCustomers(parsedC);
+  const loadLocals = () => {
+    setSuppliers(safeParseArray('lk_suppliers'));
+    setCustomers(safeParseArray('lk_customers'));
   };
 
   useEffect(() => {
     loadLocals();
     window.addEventListener('storage', loadLocals);
-    return () => window.removeEventListener('storage', loadLocals);
+    window.addEventListener('focus', loadLocals);
+    window.addEventListener('lk_suppliers_updated', loadLocals);
+    window.addEventListener('lk_customers_updated', loadLocals);
+    window.addEventListener('lk_expenses_updated', loadLocals);
+    return () => {
+      window.removeEventListener('storage', loadLocals);
+      window.removeEventListener('focus', loadLocals);
+      window.removeEventListener('lk_suppliers_updated', loadLocals);
+      window.removeEventListener('lk_customers_updated', loadLocals);
+      window.removeEventListener('lk_expenses_updated', loadLocals);
+    };
   }, []);
 
   // 1. Filter arrays dynamically based on selected TimeRange / Calendar Date
@@ -86,10 +96,14 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
       return true; // All Time ('all')
     };
 
+    const effectiveSales = (sales && sales.length > 0) ? sales : safeParseArray('lk_sales');
+    const effectivePurchases = (purchases && purchases.length > 0) ? purchases : safeParseArray('lk_purchases');
+    const effectiveExpenses = (expenses && expenses.length > 0) ? expenses : safeParseArray('lk_expenses');
+
     return {
-      sales: sales.filter(s => filterByDate(s)),
-      purchases: purchases.filter(p => filterByDate(p)),
-      expenses: expenses.filter(e => filterByDate(e))
+      sales: effectiveSales.filter(s => filterByDate(s)),
+      purchases: effectivePurchases.filter(p => filterByDate(p)),
+      expenses: effectiveExpenses.filter(e => filterByDate(e))
     };
   }, [sales, purchases, expenses, timeRange, startDate, endDate]);
 
@@ -117,32 +131,43 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
       const billCogs = items.reduce((iAcc: number, item: any) => {
         const qty = Number(item.qty || 1);
         const prod = products.find(p => p.id === (item.product_id || item.product?.id));
-        const piecesPerPack = Math.max(1, Number(prod?.pieces_per_pack || 1));
-        const purchasePrice = Number(prod?.purchase_price || item.purchase_price || 0);
-        const baseCost = piecesPerPack > 0 ? (purchasePrice / piecesPerPack) : (purchasePrice || Number(item.rate || 0));
+        const piecesPerPack = Math.max(1, Number(item.pieces_per_pack || prod?.pieces_per_pack || 1));
+        const purchasePrice = Number(item.purchase_price || prod?.purchase_price || 0);
         
-        // Check if item was sold as loose base unit or full purchase pack
+        let baseCost = 0;
+        if (purchasePrice > 0) {
+          baseCost = purchasePrice / piecesPerPack;
+        } else if (prod && Number((prod as any).base_unit_cost || 0) > 0) {
+          baseCost = Number((prod as any).base_unit_cost);
+        } else {
+          // Fallback if item cost not explicitly set: estimate cost at 70% of retail rate
+          const rate = Number(item.rate || 0);
+          baseCost = rate > 0 ? (rate * 0.70) : 0;
+        }
+        
         const isLoose = item.isLoose ?? true;
         const totalBaseUnits = isLoose ? qty : (qty * piecesPerPack);
         return iAcc + (totalBaseUnits * baseCost);
       }, 0);
-      return acc + billCogs;
+
+      // Fallback for legacy sales bills without items breakdown: estimate COGS at 70% of bill total
+      const effectiveBillCogs = items.length === 0 && Number(s.total_amount || (s as any).amount || 0) > 0
+        ? Number(s.total_amount || (s as any).amount || 0) * 0.70
+        : billCogs;
+
+      return acc + effectiveBillCogs;
     }, 0);
 
-    // Synchronize Total Purchases: A store's procurement value must be at minimum 
-    // the value of stock on hand plus the cost of items sold, ensuring Purchases >= Stock Value.
-    const syncedPurchases = Math.max(rawPurchases, stockValuation + itemizedCOGS);
-
-    // Net Profit = Sales Revenue - Cost of Goods Sold - Operating Expenses
-    const cogs = itemizedCOGS > 0 ? itemizedCOGS : Math.max(0, syncedPurchases - stockValuation);
-    const netProfit = totalSales - cogs - totalExpenses;
+    const syncedPurchases = Math.max(rawPurchases, stockValuation);
+    const cogs = itemizedCOGS;
+    const netProfit = Math.max(0, totalSales - cogs - totalExpenses);
 
     const supplierDues = suppliers.reduce((acc, s) => acc + Number(s.outstanding || (s as any).due_amount || (s as any).balance || 0), 0);
     const purchaseDues = filteredData.purchases.reduce((acc, p) => acc + Number(p.due_amount || (p as any).pending_amount || 0), 0);
     const vendorPending = supplierDues > 0 ? supplierDues : purchaseDues;
 
     const customerDues = customers.reduce((acc, c) => acc + Number(c.outstanding || (c as any).due_amount || (c as any).balance || 0), 0);
-    const salesDues = filteredData.sales.reduce((acc, s) => acc + Number(s.due_amount || (s as any).pending_amount || 0), 0);
+    const salesDues = filteredData.sales.reduce((acc, s) => acc + Number((s as any).due_amount || (s as any).pending_amount || 0), 0);
     const customerPending = customerDues > 0 ? customerDues : salesDues;
 
     return {
