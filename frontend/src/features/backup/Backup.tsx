@@ -66,14 +66,24 @@ export default function Backup() {
     reader.readAsText(restoreFile);
   };
 
+  const handleClearLocalCache = () => {
+    if (!window.confirm('WARNING: Are you sure you want to clear all local browser cache? This will wipe cached products, sales, purchases, customers, suppliers, and expenses saved in this browser.')) {
+      return;
+    }
+    const keys = ['lk_products', 'lk_sales', 'lk_purchases', 'lk_customers', 'lk_suppliers', 'lk_expenses', 'lk_unstocked_demands'];
+    keys.forEach(k => localStorage.removeItem(k));
+    alert('Local browser cache successfully cleared! The application will now reload.');
+    window.location.reload();
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="bg-secondary border border-border rounded-xl p-6 shadow-lg">
         <h2 className="text-xl font-bold text-foreground">Database Backup & Recovery</h2>
-        <p className="text-xs text-textMuted mt-1">Export, restore, and audit local store database registries</p>
+        <p className="text-xs text-textMuted mt-1">Export, restore, clear local cache, and audit store database registries</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         
         {/* Export Card */}
         <div className="bg-secondary border border-border p-6 rounded-xl shadow-lg flex flex-col justify-between space-y-6 hover:border-slate-350 dark:hover:border-slate-700 transition">
@@ -109,6 +119,23 @@ export default function Backup() {
               Restore Database Snapshot
             </button>
           </div>
+        </div>
+
+        {/* Clear Local Cache Card */}
+        <div className="bg-secondary border border-border p-6 rounded-xl shadow-lg flex flex-col justify-between space-y-6 hover:border-red-500/40 transition">
+          <div>
+            <div className="w-12 h-12 rounded-lg bg-red-500/10 text-red-500 flex items-center justify-center text-xl mb-4">
+              <i className="fa-solid fa-trash-can"></i>
+            </div>
+            <h3 className="text-sm font-bold text-foreground">Clear Local Browser Cache</h3>
+            <p className="text-xs text-textMuted mt-1">
+              If you truncated or cleaned your remote database tables, click here to clear all locally cached shop data stored in your browser.
+            </p>
+          </div>
+
+          <button className="w-full py-3 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg text-xs transition shadow-md cursor-pointer" onClick={handleClearLocalCache}>
+            Clear Local Cache & Reset
+          </button>
         </div>
 
       </div>

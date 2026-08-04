@@ -8,40 +8,75 @@ export function useBilling(tenantId: string) {
   const [customerPhone, setCustomerPhone] = useState('');
   const [paymentMode, setPaymentMode] = useState('Cash');
   const [transactionId, setTransactionId] = useState('');
-  const [sales, setSales] = useState<SalesInvoice[]>([]);
+  const [sales, setSales] = useState<SalesInvoice[]>(() => {
+    try {
+      const localStr = localStorage.getItem('lk_sales');
+      if (localStr) {
+        const parsed = JSON.parse(localStr);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) {}
+    return [];
+  });
 
   const fetchSales = async () => {
     if (!tenantId) return;
-    try {
-      // Query sales invoices alongside their itemized lines & products
-      const { data, error } = await supabase
-        .from('sales_invoices')
-        .select(`
-          *,
-          items:sales_items(
-            *,
-            product:products(*)
-          )
-        `)
-        .eq('tenant_id', tenantId)
-        .order('sale_date', { ascending: false });
 
-      if (error) throw error;
-      const fetchedList = data || [];
-      const uniqueList: any[] = [];
-      const seen = new Set<string>();
-      fetchedList.forEach((inv: any) => {
-        const k = inv.invoice_number || inv.id;
-        if (k && !seen.has(k)) {
-          seen.add(k);
-          uniqueList.push(inv);
+    let remoteList: any[] = [];
+    const isValidUUID = typeof tenantId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tenantId);
+
+    if (isValidUUID) {
+      try {
+        const { data, error } = await supabase
+          .from('sales_invoices')
+          .select(`
+            *,
+            items:sales_items(
+              *,
+              product:products(*)
+            )
+          `)
+          .eq('tenant_id', tenantId)
+          .order('sale_date', { ascending: false });
+
+        if (!error && data) {
+          remoteList = data;
         }
-      });
-      setSales(uniqueList as any[]);
-      localStorage.setItem('lk_sales', JSON.stringify(uniqueList));
-    } catch (e) {
-      console.error('Failed to fetch sales invoices:', e);
+      } catch (e) {
+        console.warn('Remote sales invoices fetch warning:', e);
+      }
     }
+
+    const localStr = localStorage.getItem('lk_sales') || '[]';
+    let localList: any[] = [];
+    try { localList = JSON.parse(localStr); } catch (e) {}
+
+    const map = new Map<string, any>();
+    localList.forEach((inv: any) => {
+      const k = inv.invoice_number || inv.id;
+      if (k) map.set(k, inv);
+    });
+
+    remoteList.forEach((inv: any) => {
+      const k = inv.invoice_number || inv.id;
+      if (k) {
+        const existing = map.get(k);
+        if (existing && (!inv.items || inv.items.length === 0) && existing.items && existing.items.length > 0) {
+          map.set(k, { ...inv, items: existing.items });
+        } else {
+          map.set(k, { ...existing, ...inv });
+        }
+      }
+    });
+
+    const mergedList = Array.from(map.values()).sort((a, b) => 
+      new Date(b.sale_date || b.created_at || 0).getTime() - new Date(a.sale_date || a.created_at || 0).getTime()
+    );
+
+    setSales(mergedList as SalesInvoice[]);
+    try {
+      localStorage.setItem('lk_sales', JSON.stringify(mergedList));
+    } catch (e) {}
   };
 
   // Fetch sales records on mount/tenant changes
