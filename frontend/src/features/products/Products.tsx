@@ -30,6 +30,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
   // Modals
   const [modalOpen, setModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [activeSearchDropdownIndex, setActiveSearchDropdownIndex] = useState<number | null>(null);
 
   // Purchase Bill Modal State
   const [supplierId, setSupplierId] = useState('');
@@ -962,16 +963,36 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
     }
   };
 
+  const getMatchingProducts = (queryText: string) => {
+    if (!queryText || queryText.trim().length < 2) return [];
+    const q = queryText.trim().toLowerCase();
+    return products.filter(p => {
+      const pName = (p.product_name || '').toLowerCase();
+      const barcode = (p.barcode || '').toLowerCase();
+      const sku = (p.sku || '').toLowerCase();
+      const hsn = (p.hsn || '').toLowerCase();
+      return pName.includes(q) || barcode.includes(q) || sku.includes(q) || hsn.includes(q);
+    }).slice(0, 6);
+  };
+
   const filtered = useMemo(() => {
     return products
       .filter(p => {
         const name = p?.product_name || '';
         const sku = p?.sku || '';
         const barcode = p?.barcode || '';
-        const matchesSearch = (
-          name.toLowerCase().includes(search.toLowerCase()) ||
-          sku.toLowerCase().includes(search.toLowerCase()) ||
-          barcode.includes(search)
+        const category = p?.category_name || '';
+        const hsn = p?.hsn || '';
+        const brand = p?.brand_name || '';
+        const q = search.trim().toLowerCase();
+
+        const matchesSearch = !q || (
+          name.toLowerCase().includes(q) ||
+          sku.toLowerCase().includes(q) ||
+          barcode.toLowerCase().includes(q) ||
+          category.toLowerCase().includes(q) ||
+          hsn.toLowerCase().includes(q) ||
+          brand.toLowerCase().includes(q)
         );
 
         if (!matchesSearch) return false;
@@ -2337,9 +2358,65 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                             className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 font-semibold focus:outline-none focus:border-blue-600 uppercase shadow-xs" 
                             required
                             value={item.product_name} 
-                            onChange={(e) => updateProductItem(index, { product_name: e.target.value })} 
+                            onFocus={() => setActiveSearchDropdownIndex(index)}
+                            onBlur={() => setTimeout(() => setActiveSearchDropdownIndex(null), 200)}
+                            onChange={(e) => {
+                              updateProductItem(index, { product_name: e.target.value });
+                              setActiveSearchDropdownIndex(index);
+                            }} 
                             placeholder="e.g. 2*6 SCREW"
                           />
+
+                          {/* Live Catalog Search & Auto-Fill Suggestions */}
+                          {activeSearchDropdownIndex === index && item.product_name.trim().length >= 2 && (() => {
+                            const suggestions = getMatchingProducts(item.product_name);
+                            if (suggestions.length === 0) return null;
+                            return (
+                              <div className="absolute z-[100] left-0 right-0 top-full mt-1 bg-white dark:bg-slate-900 border-2 border-blue-500 rounded-xl shadow-2xl overflow-hidden max-h-64 overflow-y-auto animate-fade-in">
+                                <div className="bg-blue-50 dark:bg-blue-950 px-3 py-1.5 border-b border-blue-200 dark:border-blue-800 text-[10px] font-extrabold text-blue-700 dark:text-blue-300 uppercase flex justify-between items-center">
+                                  <span>⚡ {suggestions.length} Catalog Match(es) Found</span>
+                                  <span>Click to Auto-fill Product</span>
+                                </div>
+                                {suggestions.map(p => (
+                                  <div
+                                    key={p.id}
+                                    className="p-2.5 border-b border-slate-100 dark:border-slate-800 hover:bg-blue-50/80 dark:hover:bg-blue-950/60 cursor-pointer transition flex items-center justify-between gap-2"
+                                    onMouseDown={(e) => {
+                                      e.preventDefault();
+                                      updateProductItem(index, {
+                                        id: p.id,
+                                        product_name: p.product_name,
+                                        purchase_price: Number(p.purchase_price || 0),
+                                        selling_price: Number(p.selling_price || 0),
+                                        unit: p.unit || 'Nos',
+                                        p_unit: p.p_unit || p.unit || 'Box',
+                                        s_unit: p.s_unit || p.unit || 'Nos',
+                                        pieces_per_pack: Number(p.pieces_per_pack || 1),
+                                        barcode: p.barcode || '',
+                                        sku: p.sku || '',
+                                        category_name: p.category_name || '',
+                                        hsn: p.hsn || ''
+                                      });
+                                      setActiveSearchDropdownIndex(null);
+                                    }}
+                                  >
+                                    <div>
+                                      <div className="font-extrabold text-xs text-slate-900 dark:text-slate-100 uppercase">{p.product_name}</div>
+                                      <div className="text-[10px] text-slate-500 font-mono mt-0.5 flex items-center gap-2">
+                                        <span>Stock: <strong className="text-emerald-600 dark:text-emerald-400">{p.current_stock || 0} {p.unit || 'Nos'}</strong></span>
+                                        {p.category_name && <span className="bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-[9px] font-bold text-slate-600 dark:text-slate-300">{p.category_name}</span>}
+                                        {p.hsn && <span className="text-slate-400 font-mono">HSN: {p.hsn}</span>}
+                                      </div>
+                                    </div>
+                                    <div className="text-right font-mono text-xs font-bold shrink-0">
+                                      <div className="text-blue-600 dark:text-blue-400">Cost: ₹{Number(p.purchase_price || 0).toFixed(2)}</div>
+                                      <div className="text-amber-600 dark:text-amber-400">Sell: ₹{Number(p.selling_price || 0).toFixed(2)}</div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          })()}
                         </div>
 
                         <div>
