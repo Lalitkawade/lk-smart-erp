@@ -160,41 +160,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
 
   const handleOpenNewBillModal = () => {
     setEditingProduct(null);
-    setFormData({
-      product_name: '',
-      sku: '',
-      barcode: '',
-      category_name: 'General',
-      brand_name: 'Generic',
-      unit: 'Nos',
-      purchase_price: 0,
-      selling_price: 0,
-      dealer_price: 0,
-      mrp: 0,
-      current_stock: 1,
-      min_stock_level: 10,
-      hsn: '',
-      gst: 18,
-      godown: '',
-      rack_number: '',
-      shelf_number: '',
-      description: '',
-      size: '',
-      weight: '',
-      warehouse_location: '',
-      p_unit: 'Box',
-      s_unit: 'Nos',
-      supplier_id: '',
-      supplier_name: '',
-      supplier_phone: '',
-      pieces_per_pack: 100,
-      piece_selling_price: 0,
-      additional_stock: 0,
-      purchase_date: new Date().toISOString().slice(0, 10),
-      allow_decimal: false,
-      allow_purchase_unit_selling: true,
-      track_base_unit: true
-    });
+    setProductItems([createDefaultProductItem()]);
     setSupplierId('');
     setVendorSearchQuery('');
     setBillNumber('');
