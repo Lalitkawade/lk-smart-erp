@@ -2174,21 +2174,21 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
             {/* Scrollable Form Body */}
             <form onSubmit={handleSaveProduct} className="flex-1 min-h-0 overflow-y-auto pr-2 space-y-4 scrollbar-thin">
               
-              {/* TOP VENDOR & PROCUREMENT BILL SECTION (MATCHES USER ATTACHED SCREENSHOT) */}
+              {/* TOP VENDOR & PROCUREMENT BILL SECTION */}
               {!editingProduct && (
-                <div className="bg-gradient-to-r from-blue-500/10 via-slate-900/40 to-emerald-500/10 border border-primary/40 rounded-2xl p-4 sm:p-5 space-y-4 shadow-sm">
-                  <div className="flex justify-between items-center flex-wrap gap-2 border-b border-border/60 pb-3">
-                    <label className="flex items-center gap-2 cursor-pointer font-black text-xs uppercase text-foreground select-none">
+                <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 rounded-2xl p-4 sm:p-5 space-y-4 shadow-xs">
+                  <div className="flex justify-between items-center flex-wrap gap-2 border-b border-slate-200 dark:border-slate-700 pb-3">
+                    <label className="flex items-center gap-2 cursor-pointer font-bold text-xs uppercase text-slate-900 dark:text-slate-100 select-none">
                       <input 
                         type="checkbox" 
                         checked={hasBillDetails} 
                         onChange={(e) => setHasBillDetails(e.target.checked)}
-                        className="w-4 h-4 rounded accent-primary cursor-pointer"
+                        className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
                       />
-                      <i className="fa-solid fa-cart-shopping text-emerald-500"></i>
+                      <i className="fa-solid fa-cart-shopping text-emerald-600 dark:text-emerald-400"></i>
                       <span>Record Supplier Purchase Bill / Procurement Details</span>
                     </label>
-                    <span className="text-[11px] font-bold text-textMuted">
+                    <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
                       {hasBillDetails ? '✓ Bill Details Active' : 'Check if you have a supplier bill'}
                     </span>
                   </div>
@@ -2199,20 +2199,20 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                         <div>
                           <div className="flex justify-between items-center mb-1">
-                            <label className="block text-xs text-textSecondary font-semibold">Select Supplier / Vendor *</label>
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">Select Supplier / Vendor *</label>
                             <button 
                               type="button" 
                               onClick={() => setQuickVendorModalOpen(true)}
-                              className="text-[11px] text-primary hover:text-primary/80 font-bold flex items-center gap-1 active:scale-95 cursor-pointer"
+                              className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline font-bold flex items-center gap-1 active:scale-95 cursor-pointer"
                             >
-                              ➕ Quick Register Vendor
+                              ➕ Quick Register
                             </button>
                           </div>
 
                           <div className="relative">
                             <input 
                               type="text" 
-                              className="w-full bg-background border border-border rounded-lg p-2.5 text-xs text-foreground font-bold uppercase focus:border-primary focus:outline-none pr-8"
+                              className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 font-bold uppercase focus:border-blue-600 focus:outline-none pr-8"
                               value={vendorSearchQuery || selectedSup?.supplier_name || ''} 
                               onFocus={() => setVendorDropdownOpen(true)}
                               onChange={(e) => {
@@ -2231,7 +2231,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                                   setVendorSearchQuery('');
                                   setVendorDropdownOpen(false);
                                 }}
-                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-textMuted hover:text-foreground text-xs font-bold cursor-pointer"
+                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs font-bold cursor-pointer"
                               >
                                 &times;
                               </button>
@@ -2239,10 +2239,10 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
 
                             {/* Floating Vendor Autocomplete */}
                             {vendorDropdownOpen && (
-                              <div className="absolute left-0 right-0 top-full mt-1 bg-secondary border border-border rounded-xl shadow-2xl z-50 max-h-56 overflow-y-auto divide-y divide-border/40 scrollbar-thin animate-fade-in">
+                              <div className="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-2xl z-50 max-h-56 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 scrollbar-thin animate-fade-in">
                                 {filteredSuppliersForBill.length === 0 ? (
                                   <div className="p-3 text-center text-xs space-y-2">
-                                    <p className="text-textMuted font-medium">No vendors found matching "{vendorSearchQuery}".</p>
+                                    <p className="text-slate-500 dark:text-slate-400 font-medium">No vendors found matching "{vendorSearchQuery}".</p>
                                     <button 
                                       type="button"
                                       onClick={() => {
@@ -2250,7 +2250,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                                         setVendorDropdownOpen(false);
                                         setQuickVendorModalOpen(true);
                                       }}
-                                      className="px-3 py-1.5 bg-primary/20 text-primary font-extrabold text-xs rounded-lg border border-primary/30 transition hover:bg-primary/30 cursor-pointer"
+                                      className="px-3 py-1.5 bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 font-extrabold text-xs rounded-lg border border-blue-200 dark:border-blue-800 transition hover:bg-blue-100 cursor-pointer"
                                     >
                                       ➕ Register "{vendorSearchQuery.toUpperCase()}" as New Vendor
                                     </button>
@@ -2264,13 +2264,13 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                                         setVendorSearchQuery(s.supplier_name);
                                         setVendorDropdownOpen(false);
                                       }}
-                                      className={`p-2.5 hover:bg-background/80 cursor-pointer flex justify-between items-center transition ${supplierId === s.id ? 'bg-primary/10 font-black text-primary' : 'text-foreground'}`}
+                                      className={`p-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/80 cursor-pointer flex justify-between items-center transition ${supplierId === s.id ? 'bg-blue-50 dark:bg-blue-950/60 font-black text-blue-600 dark:text-blue-400' : 'text-slate-900 dark:text-slate-100'}`}
                                     >
                                       <div className="space-y-0.5">
                                         <div className="text-xs font-bold uppercase">{s.supplier_name}</div>
-                                        <div className="text-[10px] text-textMuted">Phone: {s.phone || 'N/A'} {s.outstanding ? `| Dues: ₹${Number(s.outstanding).toFixed(2)}` : ''}</div>
+                                        <div className="text-[10px] text-slate-500 dark:text-slate-400">Phone: {s.phone || 'N/A'} {s.outstanding ? `| Dues: ₹${Number(s.outstanding).toFixed(2)}` : ''}</div>
                                       </div>
-                                      {supplierId === s.id && <span className="text-primary font-bold text-xs">✓ Selected</span>}
+                                      {supplierId === s.id && <span className="text-blue-600 dark:text-blue-400 font-bold text-xs">✓ Selected</span>}
                                     </div>
                                   ))
                                 )}
@@ -2280,18 +2280,18 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                         </div>
 
                         <div>
-                          <label className="block text-xs text-textSecondary mb-1">Supplier Bill Number</label>
-                          <input type="text" className="w-full bg-background border border-border rounded p-2 text-xs text-foreground font-semibold"
+                          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Supplier Bill Number</label>
+                          <input type="text" className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 font-semibold focus:outline-none focus:border-blue-600"
                             value={billNumber} onChange={(e) => setBillNumber(e.target.value)} placeholder="e.g. IN-98218" />
                         </div>
                         <div>
-                          <label className="block text-xs text-textSecondary mb-1">Billing Date *</label>
-                          <input type="date" className="w-full bg-background border border-border rounded p-2 text-xs text-foreground font-mono font-semibold"
+                          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Billing Date *</label>
+                          <input type="date" className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 font-mono font-semibold focus:outline-none focus:border-blue-600"
                             value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)} required={hasBillDetails} />
                         </div>
                         <div>
-                          <label className="block text-xs text-textSecondary mb-1">Payment Channel</label>
-                          <select className="w-full bg-background border border-border rounded p-2 text-xs text-foreground font-semibold"
+                          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Payment Channel</label>
+                          <select className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 font-semibold focus:outline-none focus:border-blue-600 cursor-pointer"
                             value={paymentMode} onChange={(e) => setPaymentMode(e.target.value)}>
                             <option value="UPI">UPI / GPay</option>
                             <option value="Card">Credit / Debit Card</option>
@@ -2302,15 +2302,15 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
 
                         {/* Transaction ID / Ref No. */}
                         {paymentMode !== 'Cash' && (
-                          <div className="col-span-1 md:col-span-4 animate-fade-in bg-slate-900/60 p-3 rounded-xl border border-primary/40 space-y-1">
-                            <label className="block text-xs text-primary font-extrabold flex items-center justify-between">
+                          <div className="col-span-1 md:col-span-4 animate-fade-in bg-blue-50/80 dark:bg-blue-950/40 p-3.5 rounded-xl border border-blue-200 dark:border-blue-800 space-y-1">
+                            <label className="block text-xs text-blue-900 dark:text-blue-300 font-extrabold flex items-center justify-between">
                               <span className="flex items-center gap-1.5 uppercase tracking-wide">
-                                <i className="fa-solid fa-receipt text-primary"></i> Transaction ID / UTR / Reference No.
+                                <i className="fa-solid fa-receipt text-blue-600"></i> Transaction ID / UTR / Reference No.
                               </span>
                             </label>
                             <input 
                               type="text"
-                              className="w-full bg-background border border-primary/60 rounded-lg p-2.5 text-xs text-foreground font-mono font-bold focus:border-primary focus:outline-none uppercase"
+                              className="w-full bg-white dark:bg-slate-900 border border-blue-300 dark:border-blue-700 rounded-lg p-2.5 text-xs text-slate-900 dark:text-slate-100 font-mono font-bold focus:border-blue-600 focus:outline-none uppercase"
                               value={transactionId}
                               onChange={(e) => setTransactionId(e.target.value)}
                               placeholder="e.g. UPI-981240192849 / CARD-492019 / GPay Ref ID"
@@ -2320,32 +2320,32 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                       </div>
 
                       {/* Partial Payment Option */}
-                      <div className="border-t border-border/60 pt-3">
-                        <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-textSecondary select-none">
+                      <div className="border-t border-slate-200 dark:border-slate-700 pt-3">
+                        <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700 dark:text-slate-300 select-none">
                           <input 
                             type="checkbox" 
                             checked={isPartialPayment}
                             onChange={(e) => setIsPartialPayment(e.target.checked)}
-                            className="w-4 h-4 rounded accent-primary cursor-pointer"
+                            className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
                           />
                           <span>Record Partial Payment / Remaining Vendor Dues</span>
                         </label>
 
                         {isPartialPayment && (
-                          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-4 bg-background/60 p-3 rounded-xl border border-border animate-fade-in">
+                          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-4 bg-white dark:bg-slate-900 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 animate-fade-in shadow-xs">
                             <div>
-                              <label className="block text-xs text-textSecondary font-semibold mb-1">Amount Paid Now (₹)</label>
+                              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Amount Paid Now (₹)</label>
                               <input 
                                 type="number" 
                                 step="any"
-                                className="w-full bg-background border border-border rounded p-2 text-xs font-mono font-bold text-emerald-500"
+                                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400 focus:outline-none"
                                 value={paidAmount}
                                 onChange={(e) => setPaidAmount(parseFloat(e.target.value) || 0)}
                               />
                             </div>
                             <div>
-                              <label className="block text-xs text-textSecondary mb-1">Total Bill Cost (₹)</label>
-                              <div className="w-full bg-background border border-border rounded p-2 text-xs font-mono font-extrabold text-foreground">
+                              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Total Bill Cost (₹)</label>
+                              <div className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-xs font-mono font-extrabold text-slate-900 dark:text-slate-100">
                                 ₹{productItems.reduce((sum, item) => sum + (Number(item.current_stock || 0) * Number(item.purchase_price || 0)), 0).toFixed(2)}
                               </div>
                             </div>
@@ -2375,30 +2375,30 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                     return (
                       <div 
                         key={item.id || index}
-                        className="bg-slate-900/90 border border-slate-700/80 hover:border-blue-500/60 rounded-2xl p-4 shadow-md transition-all flex items-center justify-between gap-3 animate-fade-in"
+                        className="bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700/80 hover:border-blue-500/60 rounded-2xl p-4 shadow-sm transition-all flex items-center justify-between gap-3 animate-fade-in"
                       >
                         <div 
                           className="flex items-center gap-3.5 cursor-pointer flex-1 min-w-0"
                           onClick={() => handleToggleCollapse(index)}
                         >
-                          <div className="w-8 h-8 rounded-xl bg-blue-500/20 text-blue-400 border border-blue-500/30 flex items-center justify-center font-black text-xs font-mono shrink-0">
+                          <div className="w-8 h-8 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 flex items-center justify-center font-black text-xs font-mono shrink-0">
                             #{index + 1}
                           </div>
                           <div className="truncate">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <h4 className="text-xs sm:text-sm font-black text-slate-100 uppercase truncate">
+                              <h4 className="text-xs sm:text-sm font-black text-slate-900 dark:text-slate-100 uppercase truncate">
                                 {item.product_name || `Product Item #${index + 1}`}
                               </h4>
                               {item.category_name && (
-                                <span className="text-[9.5px] font-extrabold bg-slate-800 text-slate-300 font-mono px-2 py-0.5 rounded border border-slate-700 uppercase">
+                                <span className="text-[9.5px] font-extrabold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700 uppercase">
                                   {item.category_name}
                                 </span>
                               )}
                             </div>
-                            <div className="text-[11px] text-slate-400 font-mono mt-0.5 flex items-center gap-3 flex-wrap">
-                              <span>Stock: <strong className="text-emerald-400">{item.current_stock || 0} {item.unit || 'Nos'}</strong></span>
-                              <span>Cost: <strong className="text-blue-400">₹{item.purchase_price || 0} / {pUnit}</strong></span>
-                              <span>Selling: <strong className="text-amber-400">₹{item.selling_price || 0} / {sUnit}</strong></span>
+                            <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono mt-0.5 flex items-center gap-3 flex-wrap">
+                              <span>Stock: <strong className="text-emerald-600 dark:text-emerald-400">{item.current_stock || 0} {item.unit || 'Nos'}</strong></span>
+                              <span>Cost: <strong className="text-blue-600 dark:text-blue-400">₹{item.purchase_price || 0} / {pUnit}</strong></span>
+                              <span>Selling: <strong className="text-amber-600 dark:text-amber-400">₹{item.selling_price || 0} / {sUnit}</strong></span>
                             </div>
                           </div>
                         </div>
@@ -2407,7 +2407,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                           <button 
                             type="button" 
                             onClick={() => handleToggleCollapse(index)} 
-                            className="px-3 py-1.5 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-500/30 font-bold text-xs rounded-xl transition flex items-center gap-1.5 cursor-pointer"
+                            className="px-3 py-1.5 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 font-bold text-xs rounded-xl transition flex items-center gap-1.5 cursor-pointer"
                           >
                             <i className="fa-solid fa-pen text-[10px]"></i>
                             <span>Edit</span>
@@ -2416,7 +2416,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                             <button 
                               type="button" 
                               onClick={() => handleRemoveProductItem(index)} 
-                              className="px-2.5 py-1.5 bg-rose-500/20 hover:bg-rose-500/40 text-rose-400 border border-rose-500/30 font-bold text-xs rounded-xl transition cursor-pointer"
+                              className="px-2.5 py-1.5 bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800 font-bold text-xs rounded-xl transition cursor-pointer"
                               title="Remove item from bill"
                             >
                               <i className="fa-solid fa-trash text-[10px]"></i>
@@ -2429,16 +2429,16 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
 
                   // Full Expanded Form View
                   return (
-                    <div key={item.id || index} className="space-y-4 border border-slate-800 p-4 rounded-2xl bg-slate-950/40">
+                    <div key={item.id || index} className="space-y-4 border border-slate-200 dark:border-slate-800 p-4 sm:p-5 rounded-2xl bg-slate-50/60 dark:bg-slate-900/50 shadow-xs">
                       
                       {/* Item Section Header (for multi-product tracking) */}
                       {productItems.length > 1 && (
-                        <div className="flex items-center justify-between border-b border-slate-800 pb-2.5 mb-2">
+                        <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2.5 mb-2">
                           <div className="flex items-center gap-2">
-                            <span className="w-6 h-6 rounded-lg bg-blue-600/20 text-blue-400 border border-blue-500/30 flex items-center justify-center font-bold text-xs font-mono">
+                            <span className="w-6 h-6 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-xs font-mono shadow-xs">
                               #{index + 1}
                             </span>
-                            <h4 className="text-xs font-black text-slate-200 uppercase tracking-wide">
+                            <h4 className="text-xs font-extrabold text-slate-900 dark:text-slate-100 uppercase tracking-wide">
                               Product Item #{index + 1} Details
                             </h4>
                           </div>
@@ -2446,7 +2446,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                             <button
                               type="button"
                               onClick={() => handleToggleCollapse(index)}
-                              className="text-[11px] font-bold text-slate-400 hover:text-slate-200 bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700 transition flex items-center gap-1 cursor-pointer"
+                              className="text-[11px] font-bold text-slate-700 dark:text-slate-300 hover:text-slate-900 bg-white dark:bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 transition flex items-center gap-1 cursor-pointer"
                             >
                               <i className="fa-solid fa-chevron-up text-[10px]"></i>
                               <span>Collapse Item</span>
@@ -2454,7 +2454,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                             <button
                               type="button"
                               onClick={() => handleRemoveProductItem(index)}
-                              className="text-[11px] font-bold text-rose-400 hover:text-rose-300 bg-rose-950/40 px-2.5 py-1 rounded-lg border border-rose-800 transition flex items-center gap-1 cursor-pointer"
+                              className="text-[11px] font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/60 px-2.5 py-1 rounded-lg border border-rose-200 dark:border-rose-800 transition flex items-center gap-1 cursor-pointer"
                             >
                               <i className="fa-solid fa-trash text-[10px]"></i>
                               <span>Remove</span>
@@ -2496,7 +2496,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                         {/* Unit Dropdowns */}
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                           <div>
-                            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
                               Purchase Unit <span className="text-rose-500 font-bold">*</span>
                             </label>
                             <select
@@ -2512,7 +2512,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                           </div>
 
                           <div>
-                            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
                               Selling Unit <span className="text-rose-500 font-bold">*</span>
                             </label>
                             <select
@@ -2528,7 +2528,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                           </div>
 
                           <div>
-                            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
                               Base Stock Unit <span className="text-rose-500 font-bold">*</span>
                             </label>
                             <select
@@ -2612,10 +2612,10 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                       {/* PRODUCT DETAILS GRID */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="col-span-1 sm:col-span-2 relative">
-                          <label className="block text-xs font-semibold text-textSecondary mb-1">Product Name *</label>
+                          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Product Name *</label>
                           <input 
                             type="text" 
-                            className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none focus:border-primary font-semibold uppercase" 
+                            className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 font-semibold focus:outline-none focus:border-blue-600 uppercase shadow-xs" 
                             required
                             value={item.product_name} 
                             onChange={(e) => updateProductItem(index, { product_name: e.target.value })} 
@@ -2624,32 +2624,32 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                         </div>
 
                         <div>
-                          <label className="block text-xs font-semibold text-textSecondary mb-1">SKU Code</label>
+                          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">SKU Code</label>
                           <input 
                             type="text" 
-                            className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none"
+                            className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-600 shadow-xs"
                             value={item.sku} 
                             onChange={(e) => updateProductItem(index, { sku: e.target.value })} 
                           />
                         </div>
                         <div>
-                          <label className="block text-xs font-semibold text-textSecondary mb-1">Barcode</label>
+                          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Barcode</label>
                           <input 
                             type="text" 
-                            className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none"
+                            className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-600 shadow-xs"
                             value={item.barcode} 
                             onChange={(e) => updateProductItem(index, { barcode: e.target.value })} 
                           />
                         </div>
                         <div>
-                          <label className="block text-xs font-semibold text-textSecondary mb-1 flex items-center justify-between">
+                          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
                             <span>Cost (Purchase Price) *</span>
                             <span className="text-[10px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-950 px-1.5 py-0.5 rounded border border-blue-200 dark:border-blue-800">per {item.p_unit || 'Unit'}</span>
                           </label>
                           <input 
                             type="number" 
                             step="any" 
-                            className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none font-bold" 
+                            className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 font-bold focus:outline-none focus:border-blue-600 shadow-xs" 
                             required
                             value={item.purchase_price === 0 ? '' : item.purchase_price} 
                             placeholder="0"
@@ -2658,14 +2658,14 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                           />
                         </div>
                         <div>
-                          <label className="block text-xs font-semibold text-textSecondary mb-1 flex items-center justify-between">
+                          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
                             <span>Selling Price *</span>
                             <span className="text-[10px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-950 px-1.5 py-0.5 rounded border border-blue-200 dark:border-blue-800">per {item.s_unit || 'Unit'}</span>
                           </label>
                           <input 
                             type="number" 
                             step="any" 
-                            className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none font-bold" 
+                            className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 font-bold focus:outline-none focus:border-blue-600 shadow-xs" 
                             required
                             value={item.selling_price === 0 ? '' : item.selling_price} 
                             placeholder="0"
@@ -2675,12 +2675,12 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                         </div>
                         
                         {/* Margin Inline Calculation */}
-                        <div className="col-span-1 sm:col-span-2 bg-primary/10 p-3.5 rounded-xl border border-primary/30 text-xs space-y-1.5 shadow-xs">
+                        <div className="col-span-1 sm:col-span-2 bg-blue-50/80 dark:bg-blue-950/40 p-3.5 rounded-xl border border-blue-200 dark:border-blue-800 text-xs space-y-1.5 shadow-xs">
                           <div className="flex justify-between items-center flex-wrap gap-2">
                             <span className="font-extrabold text-slate-900 dark:text-slate-100 flex items-center gap-1.5 uppercase tracking-wide">
-                              <i className="fa-solid fa-chart-line text-primary"></i> Calculated Retail Margin:
+                              <i className="fa-solid fa-chart-line text-blue-600 dark:text-blue-400"></i> Calculated Retail Margin:
                             </span>
-                            <span className="font-mono font-black text-primary text-sm">
+                            <span className="font-mono font-black text-blue-600 dark:text-blue-400 text-sm">
                               ₹{marginPerSellingUnit.toFixed(2)} / {sUnit}
                               <span className={`ml-1.5 text-xs font-bold ${marginPercent >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                                 ({marginPercent >= 0 ? '+' : ''}{marginPercent.toFixed(1)}%)
@@ -2689,7 +2689,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                           </div>
 
                           {isDualUnit && (
-                            <div className="text-[11px] font-mono text-textMuted flex items-center justify-between border-t border-primary/20 pt-1.5 mt-1 flex-wrap gap-2">
+                            <div className="text-[11px] font-mono text-slate-600 dark:text-slate-400 flex items-center justify-between border-t border-blue-200/80 dark:border-blue-800/80 pt-1.5 mt-1 flex-wrap gap-2">
                               <span>Cost per {sUnit}: <strong>₹{costPerSellingUnit.toFixed(2)}</strong> (from ₹{item.purchase_price} / {pUnit})</span>
                               <span>Total Profit per {pUnit}: <strong className="text-emerald-600 dark:text-emerald-400">₹{totalProfitPerPack.toFixed(2)}</strong></span>
                             </div>
@@ -2700,13 +2700,13 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                           <>
                             <div>
                               <div className="flex justify-between items-center mb-1">
-                                <label className="block text-xs font-semibold text-textSecondary">
+                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
                                   Current Base Stock {isEditingBaseStock ? '(Correction Mode)' : ''}
                                 </label>
                                 <button
                                   type="button"
                                   onClick={() => setIsEditingBaseStock(!isEditingBaseStock)}
-                                  className="text-[10px] font-extrabold text-primary hover:text-primary/80 underline flex items-center gap-1 cursor-pointer"
+                                  className="text-[10px] font-extrabold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer"
                                 >
                                   <i className={`fa-solid ${isEditingBaseStock ? 'fa-lock' : 'fa-pen-to-square'}`}></i> 
                                   {isEditingBaseStock ? 'Lock Field' : '✏️ Correct / Edit Base Stock'}
@@ -2716,10 +2716,10 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                                 type="number" 
                                 step="any"
                                 disabled={!isEditingBaseStock}
-                                className={`w-full border rounded-lg p-2 font-mono font-bold transition ${
+                                className={`w-full border rounded-xl p-2.5 font-mono font-bold transition text-xs ${
                                   isEditingBaseStock 
-                                    ? 'bg-background border-primary text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20' 
-                                    : 'bg-background/50 border-border text-textMuted cursor-not-allowed opacity-80'
+                                    ? 'bg-white dark:bg-slate-900 border-blue-600 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-600/20' 
+                                    : 'bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-500 cursor-not-allowed opacity-80'
                                 }`}
                                 value={item.current_stock === 0 ? '' : item.current_stock} 
                                 placeholder="0"
@@ -2728,34 +2728,34 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                               />
                             </div>
                             <div>
-                              <label className="block text-xs font-extrabold text-primary mb-1">➕ Add New Inflow Stock</label>
+                              <label className="block text-xs font-extrabold text-blue-600 dark:text-blue-400 mb-1">➕ Add New Inflow Stock</label>
                               <input 
                                 type="number" 
                                 step="any" 
                                 min="0" 
-                                className="w-full bg-background border border-primary/50 rounded-lg p-2 text-foreground focus:outline-none font-mono font-extrabold"
+                                className="w-full bg-white dark:bg-slate-900 border border-blue-500 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none font-mono font-extrabold shadow-xs"
                                 placeholder="Enter qty to add (e.g. 20)..."
                                 value={item.additional_stock === 0 ? '' : item.additional_stock} 
                                 onFocus={(e) => e.target.select()}
                                 onChange={(e) => updateProductItem(index, { additional_stock: e.target.value === '' ? 0 : Number(e.target.value) })} 
                               />
                             </div>
-                            <div className="col-span-1 sm:col-span-2 bg-primary/10 border border-primary/30 p-2.5 rounded-lg text-xs font-bold text-primary flex justify-between items-center flex-wrap gap-2">
+                            <div className="col-span-1 sm:col-span-2 bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 p-2.5 rounded-xl text-xs font-bold text-blue-900 dark:text-blue-200 flex justify-between items-center flex-wrap gap-2">
                               <span>Updated Total Stock after saving:</span>
-                              <span className="font-mono text-sm font-black">
+                              <span className="font-mono text-sm font-black text-blue-700 dark:text-blue-300">
                                 {item.current_stock || 0} + {item.additional_stock || 0} = {Number(item.current_stock || 0) + Number(item.additional_stock || 0)} {item.unit || 'Nos'}
                               </span>
                             </div>
                           </>
                         ) : (
                           <div>
-                            <label className="block text-xs font-semibold text-textSecondary mb-1 flex items-center justify-between">
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
                               <span>Initial Stock *</span>
                               <span className="text-[10px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-950 px-1.5 py-0.5 rounded border border-blue-200 dark:border-blue-800">in {item.unit || 'Base Unit'}</span>
                             </label>
                             <input 
                               type="number" 
-                              className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none font-mono" 
+                              className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none font-mono font-bold shadow-xs" 
                               required
                               value={item.current_stock === 0 ? '' : item.current_stock} 
                               placeholder="0"
@@ -2765,13 +2765,13 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                           </div>
                         )}
                         <div>
-                          <label className="block text-xs font-semibold text-textSecondary mb-1 flex items-center justify-between">
+                          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
                             <span>Min Stock Warning *</span>
                             <span className="text-[10px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-950 px-1.5 py-0.5 rounded border border-blue-200 dark:border-blue-800">in {item.unit || 'Base Unit'}</span>
                           </label>
                           <input 
                             type="number" 
-                            className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none font-mono" 
+                            className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none font-mono font-bold shadow-xs" 
                             required
                             value={item.min_stock_level === 0 ? '' : item.min_stock_level} 
                             placeholder="0"
@@ -2780,10 +2780,10 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                           />
                         </div>
                         <div>
-                          <label className="block text-xs font-semibold text-textSecondary mb-1">HSN Code of Product</label>
+                          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">HSN Code of Product</label>
                           <input 
                             type="text" 
-                            className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none font-mono"
+                            className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none font-mono shadow-xs"
                             value={item.hsn} 
                             onChange={(e) => updateProductItem(index, { hsn: e.target.value })} 
                             placeholder="e.g. 7214" 
@@ -2791,11 +2791,11 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                         </div>
                         <div>
                           <div className="flex justify-between items-center mb-1">
-                            <label className="block text-xs font-semibold text-textSecondary">GST Tax Rate (%)</label>
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">GST Tax Rate (%)</label>
                             <button
                               type="button"
                               onClick={() => setIsEditingTax(!isEditingTax)}
-                              className="text-[10px] font-extrabold text-primary hover:text-primary/80 underline flex items-center gap-1 cursor-pointer"
+                              className="text-[10px] font-extrabold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer"
                             >
                               <i className={`fa-solid ${isEditingTax ? 'fa-lock' : 'fa-pen-to-square'}`}></i>
                               {isEditingTax ? 'Lock Tax' : '✏️ Edit Tax Rate'}
@@ -2803,10 +2803,10 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                           </div>
                           <select 
                             disabled={!isEditingTax} 
-                            className={`w-full border rounded-lg p-2 font-semibold transition ${
+                            className={`w-full border rounded-xl p-2.5 text-xs font-semibold transition ${
                               isEditingTax 
-                                ? 'bg-background border-primary text-foreground focus:outline-none' 
-                                : 'bg-background/50 border-border/60 text-textMuted cursor-not-allowed opacity-75'
+                                ? 'bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none' 
+                                : 'bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-500 cursor-not-allowed opacity-75'
                             }`}
                             value={item.gst || 0} 
                             onChange={(e) => updateProductItem(index, { gst: Number(e.target.value) })}
@@ -2819,29 +2819,29 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                           </select>
                         </div>
                         <div>
-                          <label className="block text-xs font-semibold text-textSecondary mb-1">Product Size</label>
+                          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Product Size</label>
                           <input 
                             type="text" 
-                            className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none text-xs"
+                            className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none shadow-xs"
                             value={item.size} 
                             onChange={(e) => updateProductItem(index, { size: e.target.value })} 
                             placeholder="e.g. 10mm, 2 Inch" 
                           />
                         </div>
                         <div>
-                          <label className="block text-xs font-semibold text-textSecondary mb-1">Product Weight</label>
+                          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Product Weight</label>
                           <input 
                             type="text" 
-                            className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none text-xs"
+                            className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none shadow-xs"
                             value={item.weight} 
                             onChange={(e) => updateProductItem(index, { weight: e.target.value })} 
                             placeholder="e.g. 1.2kg, 500g" 
                           />
                         </div>
                         <div className="col-span-1 sm:col-span-2">
-                          <label className="block text-xs font-semibold text-textSecondary mb-1">Product Description</label>
+                          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Product Description</label>
                           <textarea 
-                            className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none text-xs" 
+                            className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none shadow-xs" 
                             rows={2}
                             value={item.description} 
                             onChange={(e) => updateProductItem(index, { description: e.target.value })} 
@@ -2851,34 +2851,34 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                       </div>
 
                       {/* Stock Location Breakdown: Godown + Rack + Shelf */}
-                      <div className="bg-background/40 p-4 border border-border rounded-xl space-y-3">
-                        <label className="block text-xs font-bold text-textSecondary uppercase tracking-wide">Stock Location (Warehouse / Shelf Breakdown)</label>
+                      <div className="bg-white dark:bg-slate-900/80 p-4 border border-slate-200 dark:border-slate-700/80 rounded-2xl space-y-3 shadow-xs">
+                        <label className="block text-xs font-extrabold text-slate-900 dark:text-slate-100 uppercase tracking-wide">Stock Location (Warehouse / Shelf Breakdown)</label>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                           <div>
-                            <label className="block text-[11px] font-semibold text-textMuted mb-1">Godown (Warehouse)</label>
+                            <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">Godown (Warehouse)</label>
                             <input 
                               type="text" 
-                              className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none text-xs font-medium" 
+                              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2 text-xs text-slate-900 dark:text-slate-100 focus:outline-none font-medium" 
                               placeholder="e.g. Main Godown A"
                               value={item.godown} 
                               onChange={(e) => updateProductItem(index, { godown: e.target.value })} 
                             />
                           </div>
                           <div>
-                            <label className="block text-[11px] font-semibold text-textMuted mb-1">Rack Number</label>
+                            <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">Rack Number</label>
                             <input 
                               type="text" 
-                              className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none text-xs font-medium" 
+                              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2 text-xs text-slate-900 dark:text-slate-100 focus:outline-none font-medium" 
                               placeholder="e.g. Rack R-12"
                               value={item.rack_number} 
                               onChange={(e) => updateProductItem(index, { rack_number: e.target.value })} 
                             />
                           </div>
                           <div>
-                            <label className="block text-[11px] font-semibold text-textMuted mb-1">Shelf Number</label>
+                            <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">Shelf Number</label>
                             <input 
                               type="text" 
-                              className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none text-xs font-medium" 
+                              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2 text-xs text-slate-900 dark:text-slate-100 focus:outline-none font-medium" 
                               placeholder="e.g. Shelf S-3"
                               value={item.shelf_number} 
                               onChange={(e) => updateProductItem(index, { shelf_number: e.target.value })} 
@@ -2898,9 +2898,9 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                   <button
                     type="button"
                     onClick={handleAddProductItem}
-                    className="w-full py-3.5 bg-gradient-to-r from-blue-600/20 via-slate-800 to-emerald-600/20 hover:from-blue-600/30 hover:to-emerald-600/30 border-2 border-dashed border-primary/50 hover:border-primary text-primary font-black text-xs sm:text-sm rounded-2xl transition flex items-center justify-center gap-2 shadow-sm cursor-pointer active:scale-98"
+                    className="w-full py-3.5 bg-blue-50/80 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-950/70 border-2 border-dashed border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 font-extrabold text-xs sm:text-sm rounded-2xl transition flex items-center justify-center gap-2 shadow-xs cursor-pointer active:scale-98"
                   >
-                    <i className="fa-solid fa-plus-circle text-base text-emerald-400"></i>
+                    <i className="fa-solid fa-plus-circle text-base text-emerald-600 dark:text-emerald-400"></i>
                     <span>+ Add Another Product to Purchase Bill</span>
                   </button>
                 </div>
