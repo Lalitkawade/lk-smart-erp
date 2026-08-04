@@ -1668,18 +1668,18 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                 ? rawS 
                 : (isBulkLegacy ? 'Nos' : (rawS || 'Pcs'));
 
-              const isDualUnit = (pUnit.toUpperCase() !== sUnit.toUpperCase() || piecesPerPack > 1) && piecesPerPack > 1;
+              const isDualUnit = piecesPerPack > 1;
 
               const costPerSellingUnit = isDualUnit ? (purchasePrice / piecesPerPack) : purchasePrice;
               const marginAmount = sellingPrice - costPerSellingUnit;
               const marginPercent = costPerSellingUnit > 0 ? (marginAmount / costPerSellingUnit) * 100 : 0;
-              const currentStock = Number(p?.current_stock || 0);
-              const minStock = Number(p?.min_stock_level || 10);
-              const unit = p?.s_unit || p?.unit || 'Pcs';
-              const isLowStock = currentStock <= minStock;
-              const costValuation = currentStock * costPerSellingUnit;
-              const retailValuation = currentStock * sellingPrice;
-              const stockRatio = Math.min(100, Math.max(5, (currentStock / (minStock * 2 || 20)) * 100));
+              const baseStockQty = Number(p?.current_stock || 0);
+              const purchasePackQty = isDualUnit ? (baseStockQty / piecesPerPack) : baseStockQty;
+              const minStockPacks = Number(p?.min_stock_level || 10);
+              const isLowStock = purchasePackQty <= minStockPacks;
+              const costValuation = baseStockQty * costPerSellingUnit;
+              const retailValuation = baseStockQty * sellingPrice;
+              const stockRatio = Math.min(100, Math.max(5, (purchasePackQty / (minStockPacks * 2 || 20)) * 100));
 
               const godownVal = p.godown || (p.warehouse_location?.includes('|') ? p.warehouse_location.split('|')[0].replace(/^Godown:\s*/i, '').trim() : '');
               const rackVal = p.rack_number || (p.warehouse_location?.match(/Rack:\s*([^|]+)/i)?.[1]?.trim() || '');
@@ -1720,13 +1720,15 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                   {mode === 'stock' ? (
                     <>
                       <td className="py-3.5 px-4 text-center font-mono text-xs font-bold text-slate-600 dark:text-slate-400">
-                        {minStock} {sUnit}
+                        {minStockPacks} {pUnit}
                       </td>
                       <td className="py-3.5 px-4 text-center">
                         <div className="flex flex-col gap-1 max-w-[200px] mx-auto">
                           <div className="flex items-center justify-between gap-2">
                             <span className={`font-mono font-black text-xs ${isLowStock ? 'text-rose-600 dark:text-rose-400' : 'text-slate-900 dark:text-slate-100'}`}>
-                              {currentStock.toFixed(2).replace(/\.00$/, '')} {isDualUnit && currentStock < piecesPerPack ? pUnit : sUnit}
+                              {isDualUnit 
+                                ? `${purchasePackQty.toFixed(2).replace(/\.00$/, '')} ${pUnit.toUpperCase()}`
+                                : `${baseStockQty.toFixed(2).replace(/\.00$/, '')} ${sUnit.toUpperCase()}`}
                             </span>
                             {isLowStock ? (
                               <span className="text-[9px] px-1.5 py-0.2 bg-rose-500 text-white rounded font-black uppercase tracking-wider animate-pulse">
@@ -1740,7 +1742,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                           </div>
                           {isDualUnit && piecesPerPack > 1 && (
                             <div className="text-[10px] text-blue-600 dark:text-blue-400 font-bold font-mono text-left">
-                              ({(currentStock < piecesPerPack ? (currentStock * piecesPerPack) : (currentStock / piecesPerPack)).toFixed(currentStock < piecesPerPack ? 0 : 2).replace(/\.00$/, '')} {currentStock < piecesPerPack ? sUnit : pUnit})
+                              ({baseStockQty.toFixed(2).replace(/\.00$/, '')} {sUnit.toUpperCase()})
                             </div>
                           )}
                           {/* Stock Level Progress Meter */}
@@ -1784,10 +1786,12 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                         <div className="flex flex-col items-center justify-center">
                           <div className="flex items-center justify-center gap-1.5">
                             <span className={`font-mono font-bold text-xs ${isLowStock ? 'text-rose-600 dark:text-rose-400' : 'text-slate-900 dark:text-slate-100'}`}>
-                              {currentStock.toFixed(2).replace(/\.00$/, '')}
+                              {isDualUnit 
+                                ? purchasePackQty.toFixed(2).replace(/\.00$/, '') 
+                                : baseStockQty.toFixed(2).replace(/\.00$/, '')}
                             </span>
                             <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase">
-                              {isDualUnit && currentStock < piecesPerPack ? pUnit : sUnit}
+                              {isDualUnit ? pUnit.toUpperCase() : sUnit.toUpperCase()}
                             </span>
                             {isLowStock && (
                               <span className="text-[9px] px-1.5 py-0.5 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 rounded-md font-bold" title="Low stock warning!">
@@ -1797,7 +1801,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                           </div>
                           {isDualUnit && piecesPerPack > 1 && (
                             <div className="text-[10px] text-blue-600 dark:text-blue-400 font-bold font-mono">
-                              ({(currentStock < piecesPerPack ? (currentStock * piecesPerPack) : (currentStock / piecesPerPack)).toFixed(currentStock < piecesPerPack ? 0 : 2).replace(/\.00$/, '')} {currentStock < piecesPerPack ? sUnit : pUnit})
+                              ({baseStockQty.toFixed(2).replace(/\.00$/, '')} {sUnit.toUpperCase()})
                             </div>
                           )}
                         </div>
