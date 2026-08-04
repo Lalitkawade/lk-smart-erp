@@ -95,6 +95,12 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
   const [amountCollectedInput, setAmountCollectedInput] = useState<string>('');
   const [manualDiscountInput, setManualDiscountInput] = useState<string>('');
   const [repayUdharInput, setRepayUdharInput] = useState<string>('');
+  const [isUdharEnabled, setIsUdharEnabled] = useState<boolean>(false);
+  const [creditDueDate, setCreditDueDate] = useState<string>(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 15);
+    return d.toISOString().split('T')[0];
+  });
 
   const cartSubtotal = useMemo(() => {
     return cart.reduce((acc, curr) => acc + curr.qty * curr.rate, 0);
@@ -296,14 +302,18 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
     if (!billingModal) {
       setAmountCollectedInput('');
       setManualDiscountInput('');
+      setIsUdharEnabled(false);
       return;
     }
     if (paymentMode === 'Credit') {
-      setAmountCollectedInput('0');
-    } else if (!amountCollectedInput || amountCollectedInput === '0' || amountCollectedInput === totalAmount.toString()) {
+      setIsUdharEnabled(true);
+      if (amountCollectedInput === totalAmount.toString()) {
+        setAmountCollectedInput('0');
+      }
+    } else if (!isUdharEnabled) {
       setAmountCollectedInput(totalAmount.toString());
     }
-  }, [totalAmount, billingModal, paymentMode]);
+  }, [totalAmount, billingModal, paymentMode, isUdharEnabled]);
 
   // Filter products for POS
   const filteredPOSProducts = useMemo(() => {
@@ -870,12 +880,56 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                   </div>
                 )}
 
+                {/* UDHAR / CREDIT SALE MODE TOGGLE CARD */}
+                <div className="bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 p-3 rounded-xl flex items-center justify-between gap-3 flex-wrap shadow-xs">
+                  <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-800 dark:text-slate-200 select-none">
+                    <input 
+                      type="checkbox"
+                      checked={isUdharEnabled || paymentMode === 'Credit'}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setIsUdharEnabled(checked);
+                        if (checked) {
+                          if (amountCollectedInput === totalAmount.toString()) {
+                            setAmountCollectedInput('0');
+                          }
+                        } else {
+                          if (paymentMode === 'Credit') setPaymentMode('Cash');
+                          setAmountCollectedInput(totalAmount.toString());
+                        }
+                      }}
+                      className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 cursor-pointer"
+                    />
+                    <span className="flex items-center gap-1.5 font-black uppercase text-[11px] text-amber-900 dark:text-amber-300">
+                      <i className="fa-solid fa-hand-holding-dollar text-amber-600 dark:text-amber-400"></i>
+                      <span>Customer asks for Udhar / Partial Payment (Credit Sale)</span>
+                    </span>
+                  </label>
+                  <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-md border ${
+                    (isUdharEnabled || paymentMode === 'Credit') 
+                      ? 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700' 
+                      : 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700'
+                  }`}>
+                    {(isUdharEnabled || paymentMode === 'Credit') ? '📌 Udhar / Partial Mode Active' : '✓ Default Cash Mode (Full Paid)'}
+                  </span>
+                </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-xs text-textSecondary mb-1 font-semibold">Payment Mode</label>
-                    <select className="w-full bg-background border border-border rounded p-2 text-xs text-foreground font-semibold"
-                      value={paymentMode} onChange={(e) => setPaymentMode(e.target.value)}>
-                      <option value="Cash">Cash</option>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Payment Mode (Default: Cash)</label>
+                    <select 
+                      className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 font-semibold focus:outline-none focus:border-blue-600 cursor-pointer"
+                      value={paymentMode} 
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setPaymentMode(val);
+                        if (val === 'Credit') {
+                          setIsUdharEnabled(true);
+                          if (amountCollectedInput === totalAmount.toString()) setAmountCollectedInput('0');
+                        }
+                      }}
+                    >
+                      <option value="Cash">Cash (Default Full Payment)</option>
                       <option value="UPI">UPI / GPay</option>
                       <option value="Card">Credit / Debit Card</option>
                       <option value="Bank">Bank Transfer / NEFT</option>
@@ -885,9 +939,9 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
 
                   <div>
                     <div className="flex justify-between items-center mb-1">
-                      <label className="block text-xs text-textSecondary font-semibold">Manual Discount (₹)</label>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">Manual Discount (₹)</label>
                       {manualDiscount > 0 && (
-                        <span className="text-[10px] font-bold text-rose-500 bg-rose-500/10 px-1.5 py-0.2 rounded border border-rose-500/30">
+                        <span className="text-[10px] font-bold text-rose-600 bg-rose-50 dark:bg-rose-950 px-1.5 py-0.2 rounded border border-rose-200 dark:border-rose-800">
                           -₹{manualDiscount.toFixed(2)}
                         </span>
                       )}
@@ -897,35 +951,78 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                       step="any"
                       min="0"
                       max={cartSubtotal}
-                      className="w-full bg-background border border-border rounded p-2 text-xs text-rose-500 font-mono font-bold focus:border-rose-500 focus:outline-none"
+                      className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-rose-600 dark:text-rose-400 font-mono font-bold focus:border-rose-500 focus:outline-none"
                       value={manualDiscountInput}
                       onChange={(e) => setManualDiscountInput(e.target.value)}
                       placeholder="e.g. 50 (Flat ₹ off)"
                     />
                   </div>
 
-                  <div>
-                    <div className="flex justify-between items-center mb-1">
-                      <label className="block text-xs text-textSecondary font-semibold">Amount Collected (₹)</label>
-                      <button
-                        type="button"
-                        onClick={() => setAmountCollectedInput(totalAmount.toString())}
-                        className="text-[10px] font-bold text-primary hover:text-primary/80 bg-primary/10 hover:bg-primary/20 px-2 py-0.5 rounded border border-primary/30 transition cursor-pointer flex items-center gap-1 active:scale-95"
-                      >
-                        ⚡ Auto-Fill Full (₹{totalAmount.toFixed(2)})
-                      </button>
+                  {/* Amount Collected & Credit Due Date Controls */}
+                  {(isUdharEnabled || paymentMode === 'Credit') ? (
+                    <div>
+                      <div className="flex justify-between items-center mb-1">
+                        <label className="block text-xs font-bold text-amber-700 dark:text-amber-300">Amount Collected (₹)</label>
+                        <button
+                          type="button"
+                          onClick={() => setAmountCollectedInput(totalAmount.toString())}
+                          className="text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:underline bg-blue-50 dark:bg-blue-950 px-2 py-0.5 rounded border border-blue-200 dark:border-blue-800 transition cursor-pointer flex items-center gap-1 active:scale-95"
+                        >
+                          ⚡ Auto-Fill Full (₹{totalAmount.toFixed(2)})
+                        </button>
+                      </div>
+                      <input 
+                        type="number"
+                        step="any"
+                        min="0"
+                        className="w-full bg-white dark:bg-slate-900 border-2 border-amber-500 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 font-mono font-bold focus:border-amber-600 focus:outline-none shadow-xs"
+                        value={amountCollectedInput}
+                        onChange={(e) => setAmountCollectedInput(e.target.value)}
+                        placeholder={`Enter collected amount (e.g. ₹${(totalAmount * 0.2).toFixed(2)})`}
+                      />
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="flex justify-between items-center mb-1">
+                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">Amount Billed & Paid</label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsUdharEnabled(true);
+                            setAmountCollectedInput('0');
+                          }}
+                          className="text-[10px] font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950 px-2 py-0.5 rounded border border-amber-200 dark:border-amber-800 hover:bg-amber-100 transition cursor-pointer flex items-center gap-1 active:scale-95"
+                        >
+                          📌 Customer asks for Udhar?
+                        </button>
+                      </div>
+                      <div className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs font-mono font-extrabold text-emerald-600 dark:text-emerald-400 flex justify-between items-center">
+                        <span>Full Paid ({paymentMode})</span>
+                        <span>₹{totalAmount.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Conditional Credit Due Date Input when Udhar Mode is Active */}
+                {(isUdharEnabled || paymentMode === 'Credit') && (
+                  <div className="animate-fade-in bg-amber-50/90 dark:bg-amber-950/40 p-3.5 rounded-xl border border-amber-200 dark:border-amber-800 space-y-1.5">
+                    <div className="flex justify-between items-center">
+                      <label className="block text-xs font-black text-amber-900 dark:text-amber-300 uppercase tracking-wide flex items-center gap-1.5">
+                        <i className="fa-solid fa-calendar-day text-amber-600"></i> Credit Due Date (Udhar Promise Date) *
+                      </label>
+                      <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400">
+                        Select date when customer promises repayment
+                      </span>
                     </div>
                     <input 
-                      type="number"
-                      step="any"
-                      min="0"
-                      className="w-full bg-background border border-border rounded p-2 text-xs text-foreground font-mono font-bold focus:border-primary focus:outline-none"
-                      value={amountCollectedInput}
-                      onChange={(e) => setAmountCollectedInput(e.target.value)}
-                      placeholder={`₹${totalAmount.toFixed(2)} (Default full)`}
+                      type="date"
+                      className="w-full bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 font-mono font-bold focus:border-amber-600 focus:outline-none"
+                      value={creditDueDate}
+                      onChange={(e) => setCreditDueDate(e.target.value)}
                     />
                   </div>
-                </div>
+                )}
 
                 {/* Transaction ID / UTR Input for GPay, Credit Card, Bank Transfer, etc. */}
                 {(paymentMode === 'UPI' || paymentMode === 'Card' || paymentMode === 'Bank' || (paymentMode !== 'Cash' && paymentMode !== 'Credit')) && (
