@@ -486,23 +486,12 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
     return Array.from(set);
   }, [customUnits]);
 
-  const handleUnitDropdownChange = (field: 'p_unit' | 's_unit' | 'unit', value: string) => {
-    let targetValue = value;
-    if (value === '__ADD_CUSTOM__') {
-      const custom = window.prompt('Enter new custom unit (e.g. Box, Packet, Bundle, Drum, Coil):');
-      if (custom && custom.trim()) {
-        targetValue = custom.trim();
-        setCustomUnits(prev => Array.from(new Set([...prev, targetValue])));
-      } else {
-        return;
-      }
-    }
-
-    setFormData(prev => {
-      const next = { ...prev, [field]: targetValue };
-      if (field === 's_unit') {
-        next.unit = targetValue;
-      }
+  const saveCustomUnit = (unitName: string) => {
+    setCustomUnits(prev => {
+      const next = Array.from(new Set([...prev, unitName]));
+      try {
+        localStorage.setItem('lk_custom_units', JSON.stringify(next));
+      } catch (e) {}
       return next;
     });
   };
@@ -741,8 +730,9 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
   };
 
 
-  // Form State
-  const [formData, setFormData] = useState({
+  // Form State for Multi-Product Procurement & Catalog Management
+  const createDefaultProductItem = (id?: string) => ({
+    id: id || 'item-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
     product_name: '',
     sku: '',
     barcode: '',
@@ -775,12 +765,59 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
     purchase_date: new Date().toISOString().slice(0, 10),
     allow_decimal: false,
     allow_purchase_unit_selling: true,
-    track_base_unit: true
+    track_base_unit: true,
+    isCollapsed: false,
+    isUnitConversionExpanded: false
   });
+
+  const [productItems, setProductItems] = useState<any[]>([createDefaultProductItem()]);
+
+  const updateProductItem = (index: number, updates: any) => {
+    setProductItems(prev => {
+      const next = [...prev];
+      next[index] = { ...next[index], ...updates };
+      return next;
+    });
+  };
+
+  const handleAddProductItem = () => {
+    setProductItems(prev => {
+      const collapsedPrev = prev.map(item => ({ ...item, isCollapsed: true }));
+      return [...collapsedPrev, createDefaultProductItem()];
+    });
+  };
+
+  const handleRemoveProductItem = (index: number) => {
+    if (productItems.length <= 1) return;
+    setProductItems(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleToggleCollapse = (index: number) => {
+    setProductItems(prev => {
+      const next = [...prev];
+      next[index] = { ...next[index], isCollapsed: !next[index].isCollapsed };
+      return next;
+    });
+  };
+
+  const handleUnitDropdownChange = (index: number, field: 'p_unit' | 's_unit' | 'unit', value: string) => {
+    if (value === '__ADD_CUSTOM__') {
+      const customVal = prompt('Enter new custom unit name (e.g. Dozen, Barrel, Coil):');
+      if (customVal && customVal.trim()) {
+        const cleaned = customVal.trim();
+        saveCustomUnit(cleaned);
+        updateProductItem(index, { [field]: cleaned });
+      }
+    } else {
+      updateProductItem(index, { [field]: value });
+    }
+  };
+
+  // Shorthand reference to active item (e.g. productItems[0])
+  const formData = productItems[0] || createDefaultProductItem();
 
   const [isEditingBaseStock, setIsEditingBaseStock] = useState(false);
   const [isEditingTax, setIsEditingTax] = useState(false);
-  const [isUnitConversionExpanded, setIsUnitConversionExpanded] = useState(false);
 
   const [activeViewTab, setActiveViewTab] = useState<'catalog' | 'bills'>('catalog');
   const [vendorFilter, setVendorFilter] = useState<string>('ALL');
@@ -893,43 +930,16 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
 
   const handleOpenAdd = () => {
     setEditingProduct(null);
-    setFormData({
-      product_name: '',
-      sku: '',
-      barcode: '',
-      category_name: 'General',
-      brand_name: 'Generic',
-      unit: 'Nos',
-      purchase_price: 0,
-      selling_price: 0,
-      dealer_price: 0,
-      mrp: 0,
-      current_stock: 0,
-      min_stock_level: 10,
-      hsn: '',
-      gst: 18,
-      godown: '',
-      rack_number: '',
-      shelf_number: '',
-      description: '',
-      size: '',
-      weight: '',
-      warehouse_location: '',
-      p_unit: 'Box',
-      s_unit: 'Nos',
-      supplier_id: '',
-      supplier_name: '',
-      supplier_phone: '',
-      pieces_per_pack: 100,
-      piece_selling_price: 0,
-      additional_stock: 0,
-      purchase_date: new Date().toISOString().slice(0, 10),
-      allow_decimal: false,
-      allow_purchase_unit_selling: true,
-      track_base_unit: true
-    });
+    setProductItems([createDefaultProductItem()]);
     setIsEditingBaseStock(true);
     setIsEditingTax(true);
+    setHasBillDetails(false);
+    setSupplierId('');
+    setVendorSearchQuery('');
+    setBillNumber('');
+    setTransactionId('');
+    setIsPartialPayment(false);
+    setPaidAmount(0);
     setModalOpen(true);
   };
 
@@ -944,7 +954,8 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
     const parsedRack = p.rack_number || (locationStr.match(/Rack:\s*([^|]+)/i)?.[1]?.trim() || '');
     const parsedShelf = p.shelf_number || (locationStr.match(/Shelf:\s*([^|]+)/i)?.[1]?.trim() || '');
 
-    setFormData({
+    setProductItems([{
+      id: p.id,
       product_name: p.product_name,
       sku: p.sku || '',
       barcode: p.barcode || '',
@@ -977,8 +988,10 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
       purchase_date: new Date().toISOString().slice(0, 10),
       allow_decimal: p.allow_decimal ?? false,
       allow_purchase_unit_selling: p.allow_purchase_unit_selling ?? true,
-      track_base_unit: p.track_base_unit ?? true
-    });
+      track_base_unit: p.track_base_unit ?? true,
+      isCollapsed: false,
+      isUnitConversionExpanded: false
+    }]);
     setModalOpen(true);
   };
 
@@ -1048,112 +1061,141 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const selectedSup = suppliers.find(s => s.id === formData.supplier_id);
-
-      const fullLocation = [
-        formData.godown ? `Godown: ${formData.godown}` : '',
-        formData.rack_number ? `Rack: ${formData.rack_number}` : '',
-        formData.shelf_number ? `Shelf: ${formData.shelf_number}` : ''
-      ].filter(Boolean).join(' | ');
-
-      // Check duplicate if not editing explicitly
-      let targetProductId = editingProduct?.id;
-      let isMergeOperation = false;
-      let existingStock = 0;
-
-      if (!targetProductId && formData.product_name.trim()) {
-        const match = products.find(p => {
-          if (formData.barcode && p.barcode && p.barcode === formData.barcode.trim()) return true;
-          if (formData.sku && p.sku && p.sku.toUpperCase() === formData.sku.trim().toUpperCase()) return true;
-          return p.product_name.toLowerCase().trim() === formData.product_name.toLowerCase().trim();
-        });
-
-        if (match) {
-          targetProductId = match.id;
-          isMergeOperation = true;
-          existingStock = Number(match.current_stock || 0);
-        }
-      }
-
-      const oldStock = editingProduct ? Number(editingProduct.current_stock || 0) : 0;
-      const directStockIncrease = editingProduct ? Math.max(0, Number(formData.current_stock || 0) - oldStock) : 0;
-      const additionalInput = Number(formData.additional_stock || 0);
-
-      const addedStockInflow = editingProduct
-        ? (additionalInput > 0 ? additionalInput : directStockIncrease)
-        : (isMergeOperation ? Number(formData.current_stock || 0) + additionalInput : Number(formData.current_stock || 0));
-
-      const finalStock = editingProduct
-        ? (additionalInput > 0 ? (oldStock + additionalInput) : Number(formData.current_stock || 0))
-        : (isMergeOperation ? (existingStock + addedStockInflow) : addedStockInflow);
-
-      const { piecesPerPack, piecePrice, packPrice } = getProductUnitRates({
-        pieces_per_pack: formData.pieces_per_pack,
-        selling_price: formData.selling_price,
-        piece_selling_price: formData.piece_selling_price,
-        purchase_price: formData.purchase_price
-      });
-
-      const productPayload = {
-        tenant_id: tenantId,
-        product_name: formData.product_name,
-        sku: formData.sku || null,
-        barcode: formData.barcode || null,
-        category_name: formData.category_name,
-        brand_name: formData.brand_name,
-        unit: formData.unit || formData.s_unit || 'Nos',
-        purchase_price: formData.purchase_price,
-        selling_price: packPrice,
-        dealer_price: formData.dealer_price,
-        mrp: formData.mrp,
-        current_stock: finalStock,
-        min_stock_level: formData.min_stock_level,
-        hsn: formData.hsn || null,
-        gst: formData.gst,
-        godown: formData.godown || null,
-        rack_number: formData.rack_number || null,
-        shelf_number: formData.shelf_number || null,
-        description: formData.description || null,
-        size: formData.size || null,
-        weight: formData.weight || null,
-        warehouse_location: fullLocation || formData.godown || formData.warehouse_location || null,
-        p_unit: formData.p_unit,
-        s_unit: formData.s_unit,
-        supplier_id: formData.supplier_id || null,
-        supplier_name: selectedSup ? selectedSup.supplier_name : (formData.supplier_name || null),
-        supplier_phone: selectedSup ? selectedSup.phone : (formData.supplier_phone || null),
-        status: 'Active',
-        pieces_per_pack: piecesPerPack,
-        piece_selling_price: piecePrice,
-        allow_decimal: formData.allow_decimal,
-        allow_purchase_unit_selling: formData.allow_purchase_unit_selling,
-        track_base_unit: formData.track_base_unit,
-        ...(targetProductId && { id: targetProductId })
-      };
-
-      const savedProd = saveProduct(productPayload as any);
-
-      // Check if prices changed or new stock was added to record in Product History ledger asynchronously
-      const effectiveProdId = savedProd?.id || targetProductId;
-
-      // Log purchase bill record if Vendor & Procurement details are active
+      let activeSup: any = null;
       if (hasBillDetails) {
-        let activeSup = suppliers.find(s => s.id === supplierId);
+        activeSup = suppliers.find(s => s.id === supplierId);
         if (!activeSup) {
-          const fallbackName = vendorSearchQuery.trim().toUpperCase() || (formData.supplier_name ? formData.supplier_name.toUpperCase() : 'GENERAL VENDOR');
+          const fallbackName = vendorSearchQuery.trim().toUpperCase() || 'GENERAL VENDOR';
           activeSup = suppliers.find(s => s.supplier_name.toUpperCase() === fallbackName) || {
             id: 'sup-gen-' + Date.now(),
             supplier_name: fallbackName,
-            phone: formData.supplier_phone || '',
+            phone: '',
             outstanding: 0
           };
         }
+      }
 
+      const savedBillItems: any[] = [];
+      let totalBillCost = 0;
+      let savedCount = 0;
+
+      for (let i = 0; i < productItems.length; i++) {
+        const item = productItems[i];
+        if (!item.product_name || !item.product_name.trim()) continue;
+
+        savedCount++;
+        const fullLocation = [
+          item.godown ? `Godown: ${item.godown}` : '',
+          item.rack_number ? `Rack: ${item.rack_number}` : '',
+          item.shelf_number ? `Shelf: ${item.shelf_number}` : ''
+        ].filter(Boolean).join(' | ');
+
+        let targetProductId = editingProduct?.id || (item.id && !item.id.startsWith('item-') ? item.id : undefined);
+        let isMergeOperation = false;
+        let existingStock = 0;
+
+        if (!targetProductId && item.product_name.trim()) {
+          const match = products.find(p => {
+            if (item.barcode && p.barcode && p.barcode === item.barcode.trim()) return true;
+            if (item.sku && p.sku && p.sku.toUpperCase() === item.sku.trim().toUpperCase()) return true;
+            return p.product_name.toLowerCase().trim() === item.product_name.toLowerCase().trim();
+          });
+
+          if (match) {
+            targetProductId = match.id;
+            isMergeOperation = true;
+            existingStock = Number(match.current_stock || 0);
+          }
+        }
+
+        const oldStock = editingProduct ? Number(editingProduct.current_stock || 0) : 0;
+        const directStockIncrease = editingProduct ? Math.max(0, Number(item.current_stock || 0) - oldStock) : 0;
+        const additionalInput = Number(item.additional_stock || 0);
+
+        const addedStockInflow = editingProduct
+          ? (additionalInput > 0 ? additionalInput : directStockIncrease)
+          : (isMergeOperation ? Number(item.current_stock || 0) + additionalInput : Number(item.current_stock || 0));
+
+        const finalStock = editingProduct
+          ? (additionalInput > 0 ? (oldStock + additionalInput) : Number(item.current_stock || 0))
+          : (isMergeOperation ? (existingStock + addedStockInflow) : addedStockInflow);
+
+        const { piecesPerPack, piecePrice, packPrice } = getProductUnitRates({
+          pieces_per_pack: item.pieces_per_pack,
+          selling_price: item.selling_price,
+          piece_selling_price: item.piece_selling_price,
+          purchase_price: item.purchase_price
+        });
+
+        const itemPurchaseRate = Number(item.purchase_price || 0);
+        const itemLineCost = addedStockInflow * itemPurchaseRate;
+        totalBillCost += itemLineCost;
+
+        const productPayload = {
+          tenant_id: tenantId,
+          product_name: item.product_name,
+          sku: item.sku || null,
+          barcode: item.barcode || null,
+          category_name: item.category_name,
+          brand_name: item.brand_name,
+          unit: item.unit || item.s_unit || 'Nos',
+          purchase_price: item.purchase_price,
+          selling_price: packPrice,
+          dealer_price: item.dealer_price,
+          mrp: item.mrp,
+          current_stock: finalStock,
+          min_stock_level: item.min_stock_level,
+          hsn: item.hsn || null,
+          gst: item.gst,
+          godown: item.godown || null,
+          rack_number: item.rack_number || null,
+          shelf_number: item.shelf_number || null,
+          description: item.description || null,
+          size: item.size || null,
+          weight: item.weight || null,
+          warehouse_location: fullLocation || item.godown || item.warehouse_location || null,
+          p_unit: item.p_unit,
+          s_unit: item.s_unit,
+          supplier_id: activeSup ? activeSup.id : (item.supplier_id || null),
+          supplier_name: activeSup ? activeSup.supplier_name : (item.supplier_name || null),
+          supplier_phone: activeSup ? activeSup.phone : (item.supplier_phone || null),
+          status: 'Active',
+          pieces_per_pack: piecesPerPack,
+          piece_selling_price: piecePrice,
+          allow_decimal: item.allow_decimal,
+          allow_purchase_unit_selling: item.allow_purchase_unit_selling,
+          track_base_unit: item.track_base_unit,
+          ...(targetProductId && { id: targetProductId })
+        };
+
+        const savedProd = saveProduct(productPayload as any);
+        const effectiveProdId = savedProd?.id || targetProductId;
+
+        savedBillItems.push({
+          product_id: effectiveProdId || 'prod-' + Date.now() + '-' + i,
+          product_name: item.product_name,
+          qty: addedStockInflow,
+          rate: itemPurchaseRate,
+          amount: itemLineCost
+        });
+
+        if (effectiveProdId && (addedStockInflow > 0 || (editingProduct && editingProduct.purchase_price !== item.purchase_price))) {
+          logInflowPurchaseHistory(
+            tenantId,
+            effectiveProdId,
+            item.product_name,
+            addedStockInflow,
+            item.purchase_price,
+            packPrice,
+            activeSup ? activeSup.supplier_name : 'Direct Stock Inflow'
+          ).catch(() => {});
+        }
+      }
+
+      // Log purchase bill record if Vendor & Procurement details are active
+      if (hasBillDetails && activeSup && savedBillItems.length > 0) {
         const rawDate = purchaseDate ? new Date(purchaseDate) : new Date();
         const safeIsoDate = isNaN(rawDate.getTime()) ? new Date().toISOString() : rawDate.toISOString();
-        const itemQty = Number(formData.current_stock || 1);
-        const itemRate = Number(formData.purchase_price || 0);
-        const totalBillCost = itemQty * itemRate;
         const effectivePaid = isPartialPayment ? Math.min(totalBillCost, Math.max(0, paidAmount)) : totalBillCost;
         const dueAmount = Math.max(0, totalBillCost - effectivePaid);
 
@@ -1169,14 +1211,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
           due_amount: dueAmount,
           purchase_date: safeIsoDate,
           is_offline_draft: true,
-          items: [
-            {
-              product_id: effectiveProdId || 'prod-' + Date.now(),
-              product_name: formData.product_name,
-              qty: itemQty,
-              rate: itemRate
-            }
-          ]
+          items: savedBillItems
         };
 
         try {
@@ -1209,40 +1244,21 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
             purchase_date: newBillObj.purchase_date
           }).select().single().then(({ data: billRes }) => {
             if (billRes && billRes.id) {
-              supabase.from('purchase_items').insert({
+              const rows = savedBillItems.map(bi => ({
                 bill_id: billRes.id,
-                product_id: isValidUUID(effectiveProdId) ? effectiveProdId : null,
-                qty: itemQty,
-                rate: itemRate,
-                amount: totalBillCost
-              });
+                product_id: isValidUUID(bi.product_id) ? bi.product_id : null,
+                qty: bi.qty,
+                rate: bi.rate,
+                amount: bi.amount
+              }));
+              supabase.from('purchase_items').insert(rows);
             }
           }).catch(() => {});
         }
       }
-      const isPriceChanged = editingProduct && (
-        editingProduct.purchase_price !== formData.purchase_price || 
-        editingProduct.selling_price !== formData.selling_price
-      );
-
-      if (effectiveProdId && (addedStockInflow > 0 || isPriceChanged)) {
-        logInflowPurchaseHistory(
-          tenantId,
-          effectiveProdId,
-          formData.product_name,
-          addedStockInflow > 0 ? addedStockInflow : 0,
-          formData.purchase_price,
-          formData.selling_price,
-          selectedSup ? selectedSup.supplier_name : (formData.supplier_name || 'Direct Stock Inflow / Price Update')
-        ).catch(() => {});
-      }
 
       setModalOpen(false);
-      if (isMergeOperation || (editingProduct && addedStockInflow > 0)) {
-        triggerToast(`Stock updated! Added +${addedStockInflow} ${formData.s_unit || 'Pcs'}. Total Stock: ${finalStock}`);
-      } else {
-        triggerToast('⚡ Product saved successfully!');
-      }
+      triggerToast(`⚡ ${savedCount} Product(s) saved successfully!`);
       window.dispatchEvent(new Event('storage'));
     } catch (err: any) {
       triggerToast('⚠️ Save failed: ' + err.message);
@@ -2364,7 +2380,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                             <div>
                               <label className="block text-xs text-textSecondary mb-1">Total Bill Cost (₹)</label>
                               <div className="w-full bg-background border border-border rounded p-2 text-xs font-mono font-extrabold text-foreground">
-                                ₹{(Number(formData.current_stock || 1) * Number(formData.purchase_price || 0)).toFixed(2)}
+                                ₹{productItems.reduce((sum, item) => sum + (Number(item.current_stock || 0) * Number(item.purchase_price || 0)), 0).toFixed(2)}
                               </div>
                             </div>
                           </div>
@@ -2374,544 +2390,563 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                   )}
                 </div>
               )}
-              {/* UNITS & STOCK CONFIGURATION CARD (COMPACT & COLLAPSIBLE) */}
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-sm">
-                {/* Card Title Header with Expand/Collapse Button */}
-                <div 
-                  className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 cursor-pointer select-none"
-                  onClick={() => setIsUnitConversionExpanded(!isUnitConversionExpanded)}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-xl bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
-                      <i className="fa-solid fa-boxes-stacked text-sm"></i>
-                    </div>
-                    <div>
-                      <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wide flex items-center gap-2 flex-wrap">
-                        <span>Units & Dual-Unit Conversion</span>
-                        <span className="text-[10px] font-extrabold text-blue-600 bg-blue-50 dark:bg-blue-950 px-2 py-0.5 rounded border border-blue-200 dark:border-blue-800">
-                          1 {formData.p_unit} = {formData.pieces_per_pack} {formData.unit}
-                        </span>
-                      </h4>
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400">Configure purchase, selling, and inventory base unit conversions</p>
-                    </div>
-                  </div>
 
-                  <button
-                    type="button"
-                    className="text-xs font-bold text-blue-600 hover:text-blue-700 bg-blue-50 dark:bg-blue-950/60 px-3 py-1.5 rounded-lg border border-blue-200 dark:border-blue-800 transition flex items-center gap-1.5 cursor-pointer shrink-0"
-                  >
-                    <span>{isUnitConversionExpanded ? 'Hide Advanced Rules' : '⚙️ Expand Rules'}</span>
-                    <i className={`fa-solid ${isUnitConversionExpanded ? 'fa-chevron-up' : 'fa-chevron-down'}`}></i>
-                  </button>
-                </div>
+              {/* MULTI-PRODUCT ACCORDION LIST */}
+              <div className="space-y-4">
+                {productItems.map((item, index) => {
+                  const pUnit = item.p_unit || 'Box';
+                  const sUnit = item.s_unit || item.unit || 'Nos';
+                  const piecesPerPack = Number(item.pieces_per_pack || 1);
+                  const isDualUnit = piecesPerPack > 1;
 
-                {/* Row 1: Unit Dropdowns (Always Visible & Compact) */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
-                      Purchase Unit <span className="text-rose-500 font-bold">*</span>
-                    </label>
-                    <select
-                      className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-xs text-slate-900 dark:text-slate-100 font-semibold focus:outline-none focus:border-blue-600 cursor-pointer"
-                      value={formData.p_unit}
-                      onChange={(e) => handleUnitDropdownChange('p_unit', e.target.value)}
-                    >
-                      {allUnits.map(u => (
-                        <option key={u} value={u}>{u}</option>
-                      ))}
-                      <option value="__ADD_CUSTOM__" className="font-bold text-blue-600">+ Add Custom Unit</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
-                      Selling Unit <span className="text-rose-500 font-bold">*</span>
-                    </label>
-                    <select
-                      className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-xs text-slate-900 dark:text-slate-100 font-semibold focus:outline-none focus:border-blue-600 cursor-pointer"
-                      value={formData.s_unit}
-                      onChange={(e) => handleUnitDropdownChange('s_unit', e.target.value)}
-                    >
-                      {allUnits.map(u => (
-                        <option key={u} value={u}>{u}</option>
-                      ))}
-                      <option value="__ADD_CUSTOM__" className="font-bold text-blue-600">+ Add Custom Unit</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
-                      Base Stock Unit <span className="text-rose-500 font-bold">*</span>
-                    </label>
-                    <select
-                      className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-xs text-slate-900 dark:text-slate-100 font-semibold focus:outline-none focus:border-blue-600 cursor-pointer"
-                      value={formData.unit}
-                      onChange={(e) => handleUnitDropdownChange('unit', e.target.value)}
-                    >
-                      {allUnits.map(u => (
-                        <option key={u} value={u}>{u}</option>
-                      ))}
-                      <option value="__ADD_CUSTOM__" className="font-bold text-blue-600">+ Add Custom Unit</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Collapsible Section: Conversion Factor, Presets, Checkboxes & Stock Rules */}
-                {isUnitConversionExpanded && (
-                  <div className="space-y-4 animate-fade-in pt-2 border-t border-slate-100 dark:border-slate-800">
-                    {/* Row 2: Conversion Factor (Visually Highlighted) */}
-                    <div className="bg-gradient-to-br from-blue-50/90 via-slate-50 to-indigo-50/80 dark:from-slate-800/90 dark:via-slate-800/50 dark:to-blue-950/40 border-2 border-blue-200 dark:border-blue-800/80 rounded-2xl p-4 sm:p-5 space-y-4 shadow-xs">
-                      <div className="flex justify-between items-center flex-wrap gap-2">
-                        <span className="text-xs font-extrabold text-blue-900 dark:text-blue-300 uppercase tracking-wider flex items-center gap-1.5">
-                          <i className="fa-solid fa-calculator text-blue-600"></i> Conversion Factor
-                        </span>
-                        <span className="text-[11px] font-bold text-blue-600 bg-blue-100 dark:bg-blue-950 px-2.5 py-0.5 rounded-full border border-blue-300 dark:border-blue-700">
-                          Live Auto-Conversion
-                        </span>
-                      </div>
-
-                      {/* Visual Conversion Editor controls */}
-                      <div className="bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-800 rounded-xl p-3.5 flex flex-wrap items-center justify-center gap-3 shadow-sm">
-                        {/* 1 Purchase Unit */}
-                        <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700">
-                          <span className="font-black text-sm text-slate-900 dark:text-slate-100 font-mono">1</span>
-                          <select
-                            className="bg-transparent text-xs font-bold text-blue-600 dark:text-blue-400 focus:outline-none cursor-pointer"
-                            value={formData.p_unit}
-                            onChange={(e) => handleUnitDropdownChange('p_unit', e.target.value)}
-                          >
-                            {allUnits.map(u => (
-                              <option key={u} value={u}>{u}</option>
-                            ))}
-                          </select>
-                        </div>
-
-                        {/* Equals Sign */}
-                        <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm shadow-md shrink-0">
-                          =
-                        </div>
-
-                        {/* Conversion Factor Input & Base Unit */}
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="number"
-                            step="any"
-                            min="0.001"
-                            className="w-28 bg-blue-50/80 dark:bg-slate-800 border-2 border-blue-600 rounded-xl p-2 text-center text-base font-black text-blue-700 dark:text-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-600/30 shadow-inner font-mono"
-                            value={formData.pieces_per_pack}
-                            onChange={(e) => setFormData({ ...formData, pieces_per_pack: Number(e.target.value) || 1 })}
-                            placeholder="100"
-                          />
-                          <select
-                            className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-slate-200 p-2.5 rounded-lg focus:outline-none cursor-pointer"
-                            value={formData.unit}
-                            onChange={(e) => handleUnitDropdownChange('unit', e.target.value)}
-                          >
-                            {allUnits.map(u => (
-                              <option key={u} value={u}>{u}</option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-
-                      {/* Live Preview Display */}
-                      <div className="bg-blue-600 text-white text-center py-2 px-4 rounded-xl text-xs font-extrabold shadow-sm flex items-center justify-center gap-2">
-                        <i className="fa-solid fa-eye text-blue-200"></i>
-                        <span>Live Conversion Preview:</span>
-                        <span className="font-mono text-amber-300 font-black text-sm">
-                          1 {formData.p_unit} = {formData.pieces_per_pack} {formData.unit}
-                        </span>
-                      </div>
-
-                      {/* Hardware Store Examples Underneath */}
-                      <div className="space-y-1.5 pt-1">
-                        <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Examples (Click to quick preset):</span>
-                        <div className="flex flex-wrap gap-2">
-                          {[
-                            { p: 'Box', u: 'Nos', f: 100 },
-                            { p: 'Bundle', u: 'Kg', f: 25 },
-                            { p: 'Roll', u: 'Meter', f: 90 },
-                            { p: 'Pipe', u: 'Feet', f: 20 },
-                            { p: 'Packet', u: 'Gram', f: 250 }
-                          ].map(preset => (
-                            <button
-                              key={preset.p}
-                              type="button"
-                              onClick={() => setFormData({
-                                ...formData,
-                                p_unit: preset.p,
-                                unit: preset.u,
-                                s_unit: preset.u,
-                                pieces_per_pack: preset.f
-                              })}
-                              className="text-[11px] font-bold bg-white dark:bg-slate-800 hover:bg-blue-600 hover:text-white border border-blue-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 px-3 py-1.5 rounded-lg transition font-mono cursor-pointer"
-                            >
-                              1 {preset.p} = {preset.f} {preset.u}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Row 3: Checkboxes */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
-                      <label className="flex items-start gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 hover:bg-slate-100/80 transition cursor-pointer">
-                        <input
-                          type="checkbox"
-                          className="mt-0.5 w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                          checked={formData.allow_decimal}
-                          onChange={(e) => setFormData({ ...formData, allow_decimal: e.target.checked })}
-                        />
-                        <div>
-                          <span className="block text-xs font-bold text-slate-900 dark:text-slate-100">☑ Allow Decimal Selling</span>
-                          <span className="block text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">e.g. 0.25 Kg, 0.5 Meter, 1.75 Feet</span>
-                        </div>
-                      </label>
-
-                      <label className="flex items-start gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 hover:bg-slate-100/80 transition cursor-pointer">
-                        <input
-                          type="checkbox"
-                          className="mt-0.5 w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                          checked={formData.allow_purchase_unit_selling}
-                          onChange={(e) => setFormData({ ...formData, allow_purchase_unit_selling: e.target.checked })}
-                        />
-                        <div>
-                          <span className="block text-xs font-bold text-slate-900 dark:text-slate-100">☑ Allow Selling in Purchase Unit</span>
-                          <span className="block text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">e.g. Sell full box also</span>
-                        </div>
-                      </label>
-
-                      <label className="flex items-start gap-3 p-3 rounded-xl border border-blue-200 dark:border-blue-900 bg-blue-50/30 dark:bg-blue-950/20 hover:bg-blue-50/60 transition cursor-pointer">
-                        <input
-                          type="checkbox"
-                          className="mt-0.5 w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                          checked={formData.track_base_unit}
-                          onChange={(e) => setFormData({ ...formData, track_base_unit: e.target.checked })}
-                        />
-                        <div>
-                          <span className="block text-xs font-bold text-blue-950 dark:text-blue-200">☑ Track Stock using Base Unit</span>
-                          <span className="block text-[10px] text-blue-600 dark:text-blue-400 font-semibold mt-0.5">(Default Enabled)</span>
-                        </div>
-                      </label>
-                    </div>
-
-                    {/* Helpful Information Card */}
-                    <div className="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/80 rounded-xl p-4 text-xs text-blue-900 dark:text-blue-200 leading-relaxed flex items-start gap-3">
-                      <i className="fa-solid fa-circle-info text-blue-600 dark:text-blue-400 text-base shrink-0 mt-0.5"></i>
-                      <div className="space-y-2 w-full">
-                        <p className="font-bold text-blue-950 dark:text-blue-100">Stock Calculation Rule</p>
-                        <ul className="list-disc list-inside space-y-0.5 text-blue-800 dark:text-blue-300 text-[11px]">
-                          <li>Stock is always stored in Base Unit.</li>
-                          <li>Purchases are automatically converted into Base Unit.</li>
-                          <li>Sales deduct stock from Base Unit.</li>
-                        </ul>
-                        <div className="mt-2 pt-2 border-t border-blue-200/80 dark:border-blue-800/80 text-[11px] bg-white/80 dark:bg-slate-900/80 p-2.5 rounded-lg grid grid-cols-1 sm:grid-cols-3 gap-2 font-mono">
-                          <div><span className="text-slate-500 dark:text-slate-400">Purchase:</span> <strong className="text-slate-900 dark:text-slate-100">5 {formData.p_unit}</strong></div>
-                          <div><span className="text-slate-500 dark:text-slate-400">Conversion:</span> <strong className="text-slate-900 dark:text-slate-100">1 {formData.p_unit} = {formData.pieces_per_pack} {formData.unit}</strong></div>
-                          <div><span className="text-blue-600 dark:text-blue-400 font-bold">Available Stock:</span> <strong className="text-blue-700 dark:text-blue-300 font-black">{5 * (formData.pieces_per_pack || 1)} {formData.unit}</strong></div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* PRODUCT DETAILS GRID */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="col-span-1 sm:col-span-2 relative">
-                  <label className="block text-xs font-semibold text-textSecondary mb-1">Product Name *</label>
-                  <input type="text" className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none focus:border-primary font-semibold uppercase" required
-                    value={formData.product_name} onChange={(e) => setFormData({ ...formData, product_name: e.target.value })} />
-                </div>
-
-                {similarProducts.length > 0 && !editingProduct && (
-                  <div className="col-span-1 sm:col-span-2 bg-slate-900 border border-amber-500/40 rounded-xl p-3 space-y-2 shadow-xl animate-fade-in text-xs">
-                    <div className="flex items-center justify-between text-[11px] font-extrabold text-amber-400 uppercase tracking-wide">
-                      <span className="flex items-center gap-1.5">
-                        <i className="fa-solid fa-magnifying-glass text-amber-400"></i>
-                        {similarProducts.length} Similar Product{similarProducts.length > 1 ? 's' : ''} Found in Catalog:
-                      </span>
-                      <span className="text-[9px] text-textMuted font-normal">Click to load / add stock</span>
-                    </div>
-
-                    <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                      {similarProducts.map((p) => (
-                        <div 
-                          key={p.id}
-                          onClick={() => handleOpenEdit(p)}
-                          className="p-2.5 bg-background hover:bg-amber-500/10 border border-border hover:border-amber-500/50 rounded-lg flex items-center justify-between cursor-pointer transition group"
-                        >
-                          <div className="space-y-0.5 pr-2">
-                            <div className="font-extrabold text-xs text-foreground group-hover:text-amber-400 uppercase flex items-center gap-2">
-                              <span>{p.product_name}</span>
-                              {p.hsn && <span className="text-[9px] font-mono bg-slate-800 text-textMuted px-1.5 py-0.5 rounded font-normal">HSN: {p.hsn}</span>}
-                            </div>
-                            <div className="text-[10px] text-textMuted flex items-center gap-3 font-mono">
-                              <span>Cost: ₹{Number(p.purchase_price || 0).toFixed(2)}</span>
-                              <span>Sell: ₹{Number(p.selling_price || 0).toFixed(2)}</span>
-                              {p.warehouse_location && <span className="truncate max-w-[120px]">Loc: {p.warehouse_location}</span>}
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2 shrink-0">
-                            <span className="text-[10px] font-extrabold bg-primary/10 text-primary border border-primary/30 px-2 py-1 rounded-md">
-                              Stock: {p.current_stock} {p.s_unit || p.unit || 'Pcs'}
-                            </span>
-                            <button
-                              type="button"
-                              className="text-[10px] bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-2.5 py-1 rounded-md transition uppercase flex items-center gap-1 shadow-xs"
-                            >
-                              <i className="fa-solid fa-pen-to-square text-[9px]"></i> Select / Merge
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                <div>
-                  <label className="block text-xs font-semibold text-textSecondary mb-1">SKU Code</label>
-                  <input type="text" className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none"
-                    value={formData.sku} onChange={(e) => setFormData({ ...formData, sku: e.target.value })} />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-textSecondary mb-1">Barcode</label>
-                  <input type="text" className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none"
-                    value={formData.barcode} onChange={(e) => setFormData({ ...formData, barcode: e.target.value })} />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-textSecondary mb-1 flex items-center justify-between">
-                    <span>Cost (Purchase Price) *</span>
-                    <span className="text-[10px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-950 px-1.5 py-0.5 rounded border border-blue-200 dark:border-blue-800">per {formData.p_unit || 'Unit'}</span>
-                  </label>
-                  <input type="number" step="any" className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none" required
-                    value={formData.purchase_price === 0 ? '' : formData.purchase_price} 
-                    placeholder="0"
-                    onFocus={(e) => e.target.select()}
-                    onChange={(e) => setFormData({ ...formData, purchase_price: e.target.value === '' ? 0 : Number(e.target.value) })} />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-textSecondary mb-1 flex items-center justify-between">
-                    <span>Selling Price *</span>
-                    <span className="text-[10px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-950 px-1.5 py-0.5 rounded border border-blue-200 dark:border-blue-800">per {formData.s_unit || 'Unit'}</span>
-                  </label>
-                  <input type="number" step="any" className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none font-bold" required
-                    value={formData.selling_price === 0 ? '' : formData.selling_price} 
-                    placeholder="0"
-                    onFocus={(e) => e.target.select()}
-                    onChange={(e) => setFormData({ ...formData, selling_price: e.target.value === '' ? 0 : Number(e.target.value) })} />
-                </div>
-                
-                {/* Margin Inline calculation with unit normalization */}
-                {(() => {
-                  const pUnit = formData.p_unit || 'Unit';
-                  const sUnit = formData.s_unit || formData.unit || 'Unit';
-                  const piecesPerPack = Number(formData.pieces_per_pack || 1);
-                  const isDualUnit = pUnit !== sUnit && piecesPerPack > 1;
-
-                  const costPerSellingUnit = isDualUnit ? (formData.purchase_price / piecesPerPack) : formData.purchase_price;
-                  const marginPerSellingUnit = formData.selling_price - costPerSellingUnit;
+                  const costPerSellingUnit = isDualUnit ? (item.purchase_price / piecesPerPack) : item.purchase_price;
+                  const marginPerSellingUnit = item.selling_price - costPerSellingUnit;
                   const marginPercent = costPerSellingUnit > 0 ? (marginPerSellingUnit / costPerSellingUnit) * 100 : 0;
                   const totalProfitPerPack = isDualUnit ? (marginPerSellingUnit * piecesPerPack) : marginPerSellingUnit;
 
-                  return (
-                    <div className="col-span-1 sm:col-span-2 bg-primary/10 p-3.5 rounded-xl border border-primary/30 text-xs space-y-1.5 shadow-xs">
-                      <div className="flex justify-between items-center flex-wrap gap-2">
-                        <span className="font-extrabold text-slate-900 dark:text-slate-100 flex items-center gap-1.5 uppercase tracking-wide">
-                          <i className="fa-solid fa-chart-line text-primary"></i> Calculated Retail Margin:
-                        </span>
-                        <span className="font-mono font-black text-primary text-sm">
-                          ₹{marginPerSellingUnit.toFixed(2)} / {sUnit}
-                          <span className={`ml-1.5 text-xs font-bold ${marginPercent >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-                            ({marginPercent >= 0 ? '+' : ''}{marginPercent.toFixed(1)}%)
-                          </span>
-                        </span>
-                      </div>
+                  // Collapsed View Card
+                  if (item.isCollapsed) {
+                    return (
+                      <div 
+                        key={item.id || index}
+                        className="bg-slate-900/90 border border-slate-700/80 hover:border-blue-500/60 rounded-2xl p-4 shadow-md transition-all flex items-center justify-between gap-3 animate-fade-in"
+                      >
+                        <div 
+                          className="flex items-center gap-3.5 cursor-pointer flex-1 min-w-0"
+                          onClick={() => handleToggleCollapse(index)}
+                        >
+                          <div className="w-8 h-8 rounded-xl bg-blue-500/20 text-blue-400 border border-blue-500/30 flex items-center justify-center font-black text-xs font-mono shrink-0">
+                            #{index + 1}
+                          </div>
+                          <div className="truncate">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h4 className="text-xs sm:text-sm font-black text-slate-100 uppercase truncate">
+                                {item.product_name || `Product Item #${index + 1}`}
+                              </h4>
+                              {item.category_name && (
+                                <span className="text-[9.5px] font-extrabold bg-slate-800 text-slate-300 font-mono px-2 py-0.5 rounded border border-slate-700 uppercase">
+                                  {item.category_name}
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-slate-400 font-mono mt-0.5 flex items-center gap-3 flex-wrap">
+                              <span>Stock: <strong className="text-emerald-400">{item.current_stock || 0} {item.unit || 'Nos'}</strong></span>
+                              <span>Cost: <strong className="text-blue-400">₹{item.purchase_price || 0} / {pUnit}</strong></span>
+                              <span>Selling: <strong className="text-amber-400">₹{item.selling_price || 0} / {sUnit}</strong></span>
+                            </div>
+                          </div>
+                        </div>
 
-                      {isDualUnit && (
-                        <div className="text-[11px] font-mono text-textMuted flex items-center justify-between border-t border-primary/20 pt-1.5 mt-1 flex-wrap gap-2">
-                          <span>Cost per {sUnit}: <strong>₹{costPerSellingUnit.toFixed(2)}</strong> (from ₹{formData.purchase_price} / {pUnit})</span>
-                          <span>Total Profit per {pUnit}: <strong className="text-emerald-600 dark:text-emerald-400">₹{totalProfitPerPack.toFixed(2)}</strong></span>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button 
+                            type="button" 
+                            onClick={() => handleToggleCollapse(index)} 
+                            className="px-3 py-1.5 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-500/30 font-bold text-xs rounded-xl transition flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <i className="fa-solid fa-pen text-[10px]"></i>
+                            <span>Edit</span>
+                          </button>
+                          {productItems.length > 1 && (
+                            <button 
+                              type="button" 
+                              onClick={() => handleRemoveProductItem(index)} 
+                              className="px-2.5 py-1.5 bg-rose-500/20 hover:bg-rose-500/40 text-rose-400 border border-rose-500/30 font-bold text-xs rounded-xl transition cursor-pointer"
+                              title="Remove item from bill"
+                            >
+                              <i className="fa-solid fa-trash text-[10px]"></i>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  // Full Expanded Form View
+                  return (
+                    <div key={item.id || index} className="space-y-4 border border-slate-800 p-4 rounded-2xl bg-slate-950/40">
+                      
+                      {/* Item Section Header (for multi-product tracking) */}
+                      {productItems.length > 1 && (
+                        <div className="flex items-center justify-between border-b border-slate-800 pb-2.5 mb-2">
+                          <div className="flex items-center gap-2">
+                            <span className="w-6 h-6 rounded-lg bg-blue-600/20 text-blue-400 border border-blue-500/30 flex items-center justify-center font-bold text-xs font-mono">
+                              #{index + 1}
+                            </span>
+                            <h4 className="text-xs font-black text-slate-200 uppercase tracking-wide">
+                              Product Item #{index + 1} Details
+                            </h4>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleCollapse(index)}
+                              className="text-[11px] font-bold text-slate-400 hover:text-slate-200 bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700 transition flex items-center gap-1 cursor-pointer"
+                            >
+                              <i className="fa-solid fa-chevron-up text-[10px]"></i>
+                              <span>Collapse Item</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveProductItem(index)}
+                              className="text-[11px] font-bold text-rose-400 hover:text-rose-300 bg-rose-950/40 px-2.5 py-1 rounded-lg border border-rose-800 transition flex items-center gap-1 cursor-pointer"
+                            >
+                              <i className="fa-solid fa-trash text-[10px]"></i>
+                              <span>Remove</span>
+                            </button>
+                          </div>
                         </div>
                       )}
+
+                      {/* UNITS & STOCK CONFIGURATION CARD */}
+                      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-sm">
+                        <div 
+                          className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 cursor-pointer select-none"
+                          onClick={() => updateProductItem(index, { isUnitConversionExpanded: !item.isUnitConversionExpanded })}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-xl bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
+                              <i className="fa-solid fa-boxes-stacked text-sm"></i>
+                            </div>
+                            <div>
+                              <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wide flex items-center gap-2 flex-wrap">
+                                <span>Units & Dual-Unit Conversion</span>
+                                <span className="text-[10px] font-extrabold text-blue-600 bg-blue-50 dark:bg-blue-950 px-2 py-0.5 rounded border border-blue-200 dark:border-blue-800">
+                                  1 {item.p_unit} = {item.pieces_per_pack} {item.unit}
+                                </span>
+                              </h4>
+                              <p className="text-[11px] text-slate-500 dark:text-slate-400">Configure purchase, selling, and inventory base unit conversions</p>
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            className="text-xs font-bold text-blue-600 hover:text-blue-700 bg-blue-50 dark:bg-blue-950/60 px-3 py-1.5 rounded-lg border border-blue-200 dark:border-blue-800 transition flex items-center gap-1.5 cursor-pointer shrink-0"
+                          >
+                            <span>{item.isUnitConversionExpanded ? 'Hide Advanced Rules' : '⚙️ Expand Rules'}</span>
+                            <i className={`fa-solid ${item.isUnitConversionExpanded ? 'fa-chevron-up' : 'fa-chevron-down'}`}></i>
+                          </button>
+                        </div>
+
+                        {/* Unit Dropdowns */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
+                              Purchase Unit <span className="text-rose-500 font-bold">*</span>
+                            </label>
+                            <select
+                              className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-xs text-slate-900 dark:text-slate-100 font-semibold focus:outline-none focus:border-blue-600 cursor-pointer"
+                              value={item.p_unit}
+                              onChange={(e) => handleUnitDropdownChange(index, 'p_unit', e.target.value)}
+                            >
+                              {allUnits.map(u => (
+                                <option key={u} value={u}>{u}</option>
+                              ))}
+                              <option value="__ADD_CUSTOM__" className="font-bold text-blue-600">+ Add Custom Unit</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
+                              Selling Unit <span className="text-rose-500 font-bold">*</span>
+                            </label>
+                            <select
+                              className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-xs text-slate-900 dark:text-slate-100 font-semibold focus:outline-none focus:border-blue-600 cursor-pointer"
+                              value={item.s_unit}
+                              onChange={(e) => handleUnitDropdownChange(index, 's_unit', e.target.value)}
+                            >
+                              {allUnits.map(u => (
+                                <option key={u} value={u}>{u}</option>
+                              ))}
+                              <option value="__ADD_CUSTOM__" className="font-bold text-blue-600">+ Add Custom Unit</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
+                              Base Stock Unit <span className="text-rose-500 font-bold">*</span>
+                            </label>
+                            <select
+                              className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-xs text-slate-900 dark:text-slate-100 font-semibold focus:outline-none focus:border-blue-600 cursor-pointer"
+                              value={item.unit}
+                              onChange={(e) => handleUnitDropdownChange(index, 'unit', e.target.value)}
+                            >
+                              {allUnits.map(u => (
+                                <option key={u} value={u}>{u}</option>
+                              ))}
+                              <option value="__ADD_CUSTOM__" className="font-bold text-blue-600">+ Add Custom Unit</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Collapsible Conversion Factor Section */}
+                        {item.isUnitConversionExpanded && (
+                          <div className="space-y-4 animate-fade-in pt-2 border-t border-slate-100 dark:border-slate-800">
+                            <div className="bg-gradient-to-br from-blue-50/90 via-slate-50 to-indigo-50/80 dark:from-slate-800/90 dark:via-slate-800/50 dark:to-blue-950/40 border-2 border-blue-200 dark:border-blue-800/80 rounded-2xl p-4 sm:p-5 space-y-4 shadow-xs">
+                              <div className="flex justify-between items-center flex-wrap gap-2">
+                                <span className="text-xs font-extrabold text-blue-900 dark:text-blue-300 uppercase tracking-wider flex items-center gap-1.5">
+                                  <i className="fa-solid fa-calculator text-blue-600"></i> Conversion Factor
+                                </span>
+                                <span className="text-[11px] font-bold text-blue-600 bg-blue-100 dark:bg-blue-950 px-2.5 py-0.5 rounded-full border border-blue-300 dark:border-blue-700">
+                                  Live Auto-Conversion
+                                </span>
+                              </div>
+
+                              <div className="bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-800 rounded-xl p-3.5 flex flex-wrap items-center justify-center gap-3 shadow-sm">
+                                <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700">
+                                  <span className="font-black text-sm text-slate-900 dark:text-slate-100 font-mono">1</span>
+                                  <select
+                                    className="bg-transparent text-xs font-bold text-blue-600 dark:text-blue-400 focus:outline-none cursor-pointer"
+                                    value={item.p_unit}
+                                    onChange={(e) => handleUnitDropdownChange(index, 'p_unit', e.target.value)}
+                                  >
+                                    {allUnits.map(u => (
+                                      <option key={u} value={u}>{u}</option>
+                                    ))}
+                                  </select>
+                                </div>
+
+                                <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm shadow-md shrink-0">
+                                  =
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="number"
+                                    step="any"
+                                    min="0.001"
+                                    className="w-28 bg-blue-50/80 dark:bg-slate-800 border-2 border-blue-600 rounded-xl p-2 text-center text-base font-black text-blue-700 dark:text-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-600/30 shadow-inner font-mono"
+                                    value={item.pieces_per_pack}
+                                    onChange={(e) => updateProductItem(index, { pieces_per_pack: Number(e.target.value) || 1 })}
+                                    placeholder="100"
+                                  />
+                                  <select
+                                    className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-slate-200 p-2.5 rounded-lg focus:outline-none cursor-pointer"
+                                    value={item.unit}
+                                    onChange={(e) => handleUnitDropdownChange(index, 'unit', e.target.value)}
+                                  >
+                                    {allUnits.map(u => (
+                                      <option key={u} value={u}>{u}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                              </div>
+
+                              <div className="bg-blue-600 text-white text-center py-2 px-4 rounded-xl text-xs font-extrabold shadow-sm flex items-center justify-center gap-2">
+                                <i className="fa-solid fa-eye text-blue-200"></i>
+                                <span>Live Conversion Preview:</span>
+                                <span className="font-mono text-amber-300 font-black text-sm">
+                                  1 {item.p_unit} = {item.pieces_per_pack} {item.unit}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* PRODUCT DETAILS GRID */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="col-span-1 sm:col-span-2 relative">
+                          <label className="block text-xs font-semibold text-textSecondary mb-1">Product Name *</label>
+                          <input 
+                            type="text" 
+                            className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none focus:border-primary font-semibold uppercase" 
+                            required
+                            value={item.product_name} 
+                            onChange={(e) => updateProductItem(index, { product_name: e.target.value })} 
+                            placeholder="e.g. 2*6 SCREW"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-semibold text-textSecondary mb-1">SKU Code</label>
+                          <input 
+                            type="text" 
+                            className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none"
+                            value={item.sku} 
+                            onChange={(e) => updateProductItem(index, { sku: e.target.value })} 
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-textSecondary mb-1">Barcode</label>
+                          <input 
+                            type="text" 
+                            className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none"
+                            value={item.barcode} 
+                            onChange={(e) => updateProductItem(index, { barcode: e.target.value })} 
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-textSecondary mb-1 flex items-center justify-between">
+                            <span>Cost (Purchase Price) *</span>
+                            <span className="text-[10px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-950 px-1.5 py-0.5 rounded border border-blue-200 dark:border-blue-800">per {item.p_unit || 'Unit'}</span>
+                          </label>
+                          <input 
+                            type="number" 
+                            step="any" 
+                            className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none font-bold" 
+                            required
+                            value={item.purchase_price === 0 ? '' : item.purchase_price} 
+                            placeholder="0"
+                            onFocus={(e) => e.target.select()}
+                            onChange={(e) => updateProductItem(index, { purchase_price: e.target.value === '' ? 0 : Number(e.target.value) })} 
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-textSecondary mb-1 flex items-center justify-between">
+                            <span>Selling Price *</span>
+                            <span className="text-[10px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-950 px-1.5 py-0.5 rounded border border-blue-200 dark:border-blue-800">per {item.s_unit || 'Unit'}</span>
+                          </label>
+                          <input 
+                            type="number" 
+                            step="any" 
+                            className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none font-bold" 
+                            required
+                            value={item.selling_price === 0 ? '' : item.selling_price} 
+                            placeholder="0"
+                            onFocus={(e) => e.target.select()}
+                            onChange={(e) => updateProductItem(index, { selling_price: e.target.value === '' ? 0 : Number(e.target.value) })} 
+                          />
+                        </div>
+                        
+                        {/* Margin Inline Calculation */}
+                        <div className="col-span-1 sm:col-span-2 bg-primary/10 p-3.5 rounded-xl border border-primary/30 text-xs space-y-1.5 shadow-xs">
+                          <div className="flex justify-between items-center flex-wrap gap-2">
+                            <span className="font-extrabold text-slate-900 dark:text-slate-100 flex items-center gap-1.5 uppercase tracking-wide">
+                              <i className="fa-solid fa-chart-line text-primary"></i> Calculated Retail Margin:
+                            </span>
+                            <span className="font-mono font-black text-primary text-sm">
+                              ₹{marginPerSellingUnit.toFixed(2)} / {sUnit}
+                              <span className={`ml-1.5 text-xs font-bold ${marginPercent >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                                ({marginPercent >= 0 ? '+' : ''}{marginPercent.toFixed(1)}%)
+                              </span>
+                            </span>
+                          </div>
+
+                          {isDualUnit && (
+                            <div className="text-[11px] font-mono text-textMuted flex items-center justify-between border-t border-primary/20 pt-1.5 mt-1 flex-wrap gap-2">
+                              <span>Cost per {sUnit}: <strong>₹{costPerSellingUnit.toFixed(2)}</strong> (from ₹{item.purchase_price} / {pUnit})</span>
+                              <span>Total Profit per {pUnit}: <strong className="text-emerald-600 dark:text-emerald-400">₹{totalProfitPerPack.toFixed(2)}</strong></span>
+                            </div>
+                          )}
+                        </div>
+
+                        {editingProduct ? (
+                          <>
+                            <div>
+                              <div className="flex justify-between items-center mb-1">
+                                <label className="block text-xs font-semibold text-textSecondary">
+                                  Current Base Stock {isEditingBaseStock ? '(Correction Mode)' : ''}
+                                </label>
+                                <button
+                                  type="button"
+                                  onClick={() => setIsEditingBaseStock(!isEditingBaseStock)}
+                                  className="text-[10px] font-extrabold text-primary hover:text-primary/80 underline flex items-center gap-1 cursor-pointer"
+                                >
+                                  <i className={`fa-solid ${isEditingBaseStock ? 'fa-lock' : 'fa-pen-to-square'}`}></i> 
+                                  {isEditingBaseStock ? 'Lock Field' : '✏️ Correct / Edit Base Stock'}
+                                </button>
+                              </div>
+                              <input 
+                                type="number" 
+                                step="any"
+                                disabled={!isEditingBaseStock}
+                                className={`w-full border rounded-lg p-2 font-mono font-bold transition ${
+                                  isEditingBaseStock 
+                                    ? 'bg-background border-primary text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20' 
+                                    : 'bg-background/50 border-border text-textMuted cursor-not-allowed opacity-80'
+                                }`}
+                                value={item.current_stock === 0 ? '' : item.current_stock} 
+                                placeholder="0"
+                                onFocus={(e) => e.target.select()}
+                                onChange={(e) => updateProductItem(index, { current_stock: e.target.value === '' ? 0 : Number(e.target.value) })} 
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-extrabold text-primary mb-1">➕ Add New Inflow Stock</label>
+                              <input 
+                                type="number" 
+                                step="any" 
+                                min="0" 
+                                className="w-full bg-background border border-primary/50 rounded-lg p-2 text-foreground focus:outline-none font-mono font-extrabold"
+                                placeholder="Enter qty to add (e.g. 20)..."
+                                value={item.additional_stock === 0 ? '' : item.additional_stock} 
+                                onFocus={(e) => e.target.select()}
+                                onChange={(e) => updateProductItem(index, { additional_stock: e.target.value === '' ? 0 : Number(e.target.value) })} 
+                              />
+                            </div>
+                            <div className="col-span-1 sm:col-span-2 bg-primary/10 border border-primary/30 p-2.5 rounded-lg text-xs font-bold text-primary flex justify-between items-center flex-wrap gap-2">
+                              <span>Updated Total Stock after saving:</span>
+                              <span className="font-mono text-sm font-black">
+                                {item.current_stock || 0} + {item.additional_stock || 0} = {Number(item.current_stock || 0) + Number(item.additional_stock || 0)} {item.unit || 'Nos'}
+                              </span>
+                            </div>
+                          </>
+                        ) : (
+                          <div>
+                            <label className="block text-xs font-semibold text-textSecondary mb-1 flex items-center justify-between">
+                              <span>Initial Stock *</span>
+                              <span className="text-[10px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-950 px-1.5 py-0.5 rounded border border-blue-200 dark:border-blue-800">in {item.unit || 'Base Unit'}</span>
+                            </label>
+                            <input 
+                              type="number" 
+                              className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none font-mono" 
+                              required
+                              value={item.current_stock === 0 ? '' : item.current_stock} 
+                              placeholder="0"
+                              onFocus={(e) => e.target.select()}
+                              onChange={(e) => updateProductItem(index, { current_stock: e.target.value === '' ? 0 : Number(e.target.value) })} 
+                            />
+                          </div>
+                        )}
+                        <div>
+                          <label className="block text-xs font-semibold text-textSecondary mb-1 flex items-center justify-between">
+                            <span>Min Stock Warning *</span>
+                            <span className="text-[10px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-950 px-1.5 py-0.5 rounded border border-blue-200 dark:border-blue-800">in {item.unit || 'Base Unit'}</span>
+                          </label>
+                          <input 
+                            type="number" 
+                            className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none font-mono" 
+                            required
+                            value={item.min_stock_level === 0 ? '' : item.min_stock_level} 
+                            placeholder="0"
+                            onFocus={(e) => e.target.select()}
+                            onChange={(e) => updateProductItem(index, { min_stock_level: e.target.value === '' ? 0 : Number(e.target.value) })} 
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-textSecondary mb-1">HSN Code of Product</label>
+                          <input 
+                            type="text" 
+                            className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none font-mono"
+                            value={item.hsn} 
+                            onChange={(e) => updateProductItem(index, { hsn: e.target.value })} 
+                            placeholder="e.g. 7214" 
+                          />
+                        </div>
+                        <div>
+                          <div className="flex justify-between items-center mb-1">
+                            <label className="block text-xs font-semibold text-textSecondary">GST Tax Rate (%)</label>
+                            <button
+                              type="button"
+                              onClick={() => setIsEditingTax(!isEditingTax)}
+                              className="text-[10px] font-extrabold text-primary hover:text-primary/80 underline flex items-center gap-1 cursor-pointer"
+                            >
+                              <i className={`fa-solid ${isEditingTax ? 'fa-lock' : 'fa-pen-to-square'}`}></i>
+                              {isEditingTax ? 'Lock Tax' : '✏️ Edit Tax Rate'}
+                            </button>
+                          </div>
+                          <select 
+                            disabled={!isEditingTax} 
+                            className={`w-full border rounded-lg p-2 font-semibold transition ${
+                              isEditingTax 
+                                ? 'bg-background border-primary text-foreground focus:outline-none' 
+                                : 'bg-background/50 border-border/60 text-textMuted cursor-not-allowed opacity-75'
+                            }`}
+                            value={item.gst || 0} 
+                            onChange={(e) => updateProductItem(index, { gst: Number(e.target.value) })}
+                          >
+                            <option value={0}>0% (GST Disabled)</option>
+                            <option value={5}>5% GST</option>
+                            <option value={12}>12% GST</option>
+                            <option value={18}>18% GST</option>
+                            <option value={28}>28% GST</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-textSecondary mb-1">Product Size</label>
+                          <input 
+                            type="text" 
+                            className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none text-xs"
+                            value={item.size} 
+                            onChange={(e) => updateProductItem(index, { size: e.target.value })} 
+                            placeholder="e.g. 10mm, 2 Inch" 
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-textSecondary mb-1">Product Weight</label>
+                          <input 
+                            type="text" 
+                            className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none text-xs"
+                            value={item.weight} 
+                            onChange={(e) => updateProductItem(index, { weight: e.target.value })} 
+                            placeholder="e.g. 1.2kg, 500g" 
+                          />
+                        </div>
+                        <div className="col-span-1 sm:col-span-2">
+                          <label className="block text-xs font-semibold text-textSecondary mb-1">Product Description</label>
+                          <textarea 
+                            className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none text-xs" 
+                            rows={2}
+                            value={item.description} 
+                            onChange={(e) => updateProductItem(index, { description: e.target.value })} 
+                            placeholder="Enter detailed specifications..." 
+                          />
+                        </div>
+                      </div>
+
+                      {/* Stock Location Breakdown: Godown + Rack + Shelf */}
+                      <div className="bg-background/40 p-4 border border-border rounded-xl space-y-3">
+                        <label className="block text-xs font-bold text-textSecondary uppercase tracking-wide">Stock Location (Warehouse / Shelf Breakdown)</label>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <div>
+                            <label className="block text-[11px] font-semibold text-textMuted mb-1">Godown (Warehouse)</label>
+                            <input 
+                              type="text" 
+                              className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none text-xs font-medium" 
+                              placeholder="e.g. Main Godown A"
+                              value={item.godown} 
+                              onChange={(e) => updateProductItem(index, { godown: e.target.value })} 
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-semibold text-textMuted mb-1">Rack Number</label>
+                            <input 
+                              type="text" 
+                              className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none text-xs font-medium" 
+                              placeholder="e.g. Rack R-12"
+                              value={item.rack_number} 
+                              onChange={(e) => updateProductItem(index, { rack_number: e.target.value })} 
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-semibold text-textMuted mb-1">Shelf Number</label>
+                            <input 
+                              type="text" 
+                              className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none text-xs font-medium" 
+                              placeholder="e.g. Shelf S-3"
+                              value={item.shelf_number} 
+                              onChange={(e) => updateProductItem(index, { shelf_number: e.target.value })} 
+                            />
+                          </div>
+                        </div>
+                      </div>
+
                     </div>
                   );
-                })()}
+                })}
+              </div>
 
-                {editingProduct ? (
-                  <>
-                    <div>
-                      <div className="flex justify-between items-center mb-1">
-                        <label className="block text-xs font-semibold text-textSecondary">
-                          Current Base Stock {isEditingBaseStock ? '(Correction Mode)' : ''}
-                        </label>
-                        <button
-                          type="button"
-                          onClick={() => setIsEditingBaseStock(!isEditingBaseStock)}
-                          className="text-[10px] font-extrabold text-primary hover:text-primary/80 underline flex items-center gap-1 cursor-pointer"
-                        >
-                          <i className={`fa-solid ${isEditingBaseStock ? 'fa-lock' : 'fa-pen-to-square'}`}></i> 
-                          {isEditingBaseStock ? 'Lock Field' : '✏️ Correct / Edit Base Stock'}
-                        </button>
-                      </div>
-                      <input 
-                        type="number" 
-                        step="any"
-                        disabled={!isEditingBaseStock}
-                        className={`w-full border rounded-lg p-2 font-mono font-bold transition ${
-                          isEditingBaseStock 
-                            ? 'bg-background border-primary text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20' 
-                            : 'bg-background/50 border-border text-textMuted cursor-not-allowed opacity-80'
-                        }`}
-                        value={formData.current_stock === 0 ? '' : formData.current_stock} 
-                        placeholder="0"
-                        onFocus={(e) => e.target.select()}
-                        onChange={(e) => setFormData({ ...formData, current_stock: e.target.value === '' ? 0 : Number(e.target.value) })} 
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-extrabold text-primary mb-1">➕ Add New Inflow Stock</label>
-                      <input type="number" step="any" min="0" className="w-full bg-background border border-primary/50 rounded-lg p-2 text-foreground focus:outline-none font-mono font-extrabold"
-                        placeholder="Enter qty to add (e.g. 20)..."
-                        value={formData.additional_stock === 0 ? '' : formData.additional_stock} 
-                        onFocus={(e) => e.target.select()}
-                        onChange={(e) => setFormData({ ...formData, additional_stock: e.target.value === '' ? 0 : Number(e.target.value) })} />
-                    </div>
-                    <div className="col-span-1 sm:col-span-2 bg-primary/10 border border-primary/30 p-2.5 rounded-lg text-xs font-bold text-primary flex justify-between items-center flex-wrap gap-2">
-                      <span>Updated Total Stock after saving:</span>
-                      <span className="font-mono text-sm font-black">
-                        {formData.current_stock || 0} + {formData.additional_stock || 0} = {Number(formData.current_stock || 0) + Number(formData.additional_stock || 0)} {formData.unit || 'Nos'}
-                      </span>
-                    </div>
-                  </>
-                ) : (
-                  <div>
-                    <label className="block text-xs font-semibold text-textSecondary mb-1 flex items-center justify-between">
-                      <span>Initial Stock *</span>
-                      <span className="text-[10px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-950 px-1.5 py-0.5 rounded border border-blue-200 dark:border-blue-800">in {formData.unit || 'Base Unit'}</span>
-                    </label>
-                    <input type="number" className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none font-mono" required
-                      value={formData.current_stock === 0 ? '' : formData.current_stock} 
-                      placeholder="0"
-                      onFocus={(e) => e.target.select()}
-                      onChange={(e) => setFormData({ ...formData, current_stock: e.target.value === '' ? 0 : Number(e.target.value) })} />
-                  </div>
-                )}
-                <div>
-                  <label className="block text-xs font-semibold text-textSecondary mb-1 flex items-center justify-between">
-                    <span>Min Stock Warning *</span>
-                    <span className="text-[10px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-950 px-1.5 py-0.5 rounded border border-blue-200 dark:border-blue-800">in {formData.unit || 'Base Unit'}</span>
-                  </label>
-                  <input type="number" className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none font-mono" required
-                    value={formData.min_stock_level === 0 ? '' : formData.min_stock_level} 
-                    placeholder="0"
-                    onFocus={(e) => e.target.select()}
-                    onChange={(e) => setFormData({ ...formData, min_stock_level: e.target.value === '' ? 0 : Number(e.target.value) })} />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-textSecondary mb-1">HSN Code of Product</label>
-                  <input type="text" className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none font-mono"
-                    value={formData.hsn} onChange={(e) => setFormData({ ...formData, hsn: e.target.value })} placeholder="e.g. 7214" />
-                </div>
-                <div>
-                  <div className="flex justify-between items-center mb-1">
-                    <label className="block text-xs font-semibold text-textSecondary">GST Tax Rate (%)</label>
-                    <button
-                      type="button"
-                      onClick={() => setIsEditingTax(!isEditingTax)}
-                      className="text-[10px] font-extrabold text-primary hover:text-primary/80 underline flex items-center gap-1 cursor-pointer"
-                    >
-                      <i className={`fa-solid ${isEditingTax ? 'fa-lock' : 'fa-pen-to-square'}`}></i>
-                      {isEditingTax ? 'Lock Tax' : '✏️ Edit Tax Rate'}
-                    </button>
-                  </div>
-                  <select 
-                    disabled={!isEditingTax} 
-                    className={`w-full border rounded-lg p-2 font-semibold transition ${
-                      isEditingTax 
-                        ? 'bg-background border-primary text-foreground focus:outline-none' 
-                        : 'bg-background/50 border-border/60 text-textMuted cursor-not-allowed opacity-75'
-                    }`}
-                    value={formData.gst || 0} 
-                    onChange={(e) => setFormData({ ...formData, gst: Number(e.target.value) })}
+              {/* + ADD ANOTHER PRODUCT BUTTON AT THE LAST OF FORM */}
+              {!editingProduct && (
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={handleAddProductItem}
+                    className="w-full py-3.5 bg-gradient-to-r from-blue-600/20 via-slate-800 to-emerald-600/20 hover:from-blue-600/30 hover:to-emerald-600/30 border-2 border-dashed border-primary/50 hover:border-primary text-primary font-black text-xs sm:text-sm rounded-2xl transition flex items-center justify-center gap-2 shadow-sm cursor-pointer active:scale-98"
                   >
-                    <option value={0}>0% (GST Disabled)</option>
-                    <option value={5}>5% GST</option>
-                    <option value={12}>12% GST</option>
-                    <option value={18}>18% GST</option>
-                    <option value={28}>28% GST</option>
-                  </select>
+                    <i className="fa-solid fa-plus-circle text-base text-emerald-400"></i>
+                    <span>+ Add Another Product to Purchase Bill</span>
+                  </button>
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-textSecondary mb-1">Product Size</label>
-                  <input type="text" className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none text-xs"
-                    value={formData.size} onChange={(e) => setFormData({ ...formData, size: e.target.value })} placeholder="e.g. 10mm, 2 Inch" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-textSecondary mb-1">Product Weight</label>
-                  <input type="text" className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none text-xs"
-                    value={formData.weight} onChange={(e) => setFormData({ ...formData, weight: e.target.value })} placeholder="e.g. 1.2kg, 500g" />
-                </div>
-                <div className="col-span-1 sm:col-span-2">
-                  <label className="block text-xs font-semibold text-textSecondary mb-1">Product Description</label>
-                  <textarea className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none text-xs" rows={2}
-                    value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} placeholder="Enter detailed specifications..." />
-                </div>
-              </div>
-
-
-
-              {/* Stock Location Breakdown: Godown + Rack + Shelf */}
-              <div className="bg-background/40 p-4 border border-border rounded-xl space-y-3">
-                <label className="block text-xs font-bold text-textSecondary uppercase tracking-wide">Stock Location (Warehouse / Shelf Breakdown)</label>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-semibold text-textMuted mb-1">Godown (Warehouse)</label>
-                    <input type="text" className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none text-xs font-medium" placeholder="e.g. Main Godown A"
-                      value={formData.godown} onChange={(e) => setFormData({ ...formData, godown: e.target.value })} />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold text-textMuted mb-1">Rack Number</label>
-                    <input type="text" className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none text-xs font-medium" placeholder="e.g. Rack R-12"
-                      value={formData.rack_number} onChange={(e) => setFormData({ ...formData, rack_number: e.target.value })} />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold text-textMuted mb-1">Shelf Number</label>
-                    <input type="text" className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none text-xs font-medium" placeholder="e.g. Shelf S-3"
-                      value={formData.shelf_number} onChange={(e) => setFormData({ ...formData, shelf_number: e.target.value })} />
-                  </div>
-                </div>
-              </div>
-
-              {/* Vendor mapping */}
-              <div className="bg-background/40 p-4 border border-border rounded-lg space-y-3">
-                <h4 className="text-xs font-bold text-blue-400 uppercase tracking-wide">Preferred Supplier (Vendor)</h4>
-                <div>
-                  <label className="block text-xs font-semibold text-textSecondary mb-1">Select Registered Vendor</label>
-                  <select className="w-full bg-background border border-border rounded-lg p-2 text-foreground focus:outline-none text-xs font-semibold"
-                    value={formData.supplier_id} 
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      const match = suppliers.find(s => s.id === val);
-                      setFormData({ 
-                        ...formData, 
-                        supplier_id: val, 
-                        supplier_name: match ? match.supplier_name : '', 
-                        supplier_phone: match ? match.phone : '' 
-                      });
-                    }}>
-                    <option value="">-- Choose Vendor --</option>
-                    {suppliers.map(s => (
-                      <option key={s.id} value={s.id}>{s.supplier_name} ({s.phone})</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
+              )}
 
               {/* Sticky Action Footer */}
               <div className="shrink-0 flex gap-3 justify-end pt-3 border-t border-border mt-4">
-                <button type="button" className="px-5 py-2.5 border border-border text-textSecondary rounded-lg text-xs font-bold hover:bg-background transition" onClick={() => setModalOpen(false)}>Cancel</button>
-                <button type="submit" className="px-5 py-2.5 bg-primary hover:bg-primary/90 text-white font-bold rounded-lg text-xs transition shadow-md cursor-pointer">Save Item</button>
+                <button type="button" className="px-5 py-2.5 border border-border text-textSecondary rounded-lg text-xs font-bold hover:bg-background transition cursor-pointer" onClick={() => setModalOpen(false)}>Cancel</button>
+                <button type="submit" className="px-5 py-2.5 bg-primary hover:bg-primary/90 text-white font-bold rounded-lg text-xs transition shadow-md cursor-pointer flex items-center gap-2">
+                  <i className="fa-solid fa-check"></i>
+                  <span>Save {productItems.length > 1 ? `${productItems.length} Products & Bill` : 'Item'}</span>
+                </button>
               </div>
             </form>
           </div>
