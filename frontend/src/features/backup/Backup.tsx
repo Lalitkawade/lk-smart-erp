@@ -67,7 +67,7 @@ export default function Backup() {
   };
 
   const handleClearLocalCache = () => {
-    if (!window.confirm('WARNING: Are you sure you want to clear all local browser cache? This will wipe cached products, sales, purchases, customers, suppliers, and expenses saved in this browser.')) {
+    if (!window.confirm('ADMIN WARNING: Clearing local browser cache will wipe all locally stored products, offline sales, and ledger data from this device.\n\nOnly use this if you have truncated/reset your backend database or are performing a factory maintenance reset.\n\nDo NOT clear cache while working offline if you have unsynced sales. Proceed with reset?')) {
       return;
     }
     const keys = ['lk_products', 'lk_sales', 'lk_purchases', 'lk_customers', 'lk_suppliers', 'lk_expenses', 'lk_unstocked_demands'];
@@ -125,16 +125,19 @@ export default function Backup() {
         <div className="bg-secondary border border-border p-6 rounded-xl shadow-lg flex flex-col justify-between space-y-6 hover:border-red-500/40 transition">
           <div>
             <div className="w-12 h-12 rounded-lg bg-red-500/10 text-red-500 flex items-center justify-center text-xl mb-4">
-              <i className="fa-solid fa-trash-can"></i>
+              <i className="fa-solid fa-triangle-exclamation"></i>
             </div>
-            <h3 className="text-sm font-bold text-foreground">Clear Local Browser Cache</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-bold text-foreground">Admin Factory Reset</h3>
+              <span className="text-[9px] bg-red-500/20 text-red-400 font-extrabold px-2 py-0.5 rounded-md uppercase tracking-wider">Maintenance</span>
+            </div>
             <p className="text-xs text-textMuted mt-1">
-              If you truncated or cleaned your remote database tables, click here to clear all locally cached shop data stored in your browser.
+              Admin utility: If you executed a SQL truncation script or wiped your Supabase database, use this button to clear all locally cached shop ledger state on this device.
             </p>
           </div>
 
           <button className="w-full py-3 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg text-xs transition shadow-md cursor-pointer" onClick={handleClearLocalCache}>
-            Clear Local Cache & Reset
+            Factory Reset Local Cache
           </button>
         </div>
 
