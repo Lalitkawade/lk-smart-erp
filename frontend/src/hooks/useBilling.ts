@@ -89,24 +89,26 @@ export function useBilling(tenantId: string) {
 
   const addToCart = (product: Product, isLoose: boolean = false) => {
     const existing = cart.find(item => item.product.id === product.id && item.isLoose === isLoose);
-    const piecesPerPack = Number(product.pieces_per_pack || 1);
-    const stockInPieces = Number(product.current_stock || 0) * piecesPerPack;
+    const piecesPerPack = Math.max(1, Number(product.pieces_per_pack || 1));
+    const stockInBaseUnits = Number(product.current_stock || 0);
 
-    // Calculate total pieces currently added to cart for this product
-    const currentPiecesInCart = cart
+    // Calculate total base units currently added to cart for this product
+    const currentBaseUnitsInCart = cart
       .filter(item => item.product.id === product.id)
       .reduce((sum, item) => sum + (item.qty * (item.isLoose ? 1 : piecesPerPack)), 0);
 
-    const addedPieces = isLoose ? 1 : piecesPerPack;
+    const addedBaseUnits = isLoose ? 1 : piecesPerPack;
 
     if (existing) {
-      if (currentPiecesInCart + addedPieces > stockInPieces) {
-        throw new Error(`Insufficient stock. Only ${product.current_stock} packs left.`);
+      if (currentBaseUnitsInCart + addedBaseUnits > stockInBaseUnits) {
+        const baseUnit = product.unit || product.s_unit || 'Nos';
+        throw new Error(`Insufficient stock. Only ${stockInBaseUnits} ${baseUnit} available in inventory.`);
       }
       setCart(cart.map(item => (item.product.id === product.id && item.isLoose === isLoose) ? { ...item, qty: item.qty + 1 } : item));
     } else {
-      if (addedPieces > stockInPieces) {
-        throw new Error(`Out of stock.`);
+      if (addedBaseUnits > stockInBaseUnits) {
+        const baseUnit = product.unit || product.s_unit || 'Nos';
+        throw new Error(`Insufficient stock. Only ${stockInBaseUnits} ${baseUnit} available in inventory.`);
       }
       const { piecePrice, packPrice } = getProductUnitRates(product);
       const rate = isLoose ? piecePrice : packPrice;
@@ -118,18 +120,19 @@ export function useBilling(tenantId: string) {
     const item = cart.find(i => i.product.id === productId && i.isLoose === isLoose);
     if (!item) return;
 
-    const piecesPerPack = Number(item.product.pieces_per_pack || 1);
-    const stockInPieces = Number(item.product.current_stock || 0) * piecesPerPack;
+    const piecesPerPack = Math.max(1, Number(item.product.pieces_per_pack || 1));
+    const stockInBaseUnits = Number(item.product.current_stock || 0);
 
-    // Calculate other cart items' total pieces for this product
-    const otherItemsPieces = cart
+    // Calculate other cart items' total base units for this product
+    const otherItemsBaseUnits = cart
       .filter(i => i.product.id === productId && !(i.isLoose === isLoose))
       .reduce((sum, i) => sum + (i.qty * (i.isLoose ? 1 : piecesPerPack)), 0);
 
-    const requestedPieces = otherItemsPieces + (qty * (isLoose ? 1 : piecesPerPack));
+    const requestedBaseUnits = otherItemsBaseUnits + (qty * (isLoose ? 1 : piecesPerPack));
 
-    if (requestedPieces > stockInPieces) {
-      throw new Error(`Insufficient stock. Only ${item.product.current_stock} packs available.`);
+    if (requestedBaseUnits > stockInBaseUnits) {
+      const baseUnit = item.product.unit || item.product.s_unit || 'Nos';
+      throw new Error(`Insufficient stock. Only ${stockInBaseUnits} ${baseUnit} available in inventory.`);
     }
 
     setCart(cart.map(i => (i.product.id === productId && i.isLoose === isLoose) ? { ...i, qty: Math.max(1, qty) } : i));
@@ -334,13 +337,13 @@ export function useBilling(tenantId: string) {
         const localProds: Product[] = JSON.parse(localProdsStr);
 
         for (const item of cart) {
-          // Decrement local stock level
-          const piecesPerPack = Number(item.product.pieces_per_pack || 1);
-          const totalDeductedPacks = item.isLoose ? (item.qty / piecesPerPack) : item.qty;
+          // Decrement stock level in Base Stock Unit (Rule 5)
+          const piecesPerPack = Math.max(1, Number(item.product.pieces_per_pack || 1));
+          const totalDeductedBaseUnits = item.isLoose ? item.qty : (item.qty * piecesPerPack);
           
           const pIdx = localProds.findIndex(p => p.id === item.product.id);
           if (pIdx >= 0) {
-            localProds[pIdx].current_stock = Math.max(0, Number(localProds[pIdx].current_stock || 0) - totalDeductedPacks);
+            localProds[pIdx].current_stock = Math.max(0, Number(localProds[pIdx].current_stock || 0) - totalDeductedBaseUnits);
           }
 
           if (isValidUUID(tenantId) && isValidUUID(invoice.id)) {

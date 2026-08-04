@@ -1086,15 +1086,14 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
           ? (additionalInput > 0 ? (oldStock + additionalInput) : Number(item.current_stock || 0))
           : (isMergeOperation ? (existingStock + addedStockInflow) : addedStockInflow);
 
-        const { piecesPerPack, piecePrice, packPrice } = getProductUnitRates({
-          pieces_per_pack: item.pieces_per_pack,
-          selling_price: item.selling_price,
-          piece_selling_price: item.piece_selling_price,
-          purchase_price: item.purchase_price
-        });
+        const conversionFactor = Math.max(1, Number(item.pieces_per_pack || 1));
+        const pPrice = Number(item.purchase_price || 0); // Price per Purchase Unit (e.g. ₹100 / Box)
+        const sPrice = Number(item.selling_price || 0);   // Price per Selling Unit (e.g. ₹2 / Nos)
+        const calculatedBaseUnitCost = conversionFactor > 0 ? (pPrice / conversionFactor) : pPrice;
 
-        const itemPurchaseRate = Number(item.purchase_price || 0);
-        const itemLineCost = addedStockInflow * itemPurchaseRate;
+        const itemPurchaseRate = pPrice;
+        // Total Bill Cost for purchase inflow = (Added Base Units / Conversion Factor) * Purchase Price per Purchase Unit
+        const itemLineCost = (addedStockInflow / conversionFactor) * pPrice;
         totalBillCost += itemLineCost;
 
         const productPayload = {
@@ -1104,12 +1103,16 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
           barcode: item.barcode || null,
           category_name: item.category_name,
           brand_name: item.brand_name,
-          unit: item.unit || item.s_unit || 'Nos',
-          purchase_price: item.purchase_price,
-          selling_price: packPrice,
+          unit: item.unit || item.s_unit || 'Nos', // Base Stock Unit
+          p_unit: item.p_unit || 'Box',             // Purchase Unit
+          s_unit: item.s_unit || item.unit || 'Nos',// Selling Unit
+          pieces_per_pack: conversionFactor,        // Conversion Factor (e.g. 100)
+          purchase_price: pPrice,                   // Purchase Price per Purchase Unit (e.g. ₹100 / Box)
+          selling_price: sPrice,                    // Selling Price per Selling Unit (e.g. ₹2 / Nos)
+          base_unit_cost: calculatedBaseUnitCost,   // Base Unit Cost (e.g. ₹1 / Nos)
           dealer_price: item.dealer_price,
           mrp: item.mrp,
-          current_stock: finalStock,
+          current_stock: finalStock,                // Inventory stock in Base Stock Unit (e.g. 1000 Nos)
           min_stock_level: item.min_stock_level,
           hsn: item.hsn || null,
           gst: item.gst,
@@ -1120,14 +1123,11 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
           size: item.size || null,
           weight: item.weight || null,
           warehouse_location: fullLocation || item.godown || item.warehouse_location || null,
-          p_unit: item.p_unit,
-          s_unit: item.s_unit,
           supplier_id: activeSup ? activeSup.id : (item.supplier_id || null),
           supplier_name: activeSup ? activeSup.supplier_name : (item.supplier_name || null),
           supplier_phone: activeSup ? activeSup.phone : (item.supplier_phone || null),
           status: 'Active',
-          pieces_per_pack: piecesPerPack,
-          piece_selling_price: piecePrice,
+          piece_selling_price: sPrice,
           allow_decimal: item.allow_decimal,
           allow_purchase_unit_selling: item.allow_purchase_unit_selling,
           track_base_unit: item.track_base_unit,
@@ -1647,35 +1647,27 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
               <tr><td colSpan={7} className="py-8 text-center text-slate-400 text-xs font-medium">No matching stock items found.</td></tr>
             ) : filtered.map((p) => {
               const name = p?.product_name || 'Unnamed Product';
-              const purchasePrice = Number(p?.purchase_price || 0);
-              const sellingPrice = Number(p?.selling_price || 0);
-              const rawPieces = Number(p?.pieces_per_pack || 0);
-              const isBulkLegacy = purchasePrice > sellingPrice * 2 && rawPieces <= 1;
+              const pUnit = p.p_unit || 'Box';
+              const sUnit = p.s_unit || p.unit || 'Nos';
+              const baseUnit = p.unit || p.s_unit || 'Nos';
+              const piecesPerPack = Math.max(1, Number(p.pieces_per_pack || 1));
 
-              const { piecesPerPack, piecePrice, packPrice } = getProductUnitRates(p);
-              const rawP = p?.p_unit;
-              const rawS = p?.s_unit || p?.unit;
+              const isDualUnit = piecesPerPack > 1 || (pUnit && sUnit && pUnit.toLowerCase() !== sUnit.toLowerCase());
 
-              const pUnit = (rawP && rawP.toUpperCase() !== rawS?.toUpperCase()) 
-                ? rawP 
-                : (isBulkLegacy ? 'Box' : (rawP || 'Pcs'));
+              const purchasePrice = Number(p.purchase_price || 0); // Purchase Price per Purchase Unit (e.g. ₹100 / Box)
+              const costPerPiece = piecesPerPack > 0 ? (purchasePrice / piecesPerPack) : purchasePrice; // Base Unit Cost (e.g. ₹1 / Nos)
+              const piecePrice = Number(p.selling_price || 0); // Selling Price per Selling Unit (e.g. ₹2 / Nos)
+              const packPrice = piecePrice * piecesPerPack; // Pack Selling Price (e.g. ₹200 / Box)
 
-              const sUnit = (rawS && rawS.toUpperCase() !== pUnit?.toUpperCase() && rawS.toUpperCase() !== 'PCS') 
-                ? rawS 
-                : (isBulkLegacy ? 'Nos' : (rawS || 'Pcs'));
-
-              const isDualUnit = piecesPerPack > 1;
-
-              const costPerPiece = isDualUnit ? (purchasePrice / piecesPerPack) : purchasePrice;
               const marginPerPiece = piecePrice - costPerPiece;
               const marginPercent = costPerPiece > 0 ? (marginPerPiece / costPerPiece) * 100 : 0;
               const baseStockQty = Number(p?.current_stock || 0);
-              const purchasePackQty = isDualUnit ? (baseStockQty / piecesPerPack) : baseStockQty;
+              const purchasePackQty = piecesPerPack > 0 ? (baseStockQty / piecesPerPack) : baseStockQty;
               const minStockPacks = Number(p?.min_stock_level || 10);
-              const isLowStock = purchasePackQty <= minStockPacks;
+              const isLowStock = baseStockQty <= minStockPacks;
               const costValuation = baseStockQty * costPerPiece;
               const retailValuation = baseStockQty * piecePrice;
-              const stockRatio = Math.min(100, Math.max(5, (purchasePackQty / (minStockPacks * 2 || 20)) * 100));
+              const stockRatio = Math.min(100, Math.max(5, (baseStockQty / (minStockPacks * 2 || 20)) * 100));
 
               const godownVal = p.godown || (p.warehouse_location?.includes('|') ? p.warehouse_location.split('|')[0].replace(/^Godown:\s*/i, '').trim() : '');
               const rackVal = p.rack_number || (p.warehouse_location?.match(/Rack:\s*([^|]+)/i)?.[1]?.trim() || '');
@@ -2674,26 +2666,47 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                           />
                         </div>
                         
-                        {/* Margin Inline Calculation */}
-                        <div className="col-span-1 sm:col-span-2 bg-blue-50/80 dark:bg-blue-950/40 p-3.5 rounded-xl border border-blue-200 dark:border-blue-800 text-xs space-y-1.5 shadow-xs">
-                          <div className="flex justify-between items-center flex-wrap gap-2">
-                            <span className="font-extrabold text-slate-900 dark:text-slate-100 flex items-center gap-1.5 uppercase tracking-wide">
-                              <i className="fa-solid fa-chart-line text-blue-600 dark:text-blue-400"></i> Calculated Retail Margin:
+                        {/* RULE 8: Live Step-by-Step Unit Conversion & Margin Calculation Card */}
+                        <div className="col-span-1 sm:col-span-2 bg-gradient-to-r from-blue-50/90 via-slate-50 to-emerald-50/90 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 p-4 rounded-2xl border-2 border-blue-200 dark:border-blue-800 text-xs space-y-2.5 shadow-xs">
+                          <div className="flex justify-between items-center flex-wrap gap-2 border-b border-blue-200 dark:border-blue-800 pb-2">
+                            <span className="font-extrabold text-blue-900 dark:text-blue-300 flex items-center gap-1.5 uppercase tracking-wide">
+                              <i className="fa-solid fa-calculator text-blue-600"></i> Rule 8 Live Conversion & Profit Engine
                             </span>
-                            <span className="font-mono font-black text-blue-600 dark:text-blue-400 text-sm">
-                              ₹{marginPerSellingUnit.toFixed(2)} / {sUnit}
-                              <span className={`ml-1.5 text-xs font-bold ${marginPercent >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-                                ({marginPercent >= 0 ? '+' : ''}{marginPercent.toFixed(1)}%)
-                              </span>
+                            <span className={`font-mono font-black text-xs px-2.5 py-0.5 rounded-md border ${
+                              marginPercent >= 0 
+                                ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700' 
+                                : 'bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300 border-rose-300 dark:border-rose-700'
+                            }`}>
+                              Margin: {marginPercent >= 0 ? '+' : ''}{marginPercent.toFixed(1)}%
                             </span>
                           </div>
 
-                          {isDualUnit && (
-                            <div className="text-[11px] font-mono text-slate-600 dark:text-slate-400 flex items-center justify-between border-t border-blue-200/80 dark:border-blue-800/80 pt-1.5 mt-1 flex-wrap gap-2">
-                              <span>Cost per {sUnit}: <strong>₹{costPerSellingUnit.toFixed(2)}</strong> (from ₹{item.purchase_price} / {pUnit})</span>
-                              <span>Total Profit per {pUnit}: <strong className="text-emerald-600 dark:text-emerald-400">₹{totalProfitPerPack.toFixed(2)}</strong></span>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 font-mono text-[11px]">
+                            <div className="bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 space-y-0.5">
+                              <span className="text-slate-500 font-sans text-[10px] block font-semibold">1. Purchase Price (per {pUnit}):</span>
+                              <strong className="text-blue-600 dark:text-blue-400 text-xs block">₹{Number(item.purchase_price || 0).toFixed(2)} / {pUnit}</strong>
+                              <span className="text-[9.5px] text-slate-400 font-sans block">Entered in Purchase Unit</span>
                             </div>
-                          )}
+
+                            <div className="bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 space-y-0.5">
+                              <span className="text-slate-500 font-sans text-[10px] block font-semibold">2. Calculated Base Cost (per {item.unit || 'Nos'}):</span>
+                              <strong className="text-slate-900 dark:text-slate-100 text-xs block">₹{costPerSellingUnit.toFixed(2)} / {item.unit || 'Nos'}</strong>
+                              <span className="text-[9.5px] text-slate-400 font-sans block">(₹{item.purchase_price || 0} ÷ {piecesPerPack})</span>
+                            </div>
+
+                            <div className="bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 space-y-0.5">
+                              <span className="text-slate-500 font-sans text-[10px] block font-semibold">3. Selling Price & Profit (per {sUnit}):</span>
+                              <strong className="text-amber-600 dark:text-amber-400 text-xs block">₹{Number(item.selling_price || 0).toFixed(2)} / {sUnit}</strong>
+                              <span className="text-[9.5px] text-emerald-600 dark:text-emerald-400 font-bold block font-mono">
+                                Profit: ₹{marginPerSellingUnit.toFixed(2)} / {sUnit}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="bg-blue-600/10 border border-blue-200 dark:border-blue-800 p-2 rounded-xl text-[11px] font-mono text-blue-900 dark:text-blue-300 flex justify-between items-center flex-wrap gap-2">
+                            <span>Full Pack Retail Selling Price (1 {pUnit} = {piecesPerPack} {sUnit}):</span>
+                            <span className="font-black text-blue-700 dark:text-blue-400 text-xs">₹{(Number(item.selling_price || 0) * piecesPerPack).toFixed(2)} / {pUnit}</span>
+                          </div>
                         </div>
 
                         {editingProduct ? (

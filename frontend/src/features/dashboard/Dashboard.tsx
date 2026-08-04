@@ -99,32 +99,32 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
     const rawPurchases = filteredData.purchases.reduce((acc, p) => acc + Number(p.total_amount || (p as any).amount || (p as any).grand_total || 0), 0);
     const totalExpenses = filteredData.expenses.reduce((acc, e) => acc + Number(e.amount || (e as any).total_amount || 0), 0);
     
-    // Total Inventory Valuation (Current Unsold Physical Stock Value)
+    // Total Inventory Valuation (Current Unsold Physical Stock Value in Base Stock Units)
     const stockValuation = products.reduce(
       (acc, p) => {
-        const piecesPerPack = Number(p.pieces_per_pack || 1);
-        const purchasePrice = Number(p.purchase_price || (p as any).cost_price || 0);
-        const costPerPiece = piecesPerPack > 1 ? (purchasePrice / piecesPerPack) : purchasePrice;
-        const stock = Number(p.current_stock || (p as any).stock || 0);
-        return acc + (costPerPiece * stock);
+        const piecesPerPack = Math.max(1, Number(p.pieces_per_pack || 1));
+        const purchasePrice = Number(p.purchase_price || 0);
+        const baseCost = piecesPerPack > 0 ? (purchasePrice / piecesPerPack) : purchasePrice;
+        const stockInBaseUnit = Number(p.current_stock || 0);
+        return acc + (baseCost * stockInBaseUnit);
       },
       0
     );
 
-    // Calculate itemized COGS (Cost of Goods Sold) for sold inventory items
+    // Calculate itemized COGS (Cost of Goods Sold) for sold inventory items in Base Stock Units
     const itemizedCOGS = filteredData.sales.reduce((acc, s) => {
       const items = (s as any).items || (s as any).sales_items || [];
       const billCogs = items.reduce((iAcc: number, item: any) => {
         const qty = Number(item.qty || 1);
         const prod = products.find(p => p.id === (item.product_id || item.product?.id));
-        const piecesPerPack = Number(prod?.pieces_per_pack || 1);
+        const piecesPerPack = Math.max(1, Number(prod?.pieces_per_pack || 1));
         const purchasePrice = Number(prod?.purchase_price || item.purchase_price || 0);
-        const costPerPiece = piecesPerPack > 1 ? (purchasePrice / piecesPerPack) : (purchasePrice || Number(item.rate || 0));
+        const baseCost = piecesPerPack > 0 ? (purchasePrice / piecesPerPack) : (purchasePrice || Number(item.rate || 0));
         
-        // Check if item was sold as loose piece or full pack
+        // Check if item was sold as loose base unit or full purchase pack
         const isLoose = item.isLoose ?? true;
-        const totalPieces = isLoose ? qty : (qty * piecesPerPack);
-        return iAcc + (totalPieces * costPerPiece);
+        const totalBaseUnits = isLoose ? qty : (qty * piecesPerPack);
+        return iAcc + (totalBaseUnits * baseCost);
       }, 0);
       return acc + billCogs;
     }, 0);
