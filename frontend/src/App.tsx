@@ -509,7 +509,13 @@ export default function App() {
     );
   }
 
-  const lowStockCount = productsList.filter((p: any) => (p.current_stock || 0) <= (p.min_stock_level || 10)).length;
+  const lowStockCount = productsList.filter((p: any) => {
+    const piecesPerPack = Number(p.pieces_per_pack || 1);
+    const baseStockQty = Number(p.current_stock || 0);
+    const purchasePackQty = piecesPerPack > 1 ? (baseStockQty / piecesPerPack) : baseStockQty;
+    const minStockPacks = Number(p.min_stock_level || 10);
+    return purchasePackQty <= minStockPacks;
+  }).length;
   
   const getCustomerDues = () => {
     try {

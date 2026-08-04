@@ -102,9 +102,11 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
     // Total Inventory Valuation (Current Unsold Physical Stock Value)
     const stockValuation = products.reduce(
       (acc, p) => {
-        const price = Number(p.purchase_price || (p as any).cost_price || p.selling_price || (p as any).price || 0);
+        const piecesPerPack = Number(p.pieces_per_pack || 1);
+        const purchasePrice = Number(p.purchase_price || (p as any).cost_price || 0);
+        const costPerPiece = piecesPerPack > 1 ? (purchasePrice / piecesPerPack) : purchasePrice;
         const stock = Number(p.current_stock || (p as any).stock || 0);
-        return acc + (price * stock);
+        return acc + (costPerPiece * stock);
       },
       0
     );
@@ -115,8 +117,14 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
       const billCogs = items.reduce((iAcc: number, item: any) => {
         const qty = Number(item.qty || 1);
         const prod = products.find(p => p.id === (item.product_id || item.product?.id));
-        const costPrice = Number(prod?.purchase_price || prod?.selling_price || item.purchase_price || item.rate || 0);
-        return iAcc + (qty * costPrice);
+        const piecesPerPack = Number(prod?.pieces_per_pack || 1);
+        const purchasePrice = Number(prod?.purchase_price || item.purchase_price || 0);
+        const costPerPiece = piecesPerPack > 1 ? (purchasePrice / piecesPerPack) : (purchasePrice || Number(item.rate || 0));
+        
+        // Check if item was sold as loose piece or full pack
+        const isLoose = item.isLoose ?? true;
+        const totalPieces = isLoose ? qty : (qty * piecesPerPack);
+        return iAcc + (totalPieces * costPerPiece);
       }, 0);
       return acc + billCogs;
     }, 0);

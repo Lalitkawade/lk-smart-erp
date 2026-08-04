@@ -1289,7 +1289,13 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
   }, [products, search, mode, stockFilterTab]);
 
   const lowStockCount = useMemo(() => {
-    return products.filter(p => Number(p?.current_stock || 0) <= Number(p?.min_stock_level || 10)).length;
+    return products.filter(p => {
+      const piecesPerPack = Number(p.pieces_per_pack || 1);
+      const baseStockQty = Number(p?.current_stock || 0);
+      const purchasePackQty = piecesPerPack > 1 ? (baseStockQty / piecesPerPack) : baseStockQty;
+      const minStockPacks = Number(p?.min_stock_level || 10);
+      return purchasePackQty <= minStockPacks;
+    }).length;
   }, [products]);
 
   const uniqueBillsList = useMemo(() => {
@@ -1367,7 +1373,12 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
           <div className="bg-background border border-border p-4 rounded-xl shadow-xs">
             <div className="text-[10px] font-bold text-blue-500 uppercase tracking-wider">Stock Valuation (At Cost)</div>
             <div className="text-xl font-black text-blue-600 dark:text-blue-400 font-mono mt-1">
-              ₹{products.reduce((sum, p) => sum + (Number(p.current_stock || 0) * Number(p.purchase_price || 0)), 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              ₹{products.reduce((sum, p) => {
+                const piecesPerPack = Number(p.pieces_per_pack || 1);
+                const purchasePrice = Number(p.purchase_price || 0);
+                const costPerPiece = piecesPerPack > 1 ? (purchasePrice / piecesPerPack) : purchasePrice;
+                return sum + (Number(p.current_stock || 0) * costPerPiece);
+              }, 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
             </div>
             <div className="text-[10px] text-textMuted mt-0.5 font-medium font-mono">Purchase cost valuation</div>
           </div>
@@ -1375,7 +1386,10 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
           <div className="bg-background border border-border p-4 rounded-xl shadow-xs">
             <div className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider">Estimated Retail Valuation</div>
             <div className="text-xl font-black text-emerald-600 dark:text-emerald-400 font-mono mt-1">
-              ₹{products.reduce((sum, p) => sum + (Number(p.current_stock || 0) * Number(p.selling_price || 0)), 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              ₹{products.reduce((sum, p) => {
+                const { piecePrice } = getProductUnitRates(p);
+                return sum + (Number(p.current_stock || 0) * piecePrice);
+              }, 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
             </div>
             <div className="text-[10px] text-textMuted mt-0.5 font-medium font-mono">Selling price valuation</div>
           </div>
@@ -1656,7 +1670,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
               const rawPieces = Number(p?.pieces_per_pack || 0);
               const isBulkLegacy = purchasePrice > sellingPrice * 2 && rawPieces <= 1;
 
-              const piecesPerPack = rawPieces > 1 ? rawPieces : (isBulkLegacy ? 100 : 1);
+              const { piecesPerPack, piecePrice, packPrice } = getProductUnitRates(p);
               const rawP = p?.p_unit;
               const rawS = p?.s_unit || p?.unit;
 
@@ -1670,15 +1684,15 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
 
               const isDualUnit = piecesPerPack > 1;
 
-              const costPerSellingUnit = isDualUnit ? (purchasePrice / piecesPerPack) : purchasePrice;
-              const marginAmount = sellingPrice - costPerSellingUnit;
-              const marginPercent = costPerSellingUnit > 0 ? (marginAmount / costPerSellingUnit) * 100 : 0;
+              const costPerPiece = isDualUnit ? (purchasePrice / piecesPerPack) : purchasePrice;
+              const marginPerPiece = piecePrice - costPerPiece;
+              const marginPercent = costPerPiece > 0 ? (marginPerPiece / costPerPiece) * 100 : 0;
               const baseStockQty = Number(p?.current_stock || 0);
               const purchasePackQty = isDualUnit ? (baseStockQty / piecesPerPack) : baseStockQty;
               const minStockPacks = Number(p?.min_stock_level || 10);
               const isLowStock = purchasePackQty <= minStockPacks;
-              const costValuation = baseStockQty * costPerSellingUnit;
-              const retailValuation = baseStockQty * sellingPrice;
+              const costValuation = baseStockQty * costPerPiece;
+              const retailValuation = baseStockQty * piecePrice;
               const stockRatio = Math.min(100, Math.max(5, (purchasePackQty / (minStockPacks * 2 || 20)) * 100));
 
               const godownVal = p.godown || (p.warehouse_location?.includes('|') ? p.warehouse_location.split('|')[0].replace(/^Godown:\s*/i, '').trim() : '');
@@ -1767,20 +1781,25 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                         <div className="flex flex-col items-center">
                           <span className="font-bold">₹{purchasePrice.toFixed(2)} {isDualUnit ? <span className="text-[10px] text-blue-600 dark:text-blue-400 font-extrabold">/ {pUnit}</span> : ''}</span>
                           {isDualUnit && (
-                            <span className="text-[10px] text-slate-400 font-mono">(₹{costPerSellingUnit.toFixed(2)} / {sUnit})</span>
+                            <span className="text-[10px] text-slate-400 font-mono">(₹{costPerPiece.toFixed(2)} / {sUnit})</span>
                           )}
                         </div>
                       </td>
                       <td className="py-3.5 px-4 text-center">
-                        <div className={`font-mono text-xs font-bold ${marginAmount >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-                          {marginAmount >= 0 ? '+' : ''}₹{marginAmount.toFixed(2)}
+                        <div className={`font-mono text-xs font-bold ${marginPerPiece >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                          {marginPerPiece >= 0 ? '+' : ''}₹{marginPerPiece.toFixed(2)} <span className="text-[10px] text-slate-400 font-normal">/ {sUnit}</span>
                         </div>
-                        <div className={`text-[10px] font-mono ${marginAmount >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                        <div className={`text-[10px] font-mono ${marginPerPiece >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                           ({marginPercent >= 0 ? '+' : ''}{marginPercent.toFixed(1)}%)
                         </div>
                       </td>
                       <td className="py-3.5 px-4 text-center font-mono font-bold text-slate-900 dark:text-slate-100 text-xs">
-                        ₹{sellingPrice.toFixed(2)} <span className="text-[10px] text-slate-400 font-normal">/ {sUnit}</span>
+                        <div className="flex flex-col items-center">
+                          <span className="font-bold">₹{piecePrice.toFixed(2)} <span className="text-[10px] text-slate-400 font-normal">/ {sUnit}</span></span>
+                          {isDualUnit && (
+                            <span className="text-[10px] text-slate-400 font-mono">(₹{packPrice.toFixed(2)} / {pUnit})</span>
+                          )}
+                        </div>
                       </td>
                       <td className="py-3.5 px-4 text-center">
                         <div className="flex flex-col items-center justify-center">
