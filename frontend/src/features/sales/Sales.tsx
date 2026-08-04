@@ -581,7 +581,9 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                             <div className="flex gap-2 text-xs font-extrabold mt-1">
                               <span className="text-primary">Pack: ₹{Number(p.selling_price).toFixed(2)}</span>
                               {hasLoose && (
-                                <span className="text-blue-400 text-[10px]">Pce: ₹{Number((p as any).piece_selling_price || 0).toFixed(2)}</span>
+                                <span className="text-blue-400 text-[10px]">
+                                  Pce: ₹{Number((p as any).piece_selling_price || (piecesPerPack > 0 ? Number(p.selling_price || 0) / piecesPerPack : 0)).toFixed(2)}
+                                </span>
                               )}
                             </div>
                           </div>
