@@ -4,6 +4,7 @@ import { useInventory } from '../../hooks/useInventory';
 import { supabase } from '../../api/supabase';
 import type { Product, BusinessType } from '../../types/erp.types';
 import { t } from '../../utils/i18n';
+import { getProductUnitRates } from '../../utils/formatters';
 
 const DEFAULT_UNITS = [
   'Nos', 'Box', 'Bundle', 'Packet', 'Bag', 'Kg', 'Gram', 'Feet', 'Meter', 'Inch',
@@ -1086,6 +1087,13 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
         ? (additionalInput > 0 ? (oldStock + additionalInput) : Number(formData.current_stock || 0))
         : (isMergeOperation ? (existingStock + addedStockInflow) : addedStockInflow);
 
+      const { piecesPerPack, piecePrice, packPrice } = getProductUnitRates({
+        pieces_per_pack: formData.pieces_per_pack,
+        selling_price: formData.selling_price,
+        piece_selling_price: formData.piece_selling_price,
+        purchase_price: formData.purchase_price
+      });
+
       const productPayload = {
         tenant_id: tenantId,
         product_name: formData.product_name,
@@ -1095,7 +1103,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
         brand_name: formData.brand_name,
         unit: formData.unit || formData.s_unit || 'Nos',
         purchase_price: formData.purchase_price,
-        selling_price: formData.selling_price,
+        selling_price: packPrice,
         dealer_price: formData.dealer_price,
         mrp: formData.mrp,
         current_stock: finalStock,
@@ -1115,8 +1123,8 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
         supplier_name: selectedSup ? selectedSup.supplier_name : (formData.supplier_name || null),
         supplier_phone: selectedSup ? selectedSup.phone : (formData.supplier_phone || null),
         status: 'Active',
-        pieces_per_pack: Number(formData.pieces_per_pack || 1),
-        piece_selling_price: Number(formData.piece_selling_price || 0),
+        pieces_per_pack: piecesPerPack,
+        piece_selling_price: piecePrice,
         allow_decimal: formData.allow_decimal,
         allow_purchase_unit_selling: formData.allow_purchase_unit_selling,
         track_base_unit: formData.track_base_unit,

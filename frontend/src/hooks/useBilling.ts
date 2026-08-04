@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../api/supabase';
 import type { CartItem, Product, SalesInvoice } from '../types/erp.types';
+import { getProductUnitRates } from '../utils/formatters';
 
 export function useBilling(tenantId: string) {
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -107,9 +108,8 @@ export function useBilling(tenantId: string) {
       if (addedPieces > stockInPieces) {
         throw new Error(`Out of stock.`);
       }
-      const rate = isLoose 
-        ? Number(product.piece_selling_price || (piecesPerPack > 0 ? Number(product.selling_price || 0) / piecesPerPack : 0)) 
-        : Number(product.selling_price);
+      const { piecePrice, packPrice } = getProductUnitRates(product);
+      const rate = isLoose ? piecePrice : packPrice;
       setCart([...cart, { product, qty: 1, rate, isLoose }]);
     }
   };

@@ -6,6 +6,7 @@ import { useDemandTracker } from '../../hooks/useDemandTracker';
 import { supabase } from '../../api/supabase';
 import type { Product } from '../../types/erp.types';
 import { t, Language } from '../../utils/i18n';
+import { getProductUnitRates } from '../../utils/formatters';
 
 interface SalesProps {
   tenantId: string;
@@ -567,7 +568,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                 ) : (
                   <div className="grid grid-cols-1 gap-2.5 max-h-[60vh] overflow-y-auto pr-1 scrollbar-thin">
                     {filteredPOSProducts.map(p => {
-                      const piecesPerPack = Number((p as any).pieces_per_pack || 1);
+                      const { piecesPerPack, piecePrice, packPrice } = getProductUnitRates(p);
                       const hasLoose = piecesPerPack > 1;
                       const stockVal = Number(p.current_stock || 0);
                       const unitLabel = p.s_unit || p.unit || 'Pcs';
@@ -579,10 +580,10 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                               <span>Stock: <span className="font-bold text-foreground">{stockVal.toFixed(2).replace(/\.00$/, '')}</span> {unitLabel}</span>
                             </div>
                             <div className="flex gap-2 text-xs font-extrabold mt-1">
-                              <span className="text-primary">Pack: ₹{Number(p.selling_price).toFixed(2)}</span>
+                              <span className="text-primary">Pack: ₹{packPrice.toFixed(2)}</span>
                               {hasLoose && (
                                 <span className="text-blue-400 text-[10px]">
-                                  Pce: ₹{Number((p as any).piece_selling_price || (piecesPerPack > 0 ? Number(p.selling_price || 0) / piecesPerPack : 0)).toFixed(2)}
+                                  Pce: ₹{piecePrice.toFixed(2)}
                                 </span>
                               )}
                             </div>
