@@ -131,18 +131,6 @@ export default function Settings({ tenantId, onSettingsSaved }: SettingsProps) {
         throw new Error(res.error);
       }
       await refreshAllData();
-      
-      // Sync with active session tenant name so sidebars update instantly
-      const sessionStr = localStorage.getItem('lk_session');
-      if (sessionStr) {
-        try {
-          const session = JSON.parse(sessionStr);
-          if (session.tenant) {
-            session.tenant.company_name = companyName;
-            localStorage.setItem('lk_session', JSON.stringify(session));
-          }
-        } catch (err) {}
-      }
 
       alert('Company configurations successfully saved!');
       if (onSettingsSaved) onSettingsSaved();

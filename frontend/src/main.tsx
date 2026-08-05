@@ -28,7 +28,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   }
 
   handleReload = () => {
-    localStorage.removeItem('lk_session');
+    localStorage.clear();
     window.location.reload();
   };
 
