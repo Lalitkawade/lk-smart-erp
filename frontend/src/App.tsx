@@ -53,6 +53,24 @@ export default function App() {
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    try {
+      const sessStr = localStorage.getItem('lk_session');
+      if (sessStr) {
+        const sess = JSON.parse(sessStr);
+        if (sess?.tenant && (sess.tenant.company_name === 'LK Hardware ERP' || sess.tenant.company_name === 'My Enterprise' || sess.tenant.company_name === 'LK HARDWARE ERP')) {
+          sess.tenant.company_name = 'Maharudra Hardware';
+          localStorage.setItem('lk_session', JSON.stringify(sess));
+        }
+      }
+      const setStr = localStorage.getItem('lk_settings');
+      if (setStr) {
+        const setObj = JSON.parse(setStr);
+        if (setObj && (setObj.company_name === 'LK Hardware ERP' || setObj.company_name === 'My Enterprise' || setObj.company_name === 'LK HARDWARE ERP')) {
+          setObj.company_name = 'Maharudra Hardware';
+          localStorage.setItem('lk_settings', JSON.stringify(setObj));
+        }
+      }
+    } catch (e) {}
     return () => clearInterval(timer);
   }, []);
 
@@ -75,6 +93,11 @@ export default function App() {
 
   const getGreeting = () => {
     const hrs = new Date().getHours();
+    if (lang === 'mr') {
+      if (hrs < 12) return 'शुभ सकाळ 👋';
+      if (hrs < 17) return 'शुभ दुपार 👋';
+      return 'शुभ संध्याकाळ 👋';
+    }
     if (hrs < 12) return 'Good morning 👋';
     if (hrs < 17) return 'Good afternoon 👋';
     return 'Good evening 👋';
@@ -539,7 +562,8 @@ export default function App() {
     return 0;
   };
 
-  const companyName = tenant?.company_name || 'My Enterprise';
+  const rawCompName = tenant?.company_name || '';
+  const companyName = (!rawCompName || rawCompName === 'LK Hardware ERP' || rawCompName === 'My Enterprise' || rawCompName === 'LK HARDWARE ERP') ? 'Maharudra Hardware' : rawCompName;
 
   const navSections = [
     {
@@ -757,98 +781,103 @@ export default function App() {
       <div className="flex-1 flex flex-col min-w-0">
         
         {/* Top Navbar */}
-        <header className="bg-secondary border-b border-border h-14 sm:h-16 px-3 sm:px-6 flex justify-between items-center select-none shadow-sm sticky top-0 z-30 min-w-0">
-          <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1 mr-1">
-
-            {/* Mobile Hamburger Drawer Toggle */}
-            <button 
-              type="button"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)} 
-              className="md:hidden p-1.5 text-textSecondary hover:text-textPrimary bg-background border border-border rounded-lg transition shrink-0 flex items-center justify-center cursor-pointer active:scale-95"
-              title="Open Navigation Menu"
-            >
-              <i className="fa-solid fa-bars text-xs sm:text-sm"></i>
-            </button>
-            <div className="min-w-0 flex-1">
-              <div className="text-[9px] sm:text-[10px] text-primary font-black uppercase tracking-wider truncate flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse shrink-0"></span>
-                <span className="truncate">{companyName}</span>
-                <span className="text-textMuted shrink-0">•</span>
-                <span className="text-textMuted font-mono shrink-0">{getBreadcrumb()}</span>
-              </div>
-              <div className="text-xs sm:text-sm font-black text-textPrimary tracking-tight mt-0.5 truncate leading-none">
-                <span>{getGreeting()}</span>
-                <span className="font-semibold text-textSecondary text-xs hidden md:inline ml-1.5">| Live Hardware Store Dashboard</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-1 sm:gap-2.5 text-xs font-semibold shrink-0">
-            {/* Live Monospace Date & Time Widget */}
-            <div className="hidden lg:flex items-center gap-2 bg-background border border-border px-3 py-1.5 rounded-lg text-textSecondary text-[11px] font-bold tracking-wide uppercase font-mono">
-              <i className="fa-regular fa-clock text-textMuted text-xs"></i>
-              <span>{currentTime.toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}</span>
-              <span className="text-textMuted">|</span>
-              <span>{currentTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}</span>
-            </div>
-
-            {/* Marathi / English Language Switcher */}
-            <button
-              onClick={toggleLanguage}
-              className="px-2.5 py-1.5 sm:px-3 text-xs font-black text-foreground bg-primary/10 hover:bg-primary/20 border border-primary/30 rounded-lg transition active:scale-95 cursor-pointer flex items-center gap-1.5 shadow-xs"
-              title={`Switch language / भाषा बदला (${lang === 'en' ? 'मराठी' : 'English'})`}
-            >
-              <i className="fa-solid fa-globe text-primary text-xs"></i>
-              <span>{lang === 'en' ? 'मराठी' : 'English'}</span>
-            </button>
-
-            {/* Theme Toggle Button */}
-            <button
-              onClick={toggleTheme}
-              className="p-1.5 sm:p-2 text-textSecondary hover:text-textPrimary bg-background border border-border rounded-lg transition active:scale-95 cursor-pointer flex items-center justify-center"
-              title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Theme`}
-            >
-              <i className={`fa-solid ${theme === 'dark' ? 'fa-sun text-amber-400' : 'fa-moon text-indigo-400'} text-xs`}></i>
-            </button>
+        {/* Top Sticky Navigation Header Bar */}
+        <header className="bg-secondary border-b border-border select-none shadow-xs sticky top-0 z-30 min-w-0">
+          <div className="h-14 sm:h-16 px-3 sm:px-6 flex justify-between items-center gap-2">
             
-            {/* Unstocked Demand Log quick button */}
-            <button 
-              onClick={() => setShowDemandModal(true)} 
-              className="p-1.5 sm:px-3 sm:py-1.5 text-xs font-bold text-foreground bg-background hover:bg-slate-100 dark:hover:bg-slate-800 border border-border rounded-lg transition flex items-center gap-1 cursor-pointer shadow-xs active:scale-95" 
-              title="Log Unstocked Item Requested by Customer"
-            >
-              <i className="fa-solid fa-clipboard-list text-primary text-xs"></i>
-              <span className="hidden sm:inline">Demand Log</span>
-              {highDemandAlerts.length > 0 && (
-                <span className="bg-rose-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full animate-pulse">
-                  {highDemandAlerts.length}
-                </span>
-              )}
-            </button>
+            {/* Left: Mobile Drawer Toggle & Store Branding / Greeting */}
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+              <button 
+                type="button"
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)} 
+                className="md:hidden p-2 text-textSecondary hover:text-textPrimary bg-background border border-border rounded-xl transition shrink-0 flex items-center justify-center cursor-pointer active:scale-95 shadow-2xs"
+                title="Open Navigation Menu"
+              >
+                <i className="fa-solid fa-bars text-sm"></i>
+              </button>
 
-            {/* Search icon */}
-            <button onClick={() => { setShowSearchModal(true); setSearchQuery(''); }} className="p-1.5 sm:p-2 text-textSecondary hover:text-textPrimary bg-background border border-border rounded-lg transition" title="Search Everything">
-              <i className="fa-solid fa-magnifying-glass text-xs"></i>
-            </button>
+              <div className="min-w-0 flex-1">
+                <div className="text-[9px] sm:text-[10px] text-primary font-black uppercase tracking-wider truncate flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse shrink-0"></span>
+                  <span className="truncate">{companyName}</span>
+                  <span className="text-textMuted shrink-0 hidden sm:inline">•</span>
+                  <span className="text-textMuted font-mono shrink-0 hidden sm:inline">{getBreadcrumb()}</span>
+                </div>
+                <div className="text-xs sm:text-sm font-black text-textPrimary tracking-tight mt-0.5 truncate flex items-center gap-1.5">
+                  <span className="whitespace-nowrap font-black">{getGreeting()}</span>
+                  <span className="font-semibold text-textSecondary text-xs hidden md:inline">| Live Hardware Store Dashboard</span>
+                </div>
+              </div>
+            </div>
 
-            {/* Notification bell */}
-            <div className="relative">
-              <button onClick={() => setShowNotifications(!showNotifications)} className="relative p-1.5 sm:p-2 text-textSecondary hover:text-textPrimary bg-background border border-border rounded-lg transition" title="System Alerts">
-                <i className="fa-regular fa-bell text-xs"></i>
-                {(lowStockCount > 0 || getCustomerDues() > 0 || getSupplierDues() > 0 || highDemandAlerts.length > 0 || todaysBirthdays.length > 0) && (
-                  <>
-                    <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-rose-500 rounded-full animate-ping"></span>
-                    <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-rose-500 rounded-full"></span>
-                  </>
+            {/* Right: Quick Action Controls */}
+            <div className="flex items-center gap-1.5 sm:gap-2.5 text-xs font-semibold shrink-0">
+              
+              {/* Desktop Clock Pill (hidden on mobile, rendered in mobile sub-bar) */}
+              <div className="hidden sm:flex items-center gap-2 bg-background border border-border px-3 py-1.5 rounded-xl text-textSecondary text-[11px] font-bold tracking-wide uppercase font-mono shadow-2xs">
+                <i className="fa-regular fa-clock text-primary text-xs shrink-0"></i>
+                <span className="hidden md:inline">{currentTime.toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short' })}</span>
+                <span className="hidden md:inline text-textMuted">|</span>
+                <span className="font-extrabold">{currentTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}</span>
+              </div>
+
+              {/* Marathi / English Language Switcher */}
+              <button
+                onClick={toggleLanguage}
+                className="px-2.5 py-1.5 text-xs font-black text-foreground bg-primary/10 hover:bg-primary/20 border border-primary/30 rounded-xl transition active:scale-95 cursor-pointer flex items-center gap-1.5 shadow-2xs shrink-0"
+                title={`Switch language / भाषा बदला (${lang === 'en' ? 'मराठी' : 'English'})`}
+              >
+                <i className="fa-solid fa-globe text-primary text-xs"></i>
+                <span>{lang === 'en' ? 'मराठी' : 'English'}</span>
+              </button>
+
+              {/* Theme Toggle Button (Desktop) */}
+              <button
+                onClick={toggleTheme}
+                className="hidden sm:flex p-2 text-textSecondary hover:text-textPrimary bg-background border border-border rounded-xl transition active:scale-95 cursor-pointer items-center justify-center shadow-2xs"
+                title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Theme`}
+              >
+                <i className={`fa-solid ${theme === 'dark' ? 'fa-sun text-amber-400' : 'fa-moon text-indigo-400'} text-xs`}></i>
+              </button>
+              
+              {/* Unstocked Demand Log quick button (Desktop) */}
+              <button 
+                onClick={() => setShowDemandModal(true)} 
+                className="hidden sm:flex p-1.5 sm:px-3 sm:py-1.5 text-xs font-bold text-foreground bg-background hover:bg-slate-100 dark:hover:bg-slate-800 border border-border rounded-xl transition items-center gap-1 cursor-pointer shadow-2xs active:scale-95" 
+                title="Log Unstocked Item Requested by Customer"
+              >
+                <i className="fa-solid fa-clipboard-list text-primary text-xs"></i>
+                <span>Demand Log</span>
+                {highDemandAlerts.length > 0 && (
+                  <span className="bg-rose-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full animate-pulse">
+                    {highDemandAlerts.length}
+                  </span>
                 )}
               </button>
 
-              {showNotifications && (
-                <div className="absolute right-0 mt-2 w-80 bg-secondary border border-border rounded-xl shadow-xl z-50 p-4 space-y-3 animate-fade-in text-foreground">
-                  <div className="flex justify-between items-center border-b border-border pb-2">
-                    <span className="text-xs font-extrabold uppercase tracking-wider">System Notifications</span>
-                    <button onClick={() => setShowNotifications(false)} className="text-[10px] text-textMuted hover:text-textPrimary">Close</button>
-                  </div>
+              {/* Search icon */}
+              <button onClick={() => { setShowSearchModal(true); setSearchQuery(''); }} className="p-2 text-textSecondary hover:text-textPrimary bg-background border border-border rounded-xl transition shadow-2xs active:scale-95" title="Search Everything">
+                <i className="fa-solid fa-magnifying-glass text-xs"></i>
+              </button>
+
+              {/* Notification bell */}
+              <div className="relative">
+                <button onClick={() => setShowNotifications(!showNotifications)} className="relative p-2 text-textSecondary hover:text-textPrimary bg-background border border-border rounded-xl transition shadow-2xs active:scale-95" title="System Alerts">
+                  <i className="fa-regular fa-bell text-xs"></i>
+                  {(lowStockCount > 0 || getCustomerDues() > 0 || getSupplierDues() > 0 || highDemandAlerts.length > 0 || todaysBirthdays.length > 0) && (
+                    <>
+                      <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-rose-500 rounded-full animate-ping"></span>
+                      <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-rose-500 rounded-full"></span>
+                    </>
+                  )}
+                </button>
+
+                {showNotifications && (
+                  <div className="absolute right-0 mt-2 w-80 bg-secondary border border-border rounded-xl shadow-xl z-50 p-4 space-y-3 animate-fade-in text-foreground">
+                    <div className="flex justify-between items-center border-b border-border pb-2">
+                      <span className="text-xs font-extrabold uppercase tracking-wider">System Notifications</span>
+                      <button onClick={() => setShowNotifications(false)} className="text-[10px] text-textMuted hover:text-textPrimary">Close</button>
+                    </div>
                   <div className="space-y-2 max-h-60 overflow-y-auto">
                     {/* Birthday & Establishment Alerts with Direct Call Option */}
                     {todaysBirthdays.map((item, idx) => (
@@ -942,7 +971,41 @@ export default function App() {
               </div>
             </div>
           </div>
-        </header>
+        </div>
+      </header>
+
+        {/* Dedicated Mobile Info Sub-Bar for Date/Time & Demands */}
+        <div className="sm:hidden bg-secondary border-b border-border px-3 py-1.5 flex items-center justify-between gap-2 text-xs select-none">
+          <div className="flex items-center gap-1.5 font-mono text-[10.5px] font-bold text-textSecondary bg-background px-2.5 py-1 rounded-lg border border-border">
+            <i className="fa-regular fa-clock text-primary text-xs shrink-0"></i>
+            <span>{currentTime.toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short' })}</span>
+            <span className="text-textMuted">•</span>
+            <span className="font-extrabold text-foreground">{currentTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}</span>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={toggleTheme}
+              className="p-1.5 text-textSecondary hover:text-textPrimary bg-background border border-border rounded-lg transition active:scale-95 cursor-pointer flex items-center justify-center"
+              title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Theme`}
+            >
+              <i className={`fa-solid ${theme === 'dark' ? 'fa-sun text-amber-400' : 'fa-moon text-indigo-400'} text-xs`}></i>
+            </button>
+
+            <button 
+              onClick={() => setShowDemandModal(true)} 
+              className="px-2.5 py-1 text-[11px] font-bold text-foreground bg-background border border-border rounded-lg transition flex items-center gap-1 cursor-pointer active:scale-95" 
+            >
+              <i className="fa-solid fa-clipboard-list text-primary text-xs"></i>
+              <span>Demands</span>
+              {highDemandAlerts.length > 0 && (
+                <span className="bg-rose-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full">
+                  {highDemandAlerts.length}
+                </span>
+              )}
+            </button>
+          </div>
+        </div>
 
         {/* Dynamic Views Router */}
         <main className="p-3 sm:p-6 overflow-y-auto flex-1">

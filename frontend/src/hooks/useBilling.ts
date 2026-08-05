@@ -288,6 +288,31 @@ export function useBilling(tenantId: string) {
 
       // Auto-register customer in database if they don't have a valid UUID yet
       if (customerName.trim() && customerName.trim().toUpperCase() !== 'CASH CUSTOMER') {
+        try {
+          const rawLocalCusts = localStorage.getItem('lk_customers') || '[]';
+          const localCusts: any[] = JSON.parse(rawLocalCusts);
+          const cNameUpper = customerName.trim().toUpperCase();
+          const existingIdx = localCusts.findIndex((c: any) => 
+            (matchedCustomer && c.id === matchedCustomer.id) ||
+            (c.customer_name && c.customer_name.trim().toUpperCase() === cNameUpper)
+          );
+          if (existingIdx >= 0) {
+            localCusts[existingIdx].outstanding = newOutstanding;
+          } else {
+            localCusts.unshift({
+              id: matchedCustomer?.id || ('cust-' + Date.now()),
+              tenant_id: tenantId,
+              customer_name: cNameUpper,
+              phone: customerPhone.trim() || '',
+              credit_limit: 50000,
+              outstanding: newOutstanding,
+              created_at: new Date().toISOString()
+            });
+          }
+          localStorage.setItem('lk_customers', JSON.stringify(localCusts));
+          window.dispatchEvent(new Event('lk_customers_updated'));
+        } catch (e) {}
+
         if (!matchedCustomer || !isValidUUID(matchedCustomer.id)) {
           try {
             const { data: newCust } = await supabase

@@ -119,6 +119,7 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
   const [isLoading, setIsLoading] = useState<boolean>(() => suppliers.length === 0);
   const [_products, setProducts] = useState<any[]>([]);
   const [search, setSearch] = useState('');
+  const [filterTab, setFilterTab] = useState<'all' | 'payables'>('all');
   
   // Modals Control
   const [modalOpen, setModalOpen] = useState(false);
@@ -373,6 +374,14 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
     e.preventDefault();
     if (!formData.supplier_name.trim()) return;
 
+    if (formData.phone.trim()) {
+      const cleanPhone = formData.phone.trim().replace(/\D/g, '');
+      if (cleanPhone.length !== 10) {
+        triggerToast('⚠️ Phone number must be compulsory 10 digits!');
+        return;
+      }
+    }
+
     const isUuid = (id: string) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
     const generateUuid = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 's' + Date.now().toString(16).padStart(31, '0').slice(0, 31);
 
@@ -616,6 +625,9 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
 
   const filteredSuppliers = useMemo(() => {
     return suppliers.filter((s, idx) => {
+      const stats = supplierStatsMap.get(s.id) || { realtimeOutstanding: Number(s.outstanding || 0) };
+      if (filterTab === 'payables' && stats.realtimeOutstanding <= 0) return false;
+
       const name = s.supplier_name || '';
       const phone = s.phone || '';
       const code = getVendorCode(s, idx).toLowerCase();
@@ -625,7 +637,7 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
         code.includes(search.toLowerCase())
       );
     });
-  }, [suppliers, search]);
+  }, [suppliers, search, filterTab, supplierStatsMap]);
 
   return (
     <div className="space-y-6 animate-fade-in relative">
@@ -643,6 +655,28 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
         </div>
         <button className="w-full sm:w-auto px-4 py-2 bg-primary hover:bg-primary/90 text-white font-bold rounded-lg text-sm text-center shrink-0 shadow-md transition active:scale-95 cursor-pointer" onClick={handleOpenAdd}>
           + {t('addVendor')}
+        </button>
+      </div>
+
+      {/* Filter Tabs Bar - Equal 2-Column Side-by-Side Grid */}
+      <div className="grid grid-cols-2 gap-2 border-b border-border text-xs font-bold mb-4">
+        <button
+          type="button"
+          onClick={() => setFilterTab('all')}
+          className={`w-full py-2.5 px-2 rounded-t-xl transition flex items-center justify-center gap-1.5 cursor-pointer text-center ${filterTab === 'all' ? 'bg-secondary border-t-2 border-x border-primary text-primary font-extrabold shadow-2xs' : 'bg-background/50 border-t border-x border-border text-textMuted hover:text-foreground'}`}
+        >
+          <span className="truncate">👥 All Vendors</span>
+          <span className="bg-background px-1.5 py-0.5 rounded text-[10px] text-foreground font-mono shrink-0">{suppliers.length}</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setFilterTab('payables')}
+          className={`w-full py-2.5 px-2 rounded-t-xl transition flex items-center justify-center gap-1.5 cursor-pointer text-center ${filterTab === 'payables' ? 'bg-secondary border-t-2 border-x border-rose-500 text-rose-500 font-extrabold shadow-2xs' : 'bg-background/50 border-t border-x border-border text-textMuted hover:text-foreground'}`}
+        >
+          <span className="truncate">⚠️ Pending Payables</span>
+          <span className="bg-rose-500/10 text-rose-500 border border-rose-500/20 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold shrink-0">
+            {suppliers.filter(s => (supplierStatsMap.get(s.id)?.realtimeOutstanding || Number(s.outstanding || 0)) > 0).length}
+          </span>
         </button>
       </div>
 
@@ -810,8 +844,8 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-textSecondary mb-1">Phone Number</label>
-                  <input type="text" className="w-full bg-background border border-border rounded-lg p-2.5 text-xs text-foreground font-semibold"
-                    value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} placeholder="e.g. 9876543210" />
+                  <input type="text" maxLength={10} className="w-full bg-background border border-border rounded-lg p-2.5 text-xs text-foreground font-semibold"
+                    value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value.replace(/\D/g, '').slice(0, 10) })} placeholder="e.g. 9876543210" />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-textSecondary mb-1">Email ID</label>

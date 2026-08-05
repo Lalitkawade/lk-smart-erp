@@ -11,7 +11,7 @@ export default function Settings({ tenantId, onSettingsSaved }: SettingsProps) {
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState('');
 
-  const [companyName, setCompanyName] = useState('LK Hardware ERP');
+  const [companyName, setCompanyName] = useState('Maharudra Hardware');
   const [logoUrl, setLogoUrl] = useState('');
   const [gstin, setGstin] = useState('27LKSERP401Z2B5');
   const [address, setAddress] = useState('123 Market Road, Pune, Maharashtra');

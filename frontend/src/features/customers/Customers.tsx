@@ -130,13 +130,13 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
         try { cachedPays = JSON.parse(cachedPayStr); } catch (e) {}
       }
 
-      // Merge remote and cached customers preserving lower/paid outstanding amount
+      // Merge remote and cached customers preserving active local outstanding amount
       const mergedCusts = remoteCusts.length > 0 ? remoteCusts.map(rc => {
         const cc = cachedCusts.find(c => c.id === rc.id || (c.customer_name && rc.customer_name && c.customer_name.toUpperCase() === rc.customer_name.toUpperCase()));
         if (cc && cc.outstanding !== undefined) {
           return {
             ...rc,
-            outstanding: Math.min(Number(rc.outstanding || 0), Number(cc.outstanding || 0))
+            outstanding: Number(cc.outstanding)
           };
         }
         return rc;
@@ -209,6 +209,14 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
   const handleSaveCustomer = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.customer_name.trim()) return;
+
+    if (formData.phone.trim()) {
+      const cleanPhone = formData.phone.trim().replace(/\D/g, '');
+      if (cleanPhone.length !== 10) {
+        triggerToast('⚠️ Phone number must be compulsory 10 digits!');
+        return;
+      }
+    }
 
     const isUuid = (id: string) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
     const generateUuid = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'f' + Date.now().toString(16).padStart(31, '0').slice(0, 31);
@@ -494,9 +502,10 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
 
       // Sum of invoice dues (unpaid amount for each invoice)
       const totalInvoiceDues = custInvoices.reduce((acc: number, inv: any) => {
-        const tot = Number(inv.total_amount || 0);
-        const paidAtInvoice = Number(inv.amount_collected !== undefined ? inv.amount_collected : (inv.is_paid ? tot : 0));
-        return acc + Math.max(0, tot - paidAtInvoice);
+        const invoiceDue = inv.due_amount !== undefined 
+          ? Number(inv.due_amount) 
+          : Math.max(0, Number(inv.total_amount || 0) - Number(inv.paid_amount || 0));
+        return acc + Math.max(0, invoiceDue);
       }, 0);
 
       // Sum of payments collected in customer_payments table
@@ -507,7 +516,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
       // Otherwise, use initial static opening balance - totalPaymentsReceived.
       let realtimeOutstanding = 0;
       if (custInvoices.length > 0) {
-        realtimeOutstanding = Math.max(0, totalInvoiceDues - totalPaymentsReceived);
+        realtimeOutstanding = Math.max(0, totalInvoiceDues);
       } else {
         realtimeOutstanding = Math.max(0, Number(c.outstanding || 0) - totalPaymentsReceived);
       }
@@ -587,21 +596,23 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
         </button>
       </div>
 
-      {/* Filter Tabs Bar */}
-      <div className="flex border-b border-border text-xs font-bold gap-2 overflow-x-auto pb-1">
+      {/* Filter Tabs Bar - Equal 2-Column Side-by-Side Grid */}
+      <div className="grid grid-cols-2 gap-2 border-b border-border text-xs font-bold mb-4">
         <button
+          type="button"
           onClick={() => setFilterTab('all')}
-          className={`py-2 px-3.5 rounded-t-lg transition flex items-center gap-1.5 ${filterTab === 'all' ? 'bg-secondary border-t-2 border-x border-primary text-primary' : 'text-textMuted hover:text-foreground'}`}
+          className={`w-full py-2.5 px-2 rounded-t-xl transition flex items-center justify-center gap-1.5 cursor-pointer text-center ${filterTab === 'all' ? 'bg-secondary border-t-2 border-x border-primary text-primary font-extrabold shadow-2xs' : 'bg-background/50 border-t border-x border-border text-textMuted hover:text-foreground'}`}
         >
-          <span>👥 All Customers</span>
-          <span className="bg-background px-1.5 py-0.5 rounded text-[10px] text-foreground font-mono">{customers.length}</span>
+          <span className="truncate">👥 All Customers</span>
+          <span className="bg-background px-1.5 py-0.5 rounded text-[10px] text-foreground font-mono shrink-0">{customers.length}</span>
         </button>
         <button
+          type="button"
           onClick={() => setFilterTab('outstanding')}
-          className={`py-2 px-3.5 rounded-t-lg transition flex items-center gap-1.5 ${filterTab === 'outstanding' ? 'bg-secondary border-t-2 border-x border-primary text-primary font-bold' : 'text-textMuted hover:text-foreground'}`}
+          className={`w-full py-2.5 px-2 rounded-t-xl transition flex items-center justify-center gap-1.5 cursor-pointer text-center ${filterTab === 'outstanding' ? 'bg-secondary border-t-2 border-x border-primary text-primary font-extrabold shadow-2xs' : 'bg-background/50 border-t border-x border-border text-textMuted hover:text-foreground'}`}
         >
-          <span>⚠️ Pending Outstanding</span>
-          <span className="bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold">
+          <span className="truncate">⚠️ Pending Outstanding</span>
+          <span className="bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold shrink-0">
             {customers.filter(c => (customerStatsMap.get(c.id)?.realtimeOutstanding || Number(c.outstanding || 0)) > 0).length}
           </span>
         </button>
@@ -775,8 +786,8 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-textSecondary mb-1">Phone Number</label>
-                  <input type="text" className="w-full bg-background border border-border rounded-lg p-2.5 text-xs text-foreground font-semibold"
-                    value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} placeholder="e.g. 9876543210" />
+                  <input type="text" maxLength={10} className="w-full bg-background border border-border rounded-lg p-2.5 text-xs text-foreground font-semibold"
+                    value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value.replace(/\D/g, '').slice(0, 10) })} placeholder="e.g. 9876543210" />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-textSecondary mb-1">Email ID</label>
@@ -800,7 +811,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                 </div>
                 <div>
                   <div className="flex justify-between items-center mb-1">
-                    <label className="block text-xs font-semibold text-textSecondary">Initial Outstanding (₹) *</label>
+                    <label className="block text-xs font-semibold text-textSecondary">Initial Outstanding (₹)</label>
                     {editingCustomer && (
                       <button
                         type="button"
@@ -822,8 +833,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                     value={formData.outstanding === 0 ? '' : formData.outstanding} 
                     placeholder="0"
                     onFocus={(e) => e.target.select()}
-                    onChange={(e) => setFormData({ ...formData, outstanding: e.target.value === '' ? 0 : (parseInt(e.target.value) || 0) })} 
-                    required />
+                    onChange={(e) => setFormData({ ...formData, outstanding: e.target.value === '' ? 0 : (parseInt(e.target.value) || 0) })} />
                 </div>
               </div>
               <div>

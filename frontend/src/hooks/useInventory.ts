@@ -3,13 +3,28 @@ import { supabase } from '../api/supabase';
 import type { Product } from '../types/erp.types';
 
 export function useInventory(tenantId: string, businessType?: string) {
+  const normalizeProduct = (p: Product): Product => {
+    const pPrice = Number(p.purchase_price || 0);
+    const sPrice = Number(p.selling_price || 0);
+    const rawPack = Number(p.pieces_per_pack || 0);
+    const isBulkLeak = pPrice > sPrice * 2 && rawPack <= 1;
+
+    return {
+      ...p,
+      p_unit: isBulkLeak ? (p.p_unit && p.p_unit !== p.s_unit ? p.p_unit : 'Box') : (p.p_unit || 'Pcs'),
+      s_unit: isBulkLeak ? (p.s_unit && p.s_unit !== 'Box' && p.s_unit !== 'PCS' ? p.s_unit : 'Nos') : (p.s_unit || 'Pcs'),
+      unit: isBulkLeak ? (p.s_unit && p.s_unit !== 'Box' && p.s_unit !== 'PCS' ? p.s_unit : 'Nos') : (p.unit || p.s_unit || 'Pcs'),
+      pieces_per_pack: isBulkLeak ? 100 : (rawPack || 1),
+    };
+  };
+
   // 1. Instant local initial state load (0ms latency)
   const [products, setProducts] = useState<Product[]>(() => {
     try {
       const localStr = localStorage.getItem('lk_products');
       if (localStr) {
         const parsed = JSON.parse(localStr);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed)) return parsed.map(normalizeProduct);
       }
     } catch (e) {}
     return [];

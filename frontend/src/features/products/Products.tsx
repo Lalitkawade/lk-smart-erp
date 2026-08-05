@@ -26,6 +26,14 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
   const [search, setSearch] = useState('');
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [stockFilterTab, setStockFilterTab] = useState<'all' | 'low'>('all');
+  const [purchasesList, setPurchasesList] = useState<any[]>(() => {
+    try {
+      const raw = localStorage.getItem('lk_purchases');
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      return [];
+    }
+  });
 
   // Modals
   const [modalOpen, setModalOpen] = useState(false);
@@ -180,6 +188,49 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
       return next;
     });
   };
+
+  const fetchPurchaseBills = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('purchase_bills')
+        .select('*')
+        .order('purchase_date', { ascending: false });
+
+      const localStr = localStorage.getItem('lk_purchases') || '[]';
+      let localBills: any[] = [];
+      try { localBills = JSON.parse(localStr); } catch (e) {}
+
+      if (!error && data && Array.isArray(data)) {
+        const billMap = new Map<string, any>();
+        localBills.forEach(b => { if (b && b.id) billMap.set(b.id, b); });
+        data.forEach((rb: any) => {
+          if (rb && rb.id) {
+            const existing = billMap.get(rb.id);
+            billMap.set(rb.id, {
+              ...existing,
+              ...rb,
+              items: rb.purchase_items || existing?.items || []
+            });
+          }
+        });
+        const merged = Array.from(billMap.values());
+        setPurchasesList(merged);
+        try { localStorage.setItem('lk_purchases', JSON.stringify(merged)); } catch (e) {}
+      } else if (localBills.length > 0) {
+        setPurchasesList(localBills);
+      }
+    } catch (e) {}
+  };
+
+  useEffect(() => {
+    fetchPurchaseBills();
+    window.addEventListener('storage', fetchPurchaseBills);
+    window.addEventListener('lk_purchases_updated', fetchPurchaseBills);
+    return () => {
+      window.removeEventListener('storage', fetchPurchaseBills);
+      window.removeEventListener('lk_purchases_updated', fetchPurchaseBills);
+    };
+  }, []);
 
   useEffect(() => {
     if (autoOpenModal) {
@@ -558,7 +609,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
         return b;
       });
       localStorage.setItem('lk_purchases', JSON.stringify(updatedList));
-      setPurchases(updatedList);
+      setPurchasesList(updatedList);
 
       try {
         if (editingBill.id && !editingBill.id.startsWith('pb-') && !editingBill.id.startsWith('sup-')) {
@@ -585,7 +636,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
     }
   };
 
-  const [purchases, setPurchases] = useState<any[]>([]);
+  const [_purchases, _setPurchases] = useState<any[]>([]);
   const [_sales, setSales] = useState<any[]>([]);
 
   useEffect(() => {
@@ -593,7 +644,8 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
       const pStr = localStorage.getItem('lk_purchases') || '[]';
       const sStr = localStorage.getItem('lk_sales') || '[]';
       try {
-        setPurchases(JSON.parse(pStr));
+        const parsedP = JSON.parse(pStr);
+        setPurchasesList(parsedP);
         setSales(JSON.parse(sStr));
       } catch (e) {}
     };
@@ -1023,14 +1075,14 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
 
   const uniqueBillsList = useMemo(() => {
     const rawLocal = localStorage.getItem('lk_purchases') || '[]';
-    let list: any[] = [];
-    try {
-      list = JSON.parse(rawLocal);
-    } catch (e) {}
+    let list: any[] = purchasesList.length > 0 ? purchasesList : [];
+    if (list.length === 0 && rawLocal) {
+      try { list = JSON.parse(rawLocal); } catch (e) {}
+    }
 
     const confirmed = list.filter((b: any) => !(b.bill_number && String(b.bill_number).toUpperCase().startsWith('STOCK-IN')));
     return confirmed.sort((a, b) => new Date(b.purchase_date || b.created_at || 0).getTime() - new Date(a.purchase_date || a.created_at || 0).getTime());
-  }, [purchases, modalOpen]);
+  }, [purchasesList, modalOpen]);
 
   const filteredPurchaseBills = useMemo(() => {
     return uniqueBillsList.filter((b: any) => {
@@ -1127,57 +1179,59 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
         </div>
       )}
 
-      {/* Stock Filter Tabs in Stock Mode */}
+      {/* Stock Filter Tabs in Stock Mode - Equal 2-Column Side-by-Side Grid */}
       {mode === 'stock' && (
-        <div className="flex border-b border-border text-xs font-bold gap-2 overflow-x-auto pb-1 mb-4">
+        <div className="grid grid-cols-2 gap-2 border-b border-border text-xs font-bold mb-4">
           <button
+            type="button"
             onClick={() => setStockFilterTab('all')}
-            className={`py-2 px-3.5 rounded-t-lg transition flex items-center gap-1.5 ${stockFilterTab === 'all' ? 'bg-secondary border-t-2 border-x border-primary text-primary' : 'text-textMuted hover:text-foreground'}`}
+            className={`w-full py-2.5 px-2 rounded-t-xl transition flex items-center justify-center gap-1.5 cursor-pointer text-center ${stockFilterTab === 'all' ? 'bg-secondary border-t-2 border-x border-primary text-primary font-extrabold shadow-2xs' : 'bg-background/50 border-t border-x border-border text-textMuted hover:text-foreground'}`}
           >
-            <span>📦 All Warehouse Stock</span>
-            <span className="bg-background px-1.5 py-0.5 rounded text-[10px] text-foreground font-mono">{products.length}</span>
+            <span className="truncate">📦 All Warehouse Stock</span>
+            <span className="bg-background px-1.5 py-0.5 rounded text-[10px] text-foreground font-mono shrink-0">{products.length}</span>
           </button>
           <button
+            type="button"
             onClick={() => setStockFilterTab('low')}
-            className={`py-2 px-3.5 rounded-t-lg transition flex items-center gap-1.5 ${stockFilterTab === 'low' ? 'bg-secondary border-t-2 border-x border-rose-500 text-rose-500 font-bold' : 'text-textMuted hover:text-foreground'}`}
+            className={`w-full py-2.5 px-2 rounded-t-xl transition flex items-center justify-center gap-1.5 cursor-pointer text-center ${stockFilterTab === 'low' ? 'bg-secondary border-t-2 border-x border-rose-500 text-rose-500 font-extrabold shadow-2xs' : 'bg-background/50 border-t border-x border-border text-textMuted hover:text-foreground'}`}
           >
-            <span>⚠️ Low Stock Alerts</span>
-            <span className="bg-rose-500/10 text-rose-500 border border-rose-500/20 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold">
+            <span className="truncate">⚠️ Low Stock Alerts</span>
+            <span className="bg-rose-500/10 text-rose-500 border border-rose-500/20 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold shrink-0">
               {lowStockCount}
             </span>
           </button>
         </div>
       )}
 
-      {/* Catalog vs Vendor Procurement Bills Desk Sub-Tabs */}
+      {/* Catalog vs Vendor Procurement Bills Desk Sub-Tabs - Equal 2-Column Side-by-Side Grid */}
       {mode === 'catalog' && (
-        <div className="flex items-center gap-2 mb-6 border-b border-border pb-3 flex-wrap">
+        <div className="grid grid-cols-2 gap-2 mb-6 border-b border-border pb-3">
           <button
             type="button"
             onClick={() => setActiveViewTab('catalog')}
-            className={`px-4 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-2 cursor-pointer ${
+            className={`w-full py-2.5 px-2 rounded-xl text-xs font-extrabold transition flex items-center justify-center gap-1.5 cursor-pointer text-center ${
               activeViewTab === 'catalog'
                 ? 'bg-primary text-white shadow-md shadow-primary/20'
                 : 'bg-background border border-border text-textSecondary hover:text-foreground'
             }`}
           >
-            <i className="fa-solid fa-boxes-stacked"></i>
-            <span>📦 Product Items & Catalog</span>
-            <span className="ml-1 bg-white/20 px-1.5 py-0.2 rounded text-[10px]">{products.length}</span>
+            <i className="fa-solid fa-boxes-stacked text-xs shrink-0"></i>
+            <span className="truncate">Product Items & Catalog</span>
+            <span className="bg-white/20 px-1.5 py-0.5 rounded text-[10px] shrink-0 font-mono">{products.length}</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveViewTab('bills')}
-            className={`px-4 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-2 cursor-pointer ${
+            className={`w-full py-2.5 px-2 rounded-xl text-xs font-extrabold transition flex items-center justify-center gap-1.5 cursor-pointer text-center ${
               activeViewTab === 'bills'
                 ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
                 : 'bg-background border border-border text-textSecondary hover:text-foreground'
             }`}
           >
-            <i className="fa-solid fa-receipt"></i>
-            <span>🧾 Procurement & Purchase Bills Desk</span>
-            <span className="ml-1 bg-white/20 px-1.5 py-0.2 rounded text-[10px]">{uniqueBillsList.length}</span>
+            <i className="fa-solid fa-receipt text-xs shrink-0"></i>
+            <span className="truncate">Procurement & Bills Desk</span>
+            <span className="bg-white/20 px-1.5 py-0.5 rounded text-[10px] shrink-0 font-mono">{uniqueBillsList.length}</span>
           </button>
         </div>
       )}

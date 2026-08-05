@@ -68,7 +68,7 @@ export function useAuth() {
         const activeTenant: Tenant = tenantData || {
           id: DEFAULT_FALLBACK_TENANT_ID,
           company_code: 'LKHARDWARE',
-          company_name: 'LK Hardware ERP',
+          company_name: 'Maharudra Hardware',
           owner_name: 'Store Owner',
           owner_email: session.user.email || '',
           plan: 'Enterprise',
@@ -98,7 +98,7 @@ export function useAuth() {
         const fallbackTenant: Tenant = {
           id: DEFAULT_FALLBACK_TENANT_ID,
           company_code: 'LKHARDWARE',
-          company_name: 'LK Hardware ERP',
+          company_name: 'Maharudra Hardware',
           owner_name: 'Store Owner',
           owner_email: session.user.email || '',
           plan: 'Enterprise',
@@ -179,7 +179,7 @@ export function useAuth() {
             .from('tenants')
             .insert({
               company_code: 'LKHARDWARE',
-              company_name: 'LK Hardware ERP',
+              company_name: 'Maharudra Hardware',
               owner_name: 'Store Owner',
               owner_email: email,
               plan: 'Enterprise',
@@ -239,7 +239,7 @@ export function useAuth() {
       const activeTenant: Tenant = tenantData || {
         id: DEFAULT_FALLBACK_TENANT_ID,
         company_code: 'LKHARDWARE',
-        company_name: 'LK Hardware ERP',
+        company_name: 'Maharudra Hardware',
         owner_name: 'Store Owner',
         owner_email: email,
         plan: 'Enterprise',

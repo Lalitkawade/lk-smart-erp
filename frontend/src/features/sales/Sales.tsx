@@ -241,6 +241,14 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
     e.preventDefault();
     if (!quickCustFormData.customer_name.trim()) return;
 
+    if (quickCustFormData.phone.trim()) {
+      const cleanPhone = quickCustFormData.phone.trim().replace(/\D/g, '');
+      if (cleanPhone.length !== 10) {
+        alert('⚠️ Mobile number must be compulsory 10 digits!');
+        return;
+      }
+    }
+
     const formattedName = quickCustFormData.customer_name.trim().toUpperCase();
     const newCustObj: any = {
       id: 'cust-' + Date.now(),
@@ -900,8 +908,8 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
 
                 <div>
                   <label className="block text-xs text-textSecondary mb-1 font-semibold">Customer Mobile Number</label>
-                  <input type="tel" className="w-full bg-background border border-border rounded p-2 text-xs text-foreground font-semibold"
-                    value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder="e.g. 9876543210" />
+                  <input type="tel" maxLength={10} className="w-full bg-background border border-border rounded p-2 text-xs text-foreground font-semibold"
+                    value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="e.g. 9876543210" />
                 </div>
 
                 {/* Outstanding Balance Display Card */}

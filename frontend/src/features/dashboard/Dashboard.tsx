@@ -564,7 +564,58 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
             </div>
           </div>
 
-          <div className="w-full h-56 relative bg-background border border-border rounded-xl p-4 flex flex-col justify-end">
+          {/* Mobile Series View (sm:hidden) */}
+          <div className="sm:hidden w-full bg-background border border-border rounded-xl p-3 max-h-[380px] overflow-y-auto space-y-3 scrollbar-thin">
+            {barChartData.items.length === 0 ? (
+              <div className="py-6 text-center text-textMuted text-xs font-semibold">
+                No sales or purchases recorded for this date range.
+              </div>
+            ) : (
+              barChartData.items.map((item, idx) => {
+                const salesWidthPct = Math.min(100, Math.max(item.sales > 0 ? 5 : 0, (item.sales / barChartData.maxVal) * 100));
+                const purWidthPct = Math.min(100, Math.max(item.purchases > 0 ? 5 : 0, (item.purchases / barChartData.maxVal) * 100));
+
+                return (
+                  <div key={idx} className="bg-secondary/60 border border-border/80 p-2.5 rounded-xl space-y-2">
+                    <div className="flex justify-between items-center text-[11px] font-bold font-mono">
+                      <span className="text-foreground uppercase tracking-wide">{item.label}</span>
+                      <div className="flex gap-2 text-[10px]">
+                        <span className="text-primary">Sales: ₹{item.sales.toLocaleString('en-IN')}</span>
+                        <span className="text-purple-500 dark:text-purple-400">Purchases: ₹{item.purchases.toLocaleString('en-IN')}</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5 pt-0.5">
+                      {/* Horizontal Sales Bar */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-[9px] text-textMuted w-14 shrink-0 font-bold">Sales</span>
+                        <div className="flex-1 bg-background h-2 rounded-full overflow-hidden border border-border/40">
+                          <div 
+                            className="bg-gradient-to-r from-blue-600 to-indigo-500 h-full rounded-full transition-all duration-300"
+                            style={{ width: `${salesWidthPct}%` }}
+                          ></div>
+                        </div>
+                      </div>
+
+                      {/* Horizontal Purchases Bar */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-[9px] text-textMuted w-14 shrink-0 font-bold">Purchases</span>
+                        <div className="flex-1 bg-background h-2 rounded-full overflow-hidden border border-border/40">
+                          <div 
+                            className="bg-gradient-to-r from-purple-600 to-purple-400 h-full rounded-full transition-all duration-300"
+                            style={{ width: `${purWidthPct}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Desktop Column View (hidden sm:flex) */}
+          <div className="hidden sm:flex w-full h-56 relative bg-background border border-border rounded-xl p-4 flex-col justify-end">
             {barChartData.items.length === 0 ? (
               <div className="flex-1 flex items-center justify-center text-textMuted text-xs font-semibold">
                 No sales or purchases recorded for this date range.
