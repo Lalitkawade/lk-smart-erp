@@ -71,14 +71,19 @@ export function useInventory(tenantId: string, _businessType?: string) {
 
     try {
       const isExisting = contextProducts.some(p => p.id === productId);
-      if (isExisting) {
-        await ProductService.updateProduct(productId, cleanPayload);
-      } else {
-        await ProductService.createProduct(cleanPayload);
+      const res = isExisting 
+        ? await ProductService.updateProduct(productId, cleanPayload)
+        : await ProductService.createProduct(cleanPayload);
+
+      if (res.error) {
+        console.error('Product save DB error:', res.error);
+        alert('⚠️ Product save failed: ' + res.error);
+        throw new Error(res.error);
       }
       await refreshAllData();
-    } catch (err) {
+    } catch (err: any) {
       console.warn('Product save exception:', err);
+      throw err;
     } finally {
       setIsSaving(false);
     }

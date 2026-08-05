@@ -35,14 +35,19 @@ export function useCustomers(tenantId: string) {
 
     try {
       const isExisting = contextCustomers.some(c => c.id === customerId);
-      if (isExisting) {
-        await CustomerService.updateCustomer(customerId, cleanPayload);
-      } else {
-        await CustomerService.createCustomer(cleanPayload);
+      const res = isExisting
+        ? await CustomerService.updateCustomer(customerId, cleanPayload)
+        : await CustomerService.createCustomer(cleanPayload);
+
+      if (res.error) {
+        console.error('Customer save DB error:', res.error);
+        alert('⚠️ Customer save failed: ' + res.error);
+        throw new Error(res.error);
       }
       await refreshAllData();
-    } catch (err) {
+    } catch (err: any) {
       console.warn('Customer save exception:', err);
+      throw err;
     } finally {
       setIsSaving(false);
     }

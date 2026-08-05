@@ -34,14 +34,19 @@ export function useSuppliers(tenantId: string) {
 
     try {
       const isExisting = contextSuppliers.some(s => s.id === supplierId);
-      if (isExisting) {
-        await SupplierService.updateSupplier(supplierId, cleanPayload);
-      } else {
-        await SupplierService.createSupplier(cleanPayload);
+      const res = isExisting
+        ? await SupplierService.updateSupplier(supplierId, cleanPayload)
+        : await SupplierService.createSupplier(cleanPayload);
+
+      if (res.error) {
+        console.error('Supplier save DB error:', res.error);
+        alert('⚠️ Supplier save failed: ' + res.error);
+        throw new Error(res.error);
       }
       await refreshAllData();
-    } catch (err) {
+    } catch (err: any) {
       console.warn('Supplier save exception:', err);
+      throw err;
     } finally {
       setIsSaving(false);
     }
