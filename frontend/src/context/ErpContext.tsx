@@ -96,7 +96,7 @@ export const ErpDataProvider: React.FC<{ children: ReactNode }> = ({ children })
   useEffect(() => {
     if (!tenantId) return;
 
-    const channelId = `realtime-erp-sync-${tenantId}`;
+    const channelId = `realtime-erp-sync-${tenantId}-${Date.now()}`;
     const realtimeChannel = supabase
       .channel(channelId)
       .on(
