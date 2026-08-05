@@ -1,14 +1,12 @@
 import { useState } from 'react';
 import { PurchaseService, PurchaseWithItems } from '../services/purchaseService';
+import { isValidUUID, generateValidUuid } from '../services/baseService';
 import { useErpContext } from '../context/ErpContext';
 
 export function usePurchases(tenantId: string) {
   const { purchases: contextPurchases, isLoading: contextLoading, refreshAllData } = useErpContext();
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
-
-  const isUuid = (id: string) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-  const generateUuid = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'pb-' + Date.now().toString(16).padStart(31, '0').slice(0, 31);
 
   const purchases = contextPurchases || [];
 
@@ -17,11 +15,11 @@ export function usePurchases(tenantId: string) {
     itemsPayload: any[] = []
   ) => {
     setIsSaving(true);
-    const purchaseId = (billPayload.id && isUuid(billPayload.id))
+    const purchaseId = (billPayload.id && isValidUUID(billPayload.id))
       ? billPayload.id
-      : generateUuid();
+      : generateValidUuid();
 
-    const activeTenantId = (tenantId && isUuid(tenantId)) ? tenantId : '00000000-0000-0000-0000-000000000000';
+    const activeTenantId = (tenantId && isValidUUID(tenantId)) ? tenantId : '00000000-0000-0000-0000-000000000000';
 
     const cleanBillPayload: any = {
       id: purchaseId,

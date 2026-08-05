@@ -81,6 +81,7 @@ export class PurchaseService {
     if (itemsPayload.length > 0) {
       const cleanItems = itemsPayload.map(item => ({
         ...item,
+        bill_id: createdBill.id,
         purchase_bill_id: createdBill.id,
         tenant_id: createdBill.tenant_id
       }));
@@ -127,11 +128,12 @@ export class PurchaseService {
 
     if (itemsPayload) {
       // Replace existing line items
-      await supabase.from('purchase_items').delete().eq('purchase_bill_id' as any, id);
+      await supabase.from('purchase_items').delete().or(`bill_id.eq.${id},purchase_bill_id.eq.${id}`);
 
       if (itemsPayload.length > 0) {
         const cleanItems = itemsPayload.map(item => ({
           ...item,
+          bill_id: id,
           purchase_bill_id: id,
           tenant_id: updatedBill.tenant_id
         }));

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { SupplierService } from '../services/supplierService';
+import { isValidUUID, generateValidUuid } from '../services/baseService';
 import { useErpContext } from '../context/ErpContext';
 import type { Supplier } from '../types/erp.types';
 
@@ -8,18 +9,15 @@ export function useSuppliers(tenantId: string) {
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
 
-  const isUuid = (id: string) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-  const generateUuid = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 's' + Date.now().toString(16).padStart(31, '0').slice(0, 31);
-
   const suppliers = contextSuppliers || [];
 
   const saveSupplier = async (supplierPayload: Partial<Supplier> & { id?: string }) => {
     setIsSaving(true);
-    const supplierId = (supplierPayload.id && isUuid(supplierPayload.id))
+    const supplierId = (supplierPayload.id && isValidUUID(supplierPayload.id))
       ? supplierPayload.id
-      : generateUuid();
+      : generateValidUuid();
 
-    const activeTenantId = (tenantId && isUuid(tenantId)) ? tenantId : '00000000-0000-0000-0000-000000000000';
+    const activeTenantId = (tenantId && isValidUUID(tenantId)) ? tenantId : '00000000-0000-0000-0000-000000000000';
 
     const cleanPayload: any = {
       id: supplierId,

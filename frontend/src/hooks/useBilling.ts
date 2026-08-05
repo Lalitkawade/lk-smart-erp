@@ -4,6 +4,7 @@ import { CustomerService } from '../services/customerService';
 import { SaleService } from '../services/saleService';
 import { InventoryService } from '../services/inventoryService';
 import { PaymentService } from '../services/paymentService';
+import { isValidUUID, generateValidUuid } from '../services/baseService';
 import type { CartItem, Product } from '../types/erp.types';
 import { getProductUnitRates } from '../utils/formatters';
 
@@ -196,7 +197,7 @@ export function useBilling(tenantId: string) {
         appliedToPreviousUdhar = explicitRepayUdhar;
       }
 
-      const isValidUUID = (id: any) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
 
       // Always calculate new net outstanding balance
       const newOutstanding = Math.max(0, previousOutstanding - appliedToPreviousUdhar + unpaidCurrentBill);
@@ -236,7 +237,7 @@ export function useBilling(tenantId: string) {
       }
 
       // 2. Create Invoice
-      const generatedInvId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'f' + Date.now().toString(16).padStart(31, '0').slice(0, 31);
+      const generatedInvId = generateValidUuid();
 
       let invoicePayload: any = {
         id: generatedInvId,

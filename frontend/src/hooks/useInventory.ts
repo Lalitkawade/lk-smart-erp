@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ProductService } from '../services/productService';
+import { isValidUUID, generateValidUuid } from '../services/baseService';
 import { useErpContext } from '../context/ErpContext';
 import type { Product } from '../types/erp.types';
 
@@ -23,18 +24,15 @@ export function useInventory(tenantId: string, _businessType?: string) {
     };
   };
 
-  const isUuid = (id: string) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-  const generateUuid = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'f' + Date.now().toString(16).padStart(31, '0').slice(0, 31);
-
   const products = (contextProducts || []).map(normalizeProduct);
 
   const saveProduct = async (productPayload: Omit<Product, 'created_at'> & { id?: string }) => {
     setIsSaving(true);
-    const productId = (productPayload.id && isUuid(productPayload.id)) 
+    const productId = (productPayload.id && isValidUUID(productPayload.id)) 
       ? productPayload.id 
-      : generateUuid();
+      : generateValidUuid();
 
-    const activeTenantId = (tenantId && isUuid(tenantId)) ? tenantId : '00000000-0000-0000-0000-000000000000';
+    const activeTenantId = (tenantId && isValidUUID(tenantId)) ? tenantId : '00000000-0000-0000-0000-000000000000';
 
     const cleanPayload: any = {
       id: productId,

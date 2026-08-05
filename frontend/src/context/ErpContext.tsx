@@ -42,8 +42,8 @@ export const ErpDataProvider: React.FC<{ children: ReactNode }> = ({ children })
     setIsLoading(true);
     try {
       const [salesRes, purchRes, expRes, prodRes, custRes, supRes, custPayRes, supPayRes, settingsRes] = await Promise.allSettled([
-        supabase.from('sales_invoices').select('*, items:sales_items(*, product:products(*))').order('sale_date', { ascending: false }),
-        supabase.from('purchase_bills').select('*, items:purchase_items(*, product:products(*))').order('purchase_date', { ascending: false }),
+        supabase.from('sales_invoices').select('*, items:sales_items(*)').order('sale_date', { ascending: false }),
+        supabase.from('purchase_bills').select('*, items:purchase_items(*)').order('purchase_date', { ascending: false }),
         supabase.from('expenses').select('*').order('expense_date', { ascending: false }),
         supabase.from('products').select('*').order('product_name', { ascending: true }),
         supabase.from('customers').select('*').order('customer_name', { ascending: true }),
