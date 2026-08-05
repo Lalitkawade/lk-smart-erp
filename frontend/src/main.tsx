@@ -1,4 +1,4 @@
-import React, { StrictMode, Component, ReactNode } from 'react';
+import { StrictMode, Component, ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import '@fortawesome/fontawesome-free/css/all.min.css';
 import './index.css';

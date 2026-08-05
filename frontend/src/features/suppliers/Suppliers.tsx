@@ -1,17 +1,20 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../../hooks/useAuth';
-import { supabase } from '../../api/supabase';
+import { useErpContext } from '../../context/ErpContext';
+import { useSuppliers } from '../../hooks/useSuppliers';
+import { SupplierService } from '../../services/supplierService';
+import { PaymentService } from '../../services/paymentService';
 import { t } from '../../utils/i18n';
 
 interface Supplier {
   id: string;
   supplier_name: string;
-  phone: string;
-  email: string;
-  address: string;
-  dob?: string;
-  establishment_date?: string;
+  phone?: string | null;
+  email?: string | null;
+  address?: string | null;
+  dob?: string | null;
+  establishment_date?: string | null;
   outstanding: number;
   initial_outstanding?: number;
   created_at: string;
@@ -31,93 +34,14 @@ interface SuppliersProps {
   onModalClosed?: () => void;
 }
 
-const buildMasterSuppliersFromLocal = (): Supplier[] => {
-  try {
-    const localSupsStr = localStorage.getItem('lk_suppliers');
-    const localBillsStr = localStorage.getItem('lk_purchases');
-    const localProdsStr = localStorage.getItem('lk_products');
-
-    const localSups: any[] = localSupsStr ? JSON.parse(localSupsStr) : [];
-    const localBills: any[] = localBillsStr ? JSON.parse(localBillsStr) : [];
-    const localProds: any[] = localProdsStr ? JSON.parse(localProdsStr) : [];
-
-    const masterMap = new Map<string, Supplier>();
-
-    (Array.isArray(localSups) ? localSups : []).forEach((s: any) => {
-      if (s && s.supplier_name) {
-        const key = s.supplier_name.toUpperCase().trim();
-        const baseOut = s.initial_outstanding !== undefined ? Number(s.initial_outstanding) : Number(s.outstanding || 0);
-        masterMap.set(key, {
-          id: s.id || 'sup-' + Math.random().toString(36).substring(2, 7),
-          supplier_name: key,
-          phone: s.phone || '',
-          email: s.email || '',
-          address: s.address || '',
-          dob: s.dob || undefined,
-          establishment_date: s.establishment_date || undefined,
-          outstanding: Number(s.outstanding || 0),
-          initial_outstanding: baseOut,
-          created_at: s.created_at || new Date().toISOString()
-        });
-      }
-    });
-
-    (Array.isArray(localBills) ? localBills : []).forEach((b: any) => {
-      if (b && b.supplier_name) {
-        const key = b.supplier_name.toUpperCase().trim();
-        if (!masterMap.has(key)) {
-          masterMap.set(key, {
-            id: 'sup-' + Math.random().toString(36).substring(2, 7),
-            supplier_name: key,
-            phone: b.supplier_phone || '',
-            email: '',
-            address: '',
-            outstanding: Number(b.due_amount || 0),
-            initial_outstanding: 0,
-            created_at: b.purchase_date || new Date().toISOString()
-          });
-        }
-      }
-    });
-
-    (Array.isArray(localProds) ? localProds : []).forEach((p: any) => {
-      if (p && p.supplier_name) {
-        const key = p.supplier_name.toUpperCase().trim();
-        if (!masterMap.has(key)) {
-          masterMap.set(key, {
-            id: 'sup-' + Math.random().toString(36).substring(2, 7),
-            supplier_name: key,
-            phone: p.supplier_phone || '',
-            email: '',
-            address: '',
-            outstanding: 0,
-            initial_outstanding: 0,
-            created_at: p.created_at || new Date().toISOString()
-          });
-        }
-      }
-    });
-
-    return Array.from(masterMap.values());
-  } catch (e) {
-    return [];
-  }
-};
-
 export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersProps = {}) {
   const { tenant } = useAuth();
   const tenantId = tenant?.id || 'default-hardware-erp';
+  const { suppliers, isLoading, saveSupplier, deleteSupplier } = useSuppliers(tenantId);
 
-  const [suppliers, setSuppliers] = useState<Supplier[]>(() => buildMasterSuppliersFromLocal());
-  const [payments, setPayments] = useState<SupplierPaymentRecord[]>(() => {
-    try {
-      return JSON.parse(localStorage.getItem('lk_supplier_payments') || '[]');
-    } catch (e) {
-      return [];
-    }
-  });
-  const [isLoading, setIsLoading] = useState<boolean>(() => suppliers.length === 0);
-  const [_products, setProducts] = useState<any[]>([]);
+  const { supplierPayments: contextSupplierPayments, purchases: contextPurchases, refreshAllData } = useErpContext();
+  const payments: SupplierPaymentRecord[] = contextSupplierPayments || [];
+
   const [search, setSearch] = useState('');
   const [filterTab, setFilterTab] = useState<'all' | 'payables'>('all');
   
@@ -155,185 +79,7 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
     ref_number: ''
   });
 
-  const fetchSuppliersData = async () => {
-    if (!tenantId) return;
 
-    let localSups: any[] = [];
-    let localBills: any[] = [];
-    let localProds: any[] = [];
-    try {
-      localSups = JSON.parse(localStorage.getItem('lk_suppliers') || '[]');
-      localBills = JSON.parse(localStorage.getItem('lk_purchases') || '[]');
-      localProds = JSON.parse(localStorage.getItem('lk_products') || '[]');
-    } catch (e) {}
-
-    try {
-      // 1. Parallel remote data fetching (reduces network latency by 4x)
-      const [supsRes, billsRes, prodsRes, paysRes] = await Promise.all([
-        supabase.from('suppliers').select('*').eq('tenant_id', tenantId).order('supplier_name', { ascending: true }),
-        supabase.from('purchase_bills').select('*').eq('tenant_id', tenantId),
-        supabase.from('products').select('*').eq('tenant_id', tenantId),
-        supabase.from('supplier_payments').select('*').eq('tenant_id', tenantId).order('payment_date', { ascending: false })
-      ]);
-
-      const supsData = supsRes.data || [];
-      const billsData = billsRes.data || [];
-      const prodsData = prodsRes.data || [];
-      const paysData = paysRes.data || [];
-
-      const currentPays = (paysData || []) as SupplierPaymentRecord[];
-      setPayments(currentPays);
-      localStorage.setItem('lk_supplier_payments', JSON.stringify(currentPays));
-
-      // 2. Build master unified supplier map
-      const masterMap = new Map<string, Supplier>();
-
-      // A. Add localSups first
-      localSups.forEach((s: any) => {
-        if (s && s.supplier_name) {
-          const key = s.supplier_name.toUpperCase().trim();
-          const baseOut = s.initial_outstanding !== undefined ? Number(s.initial_outstanding) : Number(s.outstanding || 0);
-          masterMap.set(key, {
-            id: s.id || 'sup-' + Math.random().toString(36).substring(2, 7),
-            supplier_name: key,
-            phone: s.phone || '',
-            email: s.email || '',
-            address: s.address || '',
-            dob: s.dob || undefined,
-            establishment_date: s.establishment_date || undefined,
-            outstanding: Number(s.outstanding || 0),
-            initial_outstanding: baseOut,
-            created_at: s.created_at || new Date().toISOString()
-          });
-        }
-      });
-
-      // B. Add remote sups
-      (supsData || []).forEach((s: any) => {
-        if (s && s.supplier_name) {
-          const key = s.supplier_name.toUpperCase().trim();
-          const existing = masterMap.get(key);
-          const baseOut = s.initial_outstanding !== undefined
-            ? Number(s.initial_outstanding)
-            : (existing?.initial_outstanding !== undefined ? existing.initial_outstanding : Number(s.outstanding || existing?.outstanding || 0));
-          masterMap.set(key, {
-            id: s.id || existing?.id || 'sup-' + Date.now(),
-            supplier_name: key,
-            phone: s.phone || existing?.phone || '',
-            email: s.email || existing?.email || '',
-            address: s.address || existing?.address || '',
-            dob: s.dob || existing?.dob || undefined,
-            establishment_date: s.establishment_date || existing?.establishment_date || undefined,
-            outstanding: Number(s.outstanding !== undefined ? s.outstanding : (existing?.outstanding || 0)),
-            initial_outstanding: baseOut,
-            created_at: s.created_at || existing?.created_at || new Date().toISOString()
-          });
-        }
-      });
-
-      // C. Add suppliers mentioned in purchase bills
-      const allBills = [...(billsData || []), ...localBills];
-      allBills.forEach((b: any) => {
-        if (b && b.supplier_name) {
-          const key = b.supplier_name.toUpperCase().trim();
-          if (!masterMap.has(key)) {
-            masterMap.set(key, {
-              id: 'sup-' + Math.random().toString(36).substring(2, 7),
-              supplier_name: key,
-              phone: '',
-              email: '',
-              address: '',
-              outstanding: 0,
-              initial_outstanding: 0,
-              created_at: b.purchase_date || new Date().toISOString()
-            });
-          }
-        }
-      });
-
-      // D. Add suppliers mentioned in product catalog
-      const allProds = [...(prodsData || []), ...localProds];
-      allProds.forEach((p: any) => {
-        if (p && p.supplier_name) {
-          const key = p.supplier_name.toUpperCase().trim();
-          if (!masterMap.has(key)) {
-            masterMap.set(key, {
-              id: 'sup-' + Math.random().toString(36).substring(2, 7),
-              supplier_name: key,
-              phone: '',
-              email: '',
-              address: '',
-              outstanding: 0,
-              initial_outstanding: 0,
-              created_at: new Date().toISOString()
-            });
-          }
-        }
-      });
-
-      // 3. Fast indexed balance calculation (O(N) instead of O(N*M))
-      const uniqueBills = Array.from(
-        new Map(allBills.map((b: any) => [b.bill_number || b.id, b])).values()
-      );
-
-      const billDuesMap = new Map<string, number>();
-      uniqueBills.forEach((b: any) => {
-        const due = Number(b.due_amount || 0);
-        if (due <= 0) return;
-        if (b.supplier_name) {
-          const key = b.supplier_name.toUpperCase().trim();
-          billDuesMap.set(key, (billDuesMap.get(key) || 0) + due);
-        }
-        if (b.supplier_id) {
-          const key = String(b.supplier_id);
-          billDuesMap.set(key, (billDuesMap.get(key) || 0) + due);
-        }
-      });
-
-      const payoutsMap = new Map<string, number>();
-      currentPays.forEach((p: any) => {
-        const amt = Number(p.amount || 0);
-        if (amt <= 0) return;
-        if (p.supplier_id) {
-          const key = String(p.supplier_id);
-          payoutsMap.set(key, (payoutsMap.get(key) || 0) + amt);
-        }
-        if ((p as any).supplier_name) {
-          const key = (p as any).supplier_name.toUpperCase().trim();
-          payoutsMap.set(key, (payoutsMap.get(key) || 0) + amt);
-        }
-      });
-
-      const finalSuppliers = Array.from(masterMap.values()).map(s => {
-        const nameKey = s.supplier_name.toUpperCase().trim();
-        const idKey = String(s.id);
-        const totalDueFromBills = (billDuesMap.get(nameKey) || 0) + (billDuesMap.get(idKey) || 0);
-        const totalPayouts = (payoutsMap.get(idKey) || 0) + (payoutsMap.get(nameKey) || 0);
-
-        const initialBal = s.initial_outstanding !== undefined ? Number(s.initial_outstanding) : Number(s.outstanding || 0);
-        const liveOutstanding = Math.max(0, initialBal + totalDueFromBills - totalPayouts);
-        return {
-          ...s,
-          initial_outstanding: initialBal,
-          outstanding: liveOutstanding
-        };
-      });
-
-      setSuppliers(finalSuppliers);
-      localStorage.setItem('lk_suppliers', JSON.stringify(finalSuppliers));
-      setProducts(allProds);
-    } catch (e) {
-      console.error('Failed to sync suppliers with Supabase:', e);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchSuppliersData();
-    window.addEventListener('storage', fetchSuppliersData);
-    return () => window.removeEventListener('storage', fetchSuppliersData);
-  }, [tenantId]);
 
   const handleOpenAdd = () => {
     setEditingSupplier(null);
@@ -382,72 +128,34 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
       }
     }
 
-    const isUuid = (id: string) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-    const generateUuid = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 's' + Date.now().toString(16).padStart(31, '0').slice(0, 31);
-
-    const suppId = (editingSupplier && isUuid(editingSupplier.id)) ? editingSupplier.id : generateUuid();
     const formattedName = formData.supplier_name.trim().toUpperCase();
 
-    const newSupplierObj = {
-      id: suppId,
-      tenant_id: isUuid(tenantId) ? tenantId : '00000000-0000-0000-0000-000000000000',
+    const supplierPayload = {
+      ...(editingSupplier?.id ? { id: editingSupplier.id } : {}),
       supplier_name: formattedName,
-      phone: formData.phone || null,
-      email: formData.email || null,
-      address: formData.address || null,
-      dob: formData.dob || null,
-      establishment_date: formData.establishment_date || null,
+      phone: formData.phone || '',
+      email: formData.email || '',
+      address: formData.address || '',
+      dob: formData.dob || '',
+      establishment_date: formData.establishment_date || '',
       outstanding: Number(formData.outstanding || 0),
-      created_at: editingSupplier?.created_at || new Date().toISOString()
+      created_at: editingSupplier?.created_at
     };
-
-    // Instant local state & localStorage update (0ms latency!)
-    try {
-      const localStr = localStorage.getItem('lk_suppliers') || '[]';
-      const localList = JSON.parse(localStr);
-      const existingIdx = localList.findIndex((s: any) => s.id === suppId || (s.supplier_name && s.supplier_name.toUpperCase() === formattedName));
-      if (existingIdx >= 0) {
-        localList[existingIdx] = newSupplierObj;
-      } else {
-        localList.unshift(newSupplierObj);
-      }
-      localStorage.setItem('lk_suppliers', JSON.stringify(localList));
-      setSuppliers(localList);
-    } catch (err) {}
 
     setModalOpen(false);
     triggerToast('⚡ Supplier profile saved successfully!');
-    window.dispatchEvent(new Event('storage'));
 
-    (async () => {
-      try {
-        await supabase.from('suppliers').upsert(newSupplierObj);
-      } catch (e) {
-        console.warn('Remote supplier background save note:', e);
-      }
-    })();
+    await saveSupplier(supplierPayload);
   };
 
   const handleDeleteSupplier = async (id: string) => {
     if (!window.confirm('Delete this supplier profile account?')) return;
     try {
-      try {
-        const currentLocal = JSON.parse(localStorage.getItem('lk_suppliers') || '[]');
-        const updatedLocal = currentLocal.filter((s: any) => s.id !== id);
-        localStorage.setItem('lk_suppliers', JSON.stringify(updatedLocal));
-        setSuppliers(updatedLocal);
-      } catch (e) {}
-
-      const isValidUUID = (idStr: any) => typeof idStr === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idStr);
-      if (isValidUUID(id)) {
-        try {
-          await supabase.from('suppliers').delete().eq('id', id);
-        } catch (e) {}
-      }
-
-      await fetchSuppliersData();
-      window.dispatchEvent(new Event('storage'));
-    } catch (e: any) {}
+      await deleteSupplier(id);
+      triggerToast('✓ Supplier profile deleted.');
+    } catch (e: any) {
+      alert('Failed to delete supplier profile: ' + e.message);
+    }
   };
 
   const handleOpenPayModal = (s: Supplier) => {
@@ -471,44 +179,25 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
       const paidAmt = Number(payFormData.amount);
       const newOutstanding = Math.max(0, Number(targetSupplier.outstanding || 0) - paidAmt);
 
-      const payRecordId = 'spay-' + Date.now();
       const nowIso = new Date().toISOString();
-
-      const newPaymentObj = {
-        id: payRecordId,
-        tenant_id: tenantId,
-        supplier_id: targetSupplier.id,
-        amount: paidAmt,
-        payment_mode: payFormData.payment_mode,
-        ref_number: payFormData.ref_number.trim() || 'DIR-REC',
-        payment_date: nowIso
-      };
-
-      // Instant local state & localStorage update (0ms latency!)
-      const updatedSups = suppliers.map(s => 
-        s.id === targetSupplier.id || s.supplier_name === targetSupplier.supplier_name 
-          ? { ...s, outstanding: newOutstanding } 
-          : s
-      );
-      setSuppliers(updatedSups);
-      localStorage.setItem('lk_suppliers', JSON.stringify(updatedSups));
-
-      const updatedPays = [newPaymentObj as any, ...payments];
-      setPayments(updatedPays);
-      localStorage.setItem('lk_supplier_payments', JSON.stringify(updatedPays));
 
       setPayModalOpen(false);
       triggerToast(`✓ Logged payout of ₹${paidAmt.toFixed(2)} to ${targetSupplier.supplier_name}! Remaining dues: ₹${newOutstanding.toFixed(2)}`);
-      window.dispatchEvent(new Event('storage'));
 
-      (async () => {
-        try {
-          await supabase.from('supplier_payments').insert(newPaymentObj);
-          await supabase.from('suppliers').update({ outstanding: newOutstanding }).eq('id', targetSupplier.id);
-        } catch (e) {
-          console.warn('Background supplier payment note:', e);
-        }
-      })();
+      try {
+        await PaymentService.recordSupplierPayment({
+          tenant_id: tenantId,
+          supplier_id: targetSupplier.id,
+          amount: paidAmt,
+          payment_mode: payFormData.payment_mode,
+          ref_number: payFormData.ref_number.trim() || 'DIR-REC',
+          payment_date: nowIso
+        });
+        await SupplierService.updateSupplier(targetSupplier.id, { outstanding: newOutstanding });
+        await refreshAllData();
+      } catch (e) {
+        console.warn('Background supplier payment note:', e);
+      }
     } catch (e: any) {
       alert('Failed to record payment: ' + e.message);
     }
@@ -519,16 +208,7 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
     if (!statementSupplier) return [];
 
     // Get all purchases for this supplier
-    const localPurchs = localStorage.getItem('lk_purchases');
-    let allPurchs: any[] = [];
-    if (localPurchs) {
-      try { 
-        const parsed = JSON.parse(localPurchs); 
-        if (Array.isArray(parsed)) {
-          allPurchs = parsed.filter(p => p && typeof p === 'object');
-        }
-      } catch(e) {}
-    }
+    const allPurchs: any[] = contextPurchases || [];
     const supplierPurchs = allPurchs.filter(p => 
       p.supplier_name && statementSupplier.supplier_name &&
       p.supplier_name.toUpperCase() === statementSupplier.supplier_name.toUpperCase()
@@ -573,14 +253,7 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
       lastPaymentDate: string | null;
     }>();
 
-    const localPurchs = localStorage.getItem('lk_purchases');
-    let allPurchs: any[] = [];
-    if (localPurchs) {
-      try { 
-        const parsed = JSON.parse(localPurchs); 
-        if (Array.isArray(parsed)) allPurchs = parsed.filter(p => p && typeof p === 'object');
-      } catch(e) {}
-    }
+    const allPurchs: any[] = contextPurchases || [];
 
     suppliers.forEach(s => {
       const nameKey = (s.supplier_name || '').toUpperCase().trim();

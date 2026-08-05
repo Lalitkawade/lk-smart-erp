@@ -3,7 +3,8 @@ import { createPortal } from 'react-dom';
 import { useInventory } from '../../hooks/useInventory';
 import { useBilling } from '../../hooks/useBilling';
 import { useDemandTracker } from '../../hooks/useDemandTracker';
-import { supabase } from '../../api/supabase';
+import { useErpContext } from '../../context/ErpContext';
+import { CustomerService } from '../../services/customerService';
 import type { Product } from '../../types/erp.types';
 import { t, Language } from '../../utils/i18n';
 import { getProductUnitRates } from '../../utils/formatters';
@@ -51,36 +52,8 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
   }, [autoOpenModal]);
   const [printInvoice, setPrintInvoice] = useState<any | null>(null);
   const [posSearch, setPosSearch] = useState('');
-  const [registeredCustomers, setRegisteredCustomers] = useState<any[]>([]);
+  const { customers: registeredCustomers, refreshAllData } = useErpContext();
   const [showHistoryModal, setShowHistoryModal] = useState(false);
-
-  const fetchRegisteredCustomers = async () => {
-    if (!tenantId) return;
-    try {
-      const { data } = await supabase
-        .from('customers')
-        .select('*')
-        .eq('tenant_id', tenantId)
-        .order('customer_name', { ascending: true });
-
-      if (data) {
-        setRegisteredCustomers(data);
-        localStorage.setItem('lk_customers', JSON.stringify(data));
-      } else {
-        const cached = localStorage.getItem('lk_customers');
-        if (cached) setRegisteredCustomers(JSON.parse(cached));
-      }
-    } catch (e) {
-      const cached = localStorage.getItem('lk_customers');
-      if (cached) try { setRegisteredCustomers(JSON.parse(cached)); } catch(err) {}
-    }
-  };
-
-  useEffect(() => {
-    fetchRegisteredCustomers();
-    window.addEventListener('storage', fetchRegisteredCustomers);
-    return () => window.removeEventListener('storage', fetchRegisteredCustomers);
-  }, [tenantId]);
 
   useEffect(() => {
     if (autoCustomerName) {
@@ -262,13 +235,6 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
       created_at: new Date().toISOString()
     };
 
-    // 1. Save to local storage cache immediately
-    try {
-      const currentLocal = JSON.parse(localStorage.getItem('lk_customers') || '[]');
-      localStorage.setItem('lk_customers', JSON.stringify([newCustObj, ...currentLocal]));
-    } catch (err) {}
-
-    // 2. Persist to Supabase with schema fallback for dob
     try {
       const payload: any = {
         tenant_id: tenantId,
@@ -281,20 +247,14 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
         outstanding: 0
       };
 
-      let res = await supabase.from('customers').insert(payload).select().maybeSingle();
-      if (res.error && res.error.message?.includes('dob')) {
-        delete payload.dob;
-        res = await supabase.from('customers').insert(payload).select().maybeSingle();
-      }
-
+      const res = await CustomerService.createCustomer(payload);
       if (res.data?.id) {
         newCustObj.id = res.data.id;
       }
+      await refreshAllData();
     } catch (err: any) {
       console.warn('Remote quick customer creation sync warning:', err);
     }
-
-    await fetchRegisteredCustomers();
     window.dispatchEvent(new Event('storage'));
 
     setCustomerName(newCustObj.customer_name);

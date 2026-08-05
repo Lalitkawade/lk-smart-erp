@@ -20,7 +20,6 @@ export default function DemandModal({ tenantId, isOpen, onClose, onNavigateToPro
     dismissDemand 
   } = useDemandTracker(tenantId);
   const [newItemName, setNewItemName] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!isOpen) return null;
 

@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { useInventory } from '../../hooks/useInventory';
+import { useErpContext } from '../../context/ErpContext';
 import type { SalesInvoice, PurchaseBill, Expense } from '../../types/erp.types';
 import { t } from '../../utils/i18n';
 
@@ -22,42 +23,15 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
     return d.toISOString().split('T')[0];
   });
   const [endDate, setEndDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
-  const [suppliers, setSuppliers] = useState<any[]>([]);
-  const [customers, setCustomers] = useState<any[]>([]);
+  const { customers: contextCustomers, suppliers: contextSuppliers, purchases: contextPurchases, sales: contextSales } = useErpContext();
+  const customers = contextCustomers || [];
+  const suppliers = contextSuppliers || [];
+  const activePurchases = (purchases && purchases.length > 0) ? purchases : (contextPurchases || []);
   const [selectedTxDetail, setSelectedTxDetail] = useState<any | null>(null);
 
-  // Load suppliers and customers dynamically from localStorage
-  const safeParseArray = (key: string): any[] => {
-    try {
-      const raw = localStorage.getItem(key);
-      if (!raw) return [];
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch (e) {
-      return [];
-    }
-  };
 
-  const loadLocals = () => {
-    setSuppliers(safeParseArray('lk_suppliers'));
-    setCustomers(safeParseArray('lk_customers'));
-  };
 
-  useEffect(() => {
-    loadLocals();
-    window.addEventListener('storage', loadLocals);
-    window.addEventListener('focus', loadLocals);
-    window.addEventListener('lk_suppliers_updated', loadLocals);
-    window.addEventListener('lk_customers_updated', loadLocals);
-    window.addEventListener('lk_expenses_updated', loadLocals);
-    return () => {
-      window.removeEventListener('storage', loadLocals);
-      window.removeEventListener('focus', loadLocals);
-      window.removeEventListener('lk_suppliers_updated', loadLocals);
-      window.removeEventListener('lk_customers_updated', loadLocals);
-      window.removeEventListener('lk_expenses_updated', loadLocals);
-    };
-  }, []);
+
 
   // 1. Filter arrays dynamically based on selected TimeRange / Calendar Date
   const filteredData = useMemo(() => {
@@ -96,9 +70,9 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
       return true; // All Time ('all')
     };
 
-    const effectiveSales = (sales && sales.length > 0) ? sales : safeParseArray('lk_sales');
-    const effectivePurchases = (purchases && purchases.length > 0) ? purchases : safeParseArray('lk_purchases');
-    const effectiveExpenses = (expenses && expenses.length > 0) ? expenses : safeParseArray('lk_expenses');
+    const effectiveSales = (sales && sales.length > 0) ? sales : (contextSales || []);
+    const effectivePurchases = activePurchases;
+    const effectiveExpenses = expenses || [];
 
     return {
       sales: effectiveSales.filter(s => filterByDate(s)),
@@ -191,7 +165,7 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
 
         if (!phone) {
           const match = suppliers.find(s => s.supplier_name?.toLowerCase() === vendorName.toLowerCase());
-          if (match) phone = match.phone;
+          if (match && match.phone) phone = match.phone;
         }
 
         return {

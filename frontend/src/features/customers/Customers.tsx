@@ -1,16 +1,20 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../../hooks/useAuth';
+import { useErpContext } from '../../context/ErpContext';
+import { useCustomers } from '../../hooks/useCustomers';
+import { CustomerService } from '../../services/customerService';
+import { PaymentService } from '../../services/paymentService';
 import { supabase } from '../../api/supabase';
 import { t } from '../../utils/i18n';
 
 interface Customer {
   id: string;
   customer_name: string;
-  phone: string;
-  email: string;
-  address: string;
-  dob?: string;
+  phone?: string | null;
+  email?: string | null;
+  address?: string | null;
+  dob?: string | null;
   credit_limit: number;
   outstanding: number;
   created_at: string;
@@ -34,32 +38,10 @@ interface CustomersProps {
 export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }: CustomersProps) {
   const { tenant } = useAuth();
   const tenantId = tenant?.id || 'default-hardware-erp';
+  const { customers, isLoading, saveCustomer, deleteCustomer } = useCustomers(tenantId);
+  const { customerPayments: contextCustomerPayments, sales: contextSales, refreshAllData } = useErpContext();
+  const payments: PaymentRecord[] = contextCustomerPayments || [];
 
-  // Synchronous state hydration from localStorage to prevent any layout/data flicker
-  const [customers, setCustomers] = useState<Customer[]>(() => {
-    try {
-      const cached = localStorage.getItem('lk_customers');
-      return cached ? JSON.parse(cached) : [];
-    } catch (e) {
-      return [];
-    }
-  });
-  const [payments, setPayments] = useState<PaymentRecord[]>(() => {
-    try {
-      const cached = localStorage.getItem('lk_customer_payments');
-      return cached ? JSON.parse(cached) : [];
-    } catch (e) {
-      return [];
-    }
-  });
-  const [isLoading, setIsLoading] = useState<boolean>(() => {
-    try {
-      const cached = localStorage.getItem('lk_customers');
-      return !cached || JSON.parse(cached).length === 0;
-    } catch (e) {
-      return true;
-    }
-  });
   const [search, setSearch] = useState('');
   
   // Modals Control
@@ -101,75 +83,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
     ref_number: ''
   });
 
-  const fetchCustomersData = async () => {
-    try {
-      let custsQuery = supabase.from('customers').select('*');
-      let paysQuery = supabase.from('customer_payments').select('*');
-      if (tenantId) {
-        custsQuery = custsQuery.eq('tenant_id', tenantId);
-        paysQuery = paysQuery.eq('tenant_id', tenantId);
-      }
 
-      const [custsRes, paysRes] = await Promise.all([
-        custsQuery.order('customer_name', { ascending: true }),
-        paysQuery.order('payment_date', { ascending: false })
-      ]);
-
-      const remoteCusts = (custsRes.data || []) as Customer[];
-      const remotePays = (paysRes.data || []) as PaymentRecord[];
-
-      const cachedCustStr = localStorage.getItem('lk_customers');
-      let cachedCusts: Customer[] = [];
-      if (cachedCustStr) {
-        try { cachedCusts = JSON.parse(cachedCustStr); } catch (e) {}
-      }
-
-      const cachedPayStr = localStorage.getItem('lk_customer_payments');
-      let cachedPays: PaymentRecord[] = [];
-      if (cachedPayStr) {
-        try { cachedPays = JSON.parse(cachedPayStr); } catch (e) {}
-      }
-
-      // Merge remote and cached customers preserving active local outstanding amount
-      const mergedCusts = remoteCusts.length > 0 ? remoteCusts.map(rc => {
-        const cc = cachedCusts.find(c => c.id === rc.id || (c.customer_name && rc.customer_name && c.customer_name.toUpperCase() === rc.customer_name.toUpperCase()));
-        if (cc && cc.outstanding !== undefined) {
-          return {
-            ...rc,
-            outstanding: Number(cc.outstanding)
-          };
-        }
-        return rc;
-      }) : cachedCusts;
-
-      // Merge payment records
-      const payMap = new Map<string, PaymentRecord>();
-      cachedPays.forEach(p => { if (p && p.id) payMap.set(p.id, p); });
-      remotePays.forEach(rp => { if (rp && rp.id) payMap.set(rp.id, rp); });
-      const mergedPays = Array.from(payMap.values()).sort((a, b) => new Date(b.payment_date).getTime() - new Date(a.payment_date).getTime());
-
-      localStorage.setItem('lk_customers', JSON.stringify(mergedCusts));
-      localStorage.setItem('lk_customer_payments', JSON.stringify(mergedPays));
-
-      setCustomers(mergedCusts);
-      setPayments(mergedPays);
-    } catch (e) {
-      console.error('Failed to sync customers with Supabase:', e);
-      const cached = localStorage.getItem('lk_customers');
-      if (cached) {
-        try { setCustomers(JSON.parse(cached)); } catch(err) {}
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Sync data on load and when tenant shifts
-  useEffect(() => {
-    fetchCustomersData();
-    window.addEventListener('storage', fetchCustomersData);
-    return () => window.removeEventListener('storage', fetchCustomersData);
-  }, [tenantId]);
 
   const handleOpenAdd = () => {
     setEditingCustomer(null);
@@ -206,7 +120,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
     setTimeout(() => setToastMessage(null), 2500);
   };
 
-  const handleSaveCustomer = (e: React.FormEvent) => {
+  const handleSaveCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.customer_name.trim()) return;
 
@@ -218,61 +132,31 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
       }
     }
 
-    const isUuid = (id: string) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-    const generateUuid = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'f' + Date.now().toString(16).padStart(31, '0').slice(0, 31);
-
-    const custId = (editingCustomer && isUuid(editingCustomer.id)) ? editingCustomer.id : generateUuid();
     const formattedName = formData.customer_name.trim().toUpperCase();
 
-    const newCustomerObj = {
-      id: custId,
-      tenant_id: isUuid(tenantId) ? tenantId : '00000000-0000-0000-0000-000000000000',
+    const customerPayload = {
+      ...(editingCustomer?.id ? { id: editingCustomer.id } : {}),
       customer_name: formattedName,
-      phone: formData.phone || null,
-      email: formData.email || null,
-      address: formData.address || null,
-      dob: formData.dob || null,
+      phone: formData.phone || '',
+      email: formData.email || '',
+      address: formData.address || '',
+      dob: formData.dob || '',
       credit_limit: Number(formData.credit_limit || 0),
       outstanding: Number(formData.outstanding || 0),
-      created_at: editingCustomer?.created_at || new Date().toISOString()
+      created_at: editingCustomer?.created_at
     };
 
-    // 1. Instant local state & localStorage update (0ms latency!)
-    try {
-      const localStr = localStorage.getItem('lk_customers') || '[]';
-      const localList = JSON.parse(localStr);
-      const existingIdx = localList.findIndex((c: any) => c.id === custId || (c.customer_name && c.customer_name.toUpperCase() === formattedName));
-      if (existingIdx >= 0) {
-        localList[existingIdx] = newCustomerObj;
-      } else {
-        localList.unshift(newCustomerObj);
-      }
-      localStorage.setItem('lk_customers', JSON.stringify(localList));
-      setCustomers(localList);
-    } catch (err) {}
-
-    // Close modal & trigger toast notification IMMEDIATELY (0ms latency!)
     setModalOpen(false);
     triggerToast('⚡ Customer account saved successfully!');
-    window.dispatchEvent(new Event('storage'));
 
-    // 2. Non-blocking asynchronous Supabase database upsert in background
-    (async () => {
-      try {
-        await supabase.from('customers').upsert(newCustomerObj);
-      } catch (e) {
-        console.warn('Remote customer background save note:', e);
-      }
-    })();
+    await saveCustomer(customerPayload);
   };
 
   const handleDeleteCustomer = async (id: string) => {
     if (!window.confirm('Are you sure you want to delete this customer?')) return;
     try {
-      const { error } = await supabase.from('customers').delete().eq('id', id);
-      if (error) throw error;
-      await fetchCustomersData();
-      window.dispatchEvent(new Event('storage'));
+      await deleteCustomer(id);
+      triggerToast('✓ Customer record deleted.');
     } catch (e: any) {
       alert('Failed to delete customer record: ' + e.message);
     }
@@ -302,33 +186,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
     const newOutstanding = Math.max(0, Number(targetCustomer.outstanding || 0) - paidAmt);
 
     const isUuid = (id: string) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-    const generateUuid = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'f' + Date.now().toString(16).padStart(31, '0').slice(0, 31);
-
-    const payRecordId = generateUuid();
     const nowIso = new Date().toISOString();
-
-    const newPaymentObj = {
-      id: payRecordId,
-      tenant_id: isUuid(tenantId) ? tenantId : '00000000-0000-0000-0000-000000000000',
-      customer_id: targetCustomer.id,
-      amount: paidAmt,
-      payment_mode: payFormData.payment_mode,
-      ref_number: payFormData.ref_number.trim() || 'DIR-REC',
-      payment_date: nowIso
-    };
-
-    // 1. Instant local state & localStorage update (0ms latency!)
-    const updatedCusts = customers.map(c => 
-      c.id === targetCustomer.id || c.customer_name === targetCustomer.customer_name 
-        ? { ...c, outstanding: newOutstanding } 
-        : c
-    );
-    setCustomers(updatedCusts);
-    localStorage.setItem('lk_customers', JSON.stringify(updatedCusts));
-
-    const updatedPays = [newPaymentObj as any, ...payments];
-    setPayments(updatedPays);
-    localStorage.setItem('lk_customer_payments', JSON.stringify(updatedPays));
 
     if (statementCustomer && (statementCustomer.id === targetCustomer.id || statementCustomer.customer_name === targetCustomer.customer_name)) {
       setStatementCustomer({ ...statementCustomer, outstanding: newOutstanding });
@@ -336,39 +194,39 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
 
     setPayModalOpen(false);
     triggerToast(`✓ Collected ₹${paidAmt.toFixed(2)} payment from ${targetCustomer.customer_name}! Remaining Udhar: ₹${newOutstanding.toFixed(2)}`);
-    window.dispatchEvent(new Event('storage'));
 
-    // 2. Perform Supabase database update immediately and update remote record
     try {
-      if (isUuid(targetCustomer.id)) {
-        await supabase.from('customer_payments').insert(newPaymentObj);
-        await supabase.from('customers').update({ outstanding: newOutstanding }).eq('id', targetCustomer.id);
-      } else {
+      let custId = targetCustomer.id;
+      if (!isUuid(custId)) {
         const { data: dbCust } = await supabase.from('customers').select('id').eq('customer_name', targetCustomer.customer_name).maybeSingle();
-        if (dbCust?.id) {
-          newPaymentObj.customer_id = dbCust.id;
-          await supabase.from('customer_payments').insert(newPaymentObj);
-          await supabase.from('customers').update({ outstanding: newOutstanding }).eq('id', dbCust.id);
-        }
+        if (dbCust?.id) custId = dbCust.id;
       }
-    } catch (e) {
-      console.warn('Supabase payment sync note:', e);
+      if (isUuid(custId)) {
+        await PaymentService.recordCustomerPayment({
+          tenant_id: isUuid(tenantId) ? tenantId : '00000000-0000-0000-0000-000000000000',
+          customer_id: custId,
+          amount: paidAmt,
+          payment_mode: payFormData.payment_mode,
+          ref_number: payFormData.ref_number.trim() || 'DIR-REC',
+          payment_date: nowIso
+        });
+        await CustomerService.updateCustomer(custId, { outstanding: newOutstanding });
+        await refreshAllData();
+      }
+    } catch (err) {
+      console.warn('Payment record save exception:', err);
     }
   };
 
   // Raw Customer Invoices
   const rawCustomerInvoices = useMemo(() => {
     if (!statementCustomer) return [];
-    const localSales = localStorage.getItem('lk_sales');
-    let allInvoices: any[] = [];
-    if (localSales) {
-      try { allInvoices = JSON.parse(localSales); } catch(e) {}
-    }
+    const allInvoices: any[] = contextSales || [];
     return allInvoices.filter(i => 
       i.customer_name && statementCustomer.customer_name &&
       i.customer_name.toUpperCase() === statementCustomer.customer_name.toUpperCase()
     );
-  }, [statementCustomer]);
+  }, [statementCustomer, contextSales]);
 
   // Compile specific customer ledger entries (Invoice bills vs payment logs)
   const statementLedger = useMemo(() => {
@@ -429,15 +287,9 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
     return Array.from(map.values()).sort((a, b) => b.totalSpent - a.totalSpent);
   }, [rawCustomerInvoices]);
 
-  // Load all sales invoices for calculating customer statistics (total purchases, last purchase date)
   const allSalesInvoices = useMemo(() => {
-    try {
-      const local = localStorage.getItem('lk_sales');
-      return local ? JSON.parse(local) : [];
-    } catch(e) {
-      return [];
-    }
-  }, [customers]);
+    return contextSales || [];
+  }, [contextSales]);
 
   // Comprehensive Master Customer List (Combines registered customers + past invoice customer records)
   const masterCustomersList = useMemo(() => {
@@ -882,7 +734,6 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
 
               const stats = customerStatsMap.get(targetCust.id);
               const currentOutstanding = stats ? stats.realtimeOutstanding : Number(targetCust.outstanding || 0);
-              const enteredAmount = Number(payFormData.amount || 0);
 
               return (
                 <div className="bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent border border-emerald-500/30 p-3.5 rounded-xl space-y-2">

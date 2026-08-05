@@ -233,7 +233,7 @@ export type SalesInvoiceUpdate = {
 export type SalesItemRow = {
   id: string;
   invoice_id: string;
-  product_id: string;
+  product_id: string | null;
   qty: number;
   rate: number;
   amount: number;
@@ -241,12 +241,13 @@ export type SalesItemRow = {
 export type SalesItemInsert = {
   id?: string;
   invoice_id: string;
-  product_id: string;
+  product_id?: string | null;
   qty: number;
   rate: number;
   amount: number;
 }
 export type SalesItemUpdate = {
+  product_id?: string | null;
   qty?: number;
   rate?: number;
   amount?: number;
@@ -307,7 +308,7 @@ export type PurchaseBillUpdate = {
 export type PurchaseItemRow = {
   id: string;
   bill_id: string;
-  product_id: string;
+  product_id: string | null;
   qty: number;
   rate: number;
   amount: number;
@@ -315,12 +316,13 @@ export type PurchaseItemRow = {
 export type PurchaseItemInsert = {
   id?: string;
   bill_id: string;
-  product_id: string;
+  product_id?: string | null;
   qty: number;
   rate: number;
   amount: number;
 }
 export type PurchaseItemUpdate = {
+  product_id?: string | null;
   qty?: number;
   rate?: number;
   amount?: number;

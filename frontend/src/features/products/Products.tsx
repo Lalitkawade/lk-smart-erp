@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useInventory } from '../../hooks/useInventory';
-import { supabase } from '../../api/supabase';
+import { useErpContext } from '../../context/ErpContext';
+import { SupplierService } from '../../services/supplierService';
+import { PurchaseService } from '../../services/purchaseService';
 import type { Product, BusinessType } from '../../types/erp.types';
 import { t } from '../../utils/i18n';
 import { getProductUnitRates } from '../../utils/formatters';
@@ -22,18 +24,12 @@ interface ProductsProps {
 }
 
 export default function Products({ tenantId, businessType, mode = 'catalog', autoOpenModal, autoOpenPurchaseModal, onModalClosed }: ProductsProps) {
+  const { suppliers: contextSuppliers, purchases: contextPurchases, sales: contextSales, refreshAllData } = useErpContext();
+  const suppliers = contextSuppliers || [];
+  const purchasesList = contextPurchases || [];
   const { products, isLoading, saveProduct, deleteProduct } = useInventory(tenantId, businessType);
   const [search, setSearch] = useState('');
-  const [suppliers, setSuppliers] = useState<any[]>([]);
   const [stockFilterTab, setStockFilterTab] = useState<'all' | 'low'>('all');
-  const [purchasesList, setPurchasesList] = useState<any[]>(() => {
-    try {
-      const raw = localStorage.getItem('lk_purchases');
-      return raw ? JSON.parse(raw) : [];
-    } catch (e) {
-      return [];
-    }
-  });
 
   // Modals
   const [modalOpen, setModalOpen] = useState(false);
@@ -116,38 +112,24 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
     };
 
     try {
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tenantId);
-      if (isUuid) {
-        const payload: any = {
-          tenant_id: tenantId,
-          supplier_name: formattedName,
-          phone: quickVendorFormData.phone,
-          email: quickVendorFormData.email,
-          address: quickVendorFormData.address,
-          dob: quickVendorFormData.dob || null,
-          establishment_date: quickVendorFormData.establishment_date || null,
-          outstanding: 0
-        };
+      const payload: any = {
+        tenant_id: tenantId,
+        supplier_name: formattedName,
+        phone: quickVendorFormData.phone,
+        email: quickVendorFormData.email,
+        address: quickVendorFormData.address,
+        dob: quickVendorFormData.dob || null,
+        establishment_date: quickVendorFormData.establishment_date || null,
+        outstanding: 0
+      };
 
-        let res = await supabase.from('suppliers').insert(payload).select().maybeSingle();
-        if (res.error && (res.error.message?.includes('dob') || res.error.message?.includes('establishment_date'))) {
-          delete payload.dob;
-          delete payload.establishment_date;
-          res = await supabase.from('suppliers').insert(payload).select().maybeSingle();
-        }
-
-        if (res.data?.id) {
-          newSupplierObj.id = res.data.id;
-        }
+      const res = await SupplierService.createSupplier(payload);
+      if (res.data?.id) {
+        newSupplierObj.id = res.data.id;
       }
+      await refreshAllData();
     } catch (e: any) {}
 
-    try {
-      const currentLocal = JSON.parse(localStorage.getItem('lk_suppliers') || '[]');
-      localStorage.setItem('lk_suppliers', JSON.stringify([newSupplierObj, ...currentLocal]));
-    } catch (e: any) {}
-
-    setSuppliers(prev => [newSupplierObj, ...prev]);
     setSupplierId(newSupplierObj.id);
     setVendorSearchQuery(newSupplierObj.supplier_name);
     setQuickVendorModalOpen(false);
@@ -189,48 +171,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
     });
   };
 
-  const fetchPurchaseBills = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('purchase_bills')
-        .select('*')
-        .order('purchase_date', { ascending: false });
 
-      const localStr = localStorage.getItem('lk_purchases') || '[]';
-      let localBills: any[] = [];
-      try { localBills = JSON.parse(localStr); } catch (e) {}
-
-      if (!error && data && Array.isArray(data)) {
-        const billMap = new Map<string, any>();
-        localBills.forEach(b => { if (b && b.id) billMap.set(b.id, b); });
-        data.forEach((rb: any) => {
-          if (rb && rb.id) {
-            const existing = billMap.get(rb.id);
-            billMap.set(rb.id, {
-              ...existing,
-              ...rb,
-              items: rb.purchase_items || existing?.items || []
-            });
-          }
-        });
-        const merged = Array.from(billMap.values());
-        setPurchasesList(merged);
-        try { localStorage.setItem('lk_purchases', JSON.stringify(merged)); } catch (e) {}
-      } else if (localBills.length > 0) {
-        setPurchasesList(localBills);
-      }
-    } catch (e) {}
-  };
-
-  useEffect(() => {
-    fetchPurchaseBills();
-    window.addEventListener('storage', fetchPurchaseBills);
-    window.addEventListener('lk_purchases_updated', fetchPurchaseBills);
-    return () => {
-      window.removeEventListener('storage', fetchPurchaseBills);
-      window.removeEventListener('lk_purchases_updated', fetchPurchaseBills);
-    };
-  }, []);
 
   useEffect(() => {
     if (autoOpenModal) {
@@ -249,46 +190,8 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
   const handleShowHistory = async (p: Product) => {
     setSelectedHistoryProduct(p);
 
-    // 1. Fetch Sales (combine Supabase live DB + localStorage cache)
-    let salesList: any[] = [];
-    try {
-      const localSales = localStorage.getItem('lk_sales');
-      if (localSales) {
-        salesList = JSON.parse(localSales);
-      }
-    } catch (e) {}
-
-    if (tenantId) {
-      try {
-        const { data: remoteSales } = await supabase
-          .from('sales_invoices')
-          .select('*, items:sales_items(*, product:products(*))')
-          .eq('tenant_id', tenantId)
-          .order('sale_date', { ascending: false });
-
-        if (remoteSales && remoteSales.length > 0) {
-          const salesMap = new Map<string, any>();
-          salesList.forEach(ls => {
-            const k = ls.invoice_number || ls.id;
-            if (k) salesMap.set(k, ls);
-          });
-          remoteSales.forEach(rs => {
-            const k = rs.invoice_number || rs.id;
-            if (k) {
-              const existingLocal = salesMap.get(k);
-              const rsItems = rs.items || (rs as any).sales_items || [];
-              const localItems = existingLocal?.items || existingLocal?.sales_items || [];
-              salesMap.set(k, {
-                ...existingLocal,
-                ...rs,
-                items: rsItems.length > 0 ? rsItems : localItems
-              });
-            }
-          });
-          salesList = Array.from(salesMap.values());
-        }
-      } catch (err) {}
-    }
+    // 1. Sales history from ErpContext
+    const salesList: any[] = contextSales || [];
 
     const matchedSales: any[] = [];
     salesList.forEach((invoice: any) => {
@@ -334,46 +237,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
     matchedSales.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     setProdSalesHistory(matchedSales);
 
-    // 2. Fetch Purchases (combine Supabase live DB + localStorage cache)
-    let purchasesList: any[] = [];
-    try {
-      const localPurchases = localStorage.getItem('lk_purchases');
-      if (localPurchases) {
-        purchasesList = JSON.parse(localPurchases);
-      }
-    } catch (e) {}
-
-    if (tenantId) {
-      try {
-        const { data: remotePurchases } = await supabase
-          .from('purchase_bills')
-          .select('*, items:purchase_items(*, product:products(*))')
-          .eq('tenant_id', tenantId)
-          .order('purchase_date', { ascending: false });
-
-        if (remotePurchases && remotePurchases.length > 0) {
-          const purchMap = new Map<string, any>();
-          purchasesList.forEach(lp => {
-            const k = lp.bill_number || lp.id;
-            if (k) purchMap.set(k, lp);
-          });
-          remotePurchases.forEach(rp => {
-            const k = rp.bill_number || rp.id;
-            if (k) {
-              const existingLocal = purchMap.get(k);
-              const rpItems = rp.items || (rp as any).purchase_items || [];
-              const localItems = existingLocal?.items || existingLocal?.purchase_items || [];
-              purchMap.set(k, {
-                ...existingLocal,
-                ...rp,
-                items: rpItems.length > 0 ? rpItems : localItems
-              });
-            }
-          });
-          purchasesList = Array.from(purchMap.values());
-        }
-      } catch (err) {}
-    }
+    // 2. Purchases movement history from ErpContext
 
     const matchedPurchases: any[] = [];
     purchasesList.forEach((bill: any) => {
@@ -451,16 +315,6 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
       current_stock: liveCalculatedStock
     };
     setSelectedHistoryProduct(reconciledProduct);
-
-    try {
-      const localProds = JSON.parse(localStorage.getItem('lk_products') || '[]');
-      const pIdx = localProds.findIndex((lp: any) => lp.id === p.id);
-      if (pIdx >= 0 && Number(localProds[pIdx].current_stock || 0) !== liveCalculatedStock) {
-        localProds[pIdx].current_stock = liveCalculatedStock;
-        localStorage.setItem('lk_products', JSON.stringify(localProds));
-        window.dispatchEvent(new Event('storage'));
-      }
-    } catch (e) {}
 
     setHistoryModalOpen(true);
   };
@@ -585,50 +439,25 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
   const handleSaveEditBill = async () => {
     if (!editingBill) return;
     try {
-      const targetId = editingBill.id || editingBill.bill_number;
       const updatedTotal = Number(editBillData.total_amount || 0);
       const updatedPaid = Number(editBillData.paid_amount || 0);
       const updatedDue = Math.max(0, updatedTotal - updatedPaid);
 
-      const updatedBillObj = {
-        ...editingBill,
-        bill_number: editBillData.bill_number,
-        supplier_name: editBillData.supplier_name,
-        purchase_date: editBillData.purchase_date,
-        total_amount: updatedTotal,
-        paid_amount: updatedPaid,
-        due_amount: updatedDue,
-        payment_mode: editBillData.payment_mode
-      };
-
-      const localP = JSON.parse(localStorage.getItem('lk_purchases') || '[]');
-      const updatedList = localP.map((b: any) => {
-        if (b.id === targetId || b.bill_number === targetId || (b.bill_number && b.bill_number === editingBill.bill_number)) {
-          return updatedBillObj;
-        }
-        return b;
-      });
-      localStorage.setItem('lk_purchases', JSON.stringify(updatedList));
-      setPurchasesList(updatedList);
-
       try {
-        if (editingBill.id && !editingBill.id.startsWith('pb-') && !editingBill.id.startsWith('sup-')) {
-          await supabase
-            .from('purchase_bills')
-            .update({
-              bill_number: editBillData.bill_number,
-              supplier_name: editBillData.supplier_name,
-              purchase_date: editBillData.purchase_date,
-              total_amount: updatedTotal,
-              paid_amount: updatedPaid,
-              due_amount: updatedDue,
-              payment_mode: editBillData.payment_mode
-            })
-            .eq('id', editingBill.id);
+        if (editingBill.id) {
+          await PurchaseService.updatePurchase(editingBill.id, {
+            bill_number: editBillData.bill_number,
+            supplier_name: editBillData.supplier_name,
+            purchase_date: editBillData.purchase_date,
+            total_amount: updatedTotal,
+            paid_amount: updatedPaid,
+            due_amount: updatedDue,
+            payment_mode: editBillData.payment_mode
+          });
         }
+        await refreshAllData();
       } catch (e) {}
 
-      window.dispatchEvent(new Event('storage'));
       triggerToast('⚡ Purchase bill updated successfully!');
       setEditingBill(null);
     } catch (err: any) {
@@ -636,33 +465,9 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
     }
   };
 
-  const [_purchases, _setPurchases] = useState<any[]>([]);
-  const [_sales, setSales] = useState<any[]>([]);
 
-  useEffect(() => {
-    const loadTransactions = () => {
-      const pStr = localStorage.getItem('lk_purchases') || '[]';
-      const sStr = localStorage.getItem('lk_sales') || '[]';
-      try {
-        const parsedP = JSON.parse(pStr);
-        setPurchasesList(parsedP);
-        setSales(JSON.parse(sStr));
-      } catch (e) {}
-    };
-    loadTransactions();
-    window.addEventListener('storage', loadTransactions);
-    return () => window.removeEventListener('storage', loadTransactions);
-  }, []);
 
-  // Load suppliers list from localStorage on mount/modal toggle
-  useEffect(() => {
-    const localSups = localStorage.getItem('lk_suppliers');
-    if (localSups) {
-      try {
-        setSuppliers(JSON.parse(localSups));
-      } catch (e) {}
-    }
-  }, [modalOpen]);
+
 
   const handleOpenAdd = () => {
     setEditingProduct(null);
@@ -737,43 +542,35 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
   const logInflowPurchaseHistory = async (
     tenantId: string,
     productId: string,
-    productName: string,
+    _productName: string,
     qty: number,
     purchaseRate: number,
-    sellingPrice: number,
+    _sellingPrice: number,
     supplierName: string
   ) => {
     const billNum = `STOCK-IN-${Date.now().toString().slice(-6)}`;
     const nowIso = new Date().toISOString();
 
-    // 1. LocalStorage purchase log
-    const localP = localStorage.getItem('lk_purchases') || '[]';
     try {
-      const list = JSON.parse(localP);
-      const newBill = {
-        id: 'bill-' + Date.now(),
-        tenant_id: tenantId,
+      const isValidUUID = (id: any) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+      const billPayload = {
+        tenant_id: (tenantId && isValidUUID(tenantId)) ? tenantId : '00000000-0000-0000-0000-000000000000',
         bill_number: billNum,
         supplier_name: supplierName,
         payment_mode: 'Cash',
         total_amount: qty * purchaseRate,
         paid_amount: qty * purchaseRate,
         due_amount: 0,
-        purchase_date: nowIso,
-        is_offline_draft: true,
-        items: [
-          {
-            product_id: productId,
-            product_name: productName,
-            qty,
-            rate: purchaseRate,
-            selling_price: sellingPrice,
-            amount: qty * purchaseRate
-          }
-        ]
+        purchase_date: nowIso
       };
-      list.unshift(newBill);
-      window.dispatchEvent(new Event('storage'));
+      const items = [{
+        product_id: isValidUUID(productId) ? productId : null,
+        qty,
+        rate: purchaseRate,
+        amount: qty * purchaseRate
+      }];
+      await PurchaseService.createPurchase(billPayload as any, items);
+      await refreshAllData();
     } catch (e) {}
   };
 
@@ -904,7 +701,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
           ...(targetProductId && { id: targetProductId })
         };
 
-        const savedProd = saveProduct(productPayload as any);
+        const savedProd = await saveProduct(productPayload as any);
         const effectiveProdId = savedProd?.id || targetProductId;
         const packSellingRate = sPrice * conversionFactor;
 
@@ -951,49 +748,34 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
           items: savedBillItems
         };
 
-        try {
-          const localP = JSON.parse(localStorage.getItem('lk_purchases') || '[]');
-          const cleanedP = localP.filter((b: any) => !(b.bill_number && String(b.bill_number).toUpperCase().startsWith('STOCK-IN')));
-          localStorage.setItem('lk_purchases', JSON.stringify([newBillObj, ...cleanedP]));
-
-          if (dueAmount > 0) {
-            const localSups = JSON.parse(localStorage.getItem('lk_suppliers') || '[]');
-            const sIdx = localSups.findIndex((s: any) => s.id === activeSup.id);
-            if (sIdx >= 0) {
-              localSups[sIdx].outstanding = Number(localSups[sIdx].outstanding || 0) + dueAmount;
-            }
-            localStorage.setItem('lk_suppliers', JSON.stringify(localSups));
-          }
-        } catch (e) {}
-
         const isValidUUID = (id: any) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-        if (isValidUUID(tenantId)) {
-          try {
-            const { data: billRes } = await supabase.from('purchase_bills').insert({
-              tenant_id: tenantId,
-              bill_number: newBillObj.bill_number,
-              supplier_name: activeSup.supplier_name,
-              payment_mode: paymentMode,
-              ref_number: transactionId.trim() || null,
-              transaction_id: transactionId.trim() || null,
-              total_amount: totalBillCost,
-              paid_amount: effectivePaid,
-              due_amount: dueAmount,
-              purchase_date: newBillObj.purchase_date
-            }).select().single();
+        const billPayload = {
+          tenant_id: (tenantId && isValidUUID(tenantId)) ? tenantId : '00000000-0000-0000-0000-000000000000',
+          bill_number: newBillObj.bill_number,
+          supplier_name: activeSup.supplier_name,
+          payment_mode: paymentMode,
+          ref_number: transactionId.trim() || null,
+          transaction_id: transactionId.trim() || null,
+          total_amount: totalBillCost,
+          paid_amount: effectivePaid,
+          due_amount: dueAmount,
+          purchase_date: safeIsoDate
+        };
 
-            if (billRes && billRes.id) {
-              const rows = savedBillItems.map(bi => ({
-                bill_id: billRes.id,
-                product_id: isValidUUID(bi.product_id) ? bi.product_id : null,
-                qty: bi.qty,
-                rate: bi.rate,
-                amount: bi.amount
-              }));
-              await supabase.from('purchase_items').insert(rows);
-            }
-          } catch (e) {}
-        }
+        const rows = savedBillItems.map(bi => ({
+          product_id: isValidUUID(bi.product_id) ? bi.product_id : null,
+          qty: bi.qty,
+          rate: bi.rate,
+          amount: bi.amount
+        }));
+
+        try {
+          await PurchaseService.createPurchase(billPayload as any, rows);
+          if (dueAmount > 0 && activeSup?.id) {
+            await SupplierService.updateSupplier(activeSup.id, { outstanding: Number(activeSup.outstanding || 0) + dueAmount });
+          }
+          await refreshAllData();
+        } catch (e) {}
       }
 
       setModalOpen(false);
@@ -1074,15 +856,10 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
   }, [products]);
 
   const uniqueBillsList = useMemo(() => {
-    const rawLocal = localStorage.getItem('lk_purchases') || '[]';
-    let list: any[] = purchasesList.length > 0 ? purchasesList : [];
-    if (list.length === 0 && rawLocal) {
-      try { list = JSON.parse(rawLocal); } catch (e) {}
-    }
-
+    const list: any[] = purchasesList || [];
     const confirmed = list.filter((b: any) => !(b.bill_number && String(b.bill_number).toUpperCase().startsWith('STOCK-IN')));
     return confirmed.sort((a, b) => new Date(b.purchase_date || b.created_at || 0).getTime() - new Date(a.purchase_date || a.created_at || 0).getTime());
-  }, [purchasesList, modalOpen]);
+  }, [purchasesList]);
 
   const filteredPurchaseBills = useMemo(() => {
     return uniqueBillsList.filter((b: any) => {

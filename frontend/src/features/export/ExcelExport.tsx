@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../hooks/useAuth';
+import { useErpContext } from '../../context/ErpContext';
 import * as XLSX from 'xlsx';
 import { t } from '../../utils/i18n';
 
 export default function ExcelExport() {
   const { tenant } = useAuth();
+  const { products: contextProducts, customers: contextCustomers, suppliers: contextSuppliers, purchases: contextPurchases, sales: contextSales, customerPayments: contextCustomerPayments, supplierPayments: contextSupplierPayments, expenses: contextExpenses, settings: contextSettings } = useErpContext();
   const currentTenantId = tenant?.id || 'default-hardware-erp';
 
   // State for record counts and raw arrays
@@ -25,29 +27,20 @@ export default function ExcelExport() {
 
   // Load all local storage tables on mount
   useEffect(() => {
-    const prodStr = localStorage.getItem('lk_products') || '[]';
-    const salesStr = localStorage.getItem('lk_sales') || '[]';
-    const purchasesStr = localStorage.getItem('lk_purchases') || '[]';
-    const custStr = localStorage.getItem('lk_customers') || '[]';
-    const supStr = localStorage.getItem('lk_suppliers') || '[]';
-    const expStr = localStorage.getItem('lk_expenses') || '[]';
-    const custPaysStr = localStorage.getItem('lk_customer_payments') || '[]';
-    const supPaysStr = localStorage.getItem('lk_supplier_payments') || '[]';
-    const settingsStr = localStorage.getItem('lk_settings') || '{}';
+    const prodStr = '[]';
 
     try {
-      const allProducts = JSON.parse(prodStr);
-      const allSales = JSON.parse(salesStr);
-      const allPurchases = JSON.parse(purchasesStr);
-      const allCustomers = JSON.parse(custStr);
-      const allSuppliers = JSON.parse(supStr);
-      const allExpenses = JSON.parse(expStr);
-      const allCustPayments = JSON.parse(custPaysStr);
-      const allSupPayments = JSON.parse(supPaysStr);
-      const settings = JSON.parse(settingsStr);
+      const allSales = contextSales || [];
+      const allPurchases = contextPurchases || [];
+      const allCustomers = contextCustomers || [];
+      const allSuppliers = contextSuppliers || [];
+      const allExpenses = contextExpenses || [];
+      const allCustPayments = contextCustomerPayments || [];
+      const allSupPayments = contextSupplierPayments || [];
+      const settings = contextSettings || {};
 
       // Filter by tenant if applicable, or fallback to all items
-      const products = allProducts.filter((p: any) => !p.tenant_id || p.tenant_id === currentTenantId);
+      const products = contextProducts && contextProducts.length > 0 ? contextProducts : JSON.parse(prodStr);
 
       setDataState({
         products,

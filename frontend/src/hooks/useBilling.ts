@@ -1,88 +1,21 @@
-import { useState, useEffect } from 'react';
-import { supabase } from '../api/supabase';
-import type { CartItem, Product, SalesInvoice } from '../types/erp.types';
+import { useState } from 'react';
+import { useErpContext } from '../context/ErpContext';
+import { CustomerService } from '../services/customerService';
+import { SaleService } from '../services/saleService';
+import { InventoryService } from '../services/inventoryService';
+import { PaymentService } from '../services/paymentService';
+import type { CartItem, Product } from '../types/erp.types';
 import { getProductUnitRates } from '../utils/formatters';
 
 export function useBilling(tenantId: string) {
+  const { sales: contextSales, refreshAllData } = useErpContext();
   const [cart, setCart] = useState<CartItem[]>([]);
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [paymentMode, setPaymentMode] = useState('Cash');
   const [transactionId, setTransactionId] = useState('');
-  const [sales, setSales] = useState<SalesInvoice[]>(() => {
-    try {
-      const localStr = localStorage.getItem('lk_sales');
-      if (localStr) {
-        const parsed = JSON.parse(localStr);
-        if (Array.isArray(parsed)) return parsed;
-      }
-    } catch (e) {}
-    return [];
-  });
 
-  const fetchSales = async () => {
-    if (!tenantId) return;
-
-    let remoteList: any[] = [];
-    const isValidUUID = typeof tenantId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tenantId);
-
-    if (isValidUUID) {
-      try {
-        const { data, error } = await supabase
-          .from('sales_invoices')
-          .select(`
-            *,
-            items:sales_items(
-              *,
-              product:products(*)
-            )
-          `)
-          .eq('tenant_id', tenantId)
-          .order('sale_date', { ascending: false });
-
-        if (!error && data) {
-          remoteList = data;
-        }
-      } catch (e) {
-        console.warn('Remote sales invoices fetch warning:', e);
-      }
-    }
-
-    const localStr = localStorage.getItem('lk_sales') || '[]';
-    let localList: any[] = [];
-    try { localList = JSON.parse(localStr); } catch (e) {}
-
-    const map = new Map<string, any>();
-    localList.forEach((inv: any) => {
-      const k = inv.invoice_number || inv.id;
-      if (k) map.set(k, inv);
-    });
-
-    remoteList.forEach((inv: any) => {
-      const k = inv.invoice_number || inv.id;
-      if (k) {
-        const existing = map.get(k);
-        const effectiveItems = (inv.items && inv.items.length > 0 ? inv.items : (inv.sales_items && inv.sales_items.length > 0 ? inv.sales_items : existing?.items)) || [];
-        map.set(k, { ...existing, ...inv, items: effectiveItems });
-      }
-    });
-
-    const mergedList = Array.from(map.values()).sort((a, b) => 
-      new Date(b.sale_date || b.created_at || 0).getTime() - new Date(a.sale_date || a.created_at || 0).getTime()
-    );
-
-    setSales(mergedList as SalesInvoice[]);
-    try {
-      localStorage.setItem('lk_sales', JSON.stringify(mergedList));
-    } catch (e) {}
-  };
-
-  // Fetch sales records on mount/tenant changes
-  useEffect(() => {
-    fetchSales();
-    window.addEventListener('storage', fetchSales);
-    return () => window.removeEventListener('storage', fetchSales);
-  }, [tenantId]);
+  const sales = contextSales || [];
 
   const addToCart = (product: Product, isLoose: boolean = false) => {
     const existing = cart.find(item => item.product.id === product.id && item.isLoose === isLoose);
@@ -198,33 +131,15 @@ export function useBilling(tenantId: string) {
       const trimmedPhone = customerPhone.trim();
 
       if (trimmedName && trimmedName.toUpperCase() !== 'CASH CUSTOMER') {
-        // Try local cache first for instant match
-        try {
-          const localCusts = JSON.parse(localStorage.getItem('lk_customers') || '[]');
-          matchedCustomer = localCusts.find((c: any) => 
-            (c.customer_name && c.customer_name.trim().toUpperCase() === trimmedName.toUpperCase()) ||
-            (trimmedPhone && c.phone && c.phone.trim() === trimmedPhone)
-          ) || null;
-        } catch(e) {}
-
-        // Query database to ensure fresh outstanding balance data
-        let query = supabase.from('customers').select('*').eq('tenant_id', tenantId);
-        if (trimmedPhone) {
-          query = query.or(`customer_name.ilike.${trimmedName},phone.eq.${trimmedPhone}`);
-        } else {
-          query = query.ilike('customer_name', trimmedName);
-        }
-
-        const { data: custRows } = await query.limit(1);
-        if (custRows && custRows.length > 0) {
-          matchedCustomer = custRows[0];
+        const searchRes = await CustomerService.searchCustomers(trimmedPhone || trimmedName, tenantId);
+        if (searchRes.data && searchRes.data.length > 0) {
+          matchedCustomer = searchRes.data[0];
         }
 
         // Calculate past unpaid due amount from sales invoices if matchedCustomer is missing or has 0 outstanding
         let pastInvoiceDue = 0;
         try {
-          const localSales = JSON.parse(localStorage.getItem('lk_sales') || '[]');
-          const pastInvs = localSales.filter((inv: any) => 
+          const pastInvs = sales.filter((inv: any) => 
             inv.customer_name && inv.customer_name.trim().toUpperCase() === trimmedName.toUpperCase()
           );
           pastInvoiceDue = pastInvs.reduce((acc: number, curr: any) => acc + Number(curr.due_amount || 0), 0);
@@ -288,61 +203,28 @@ export function useBilling(tenantId: string) {
 
       // Auto-register customer in database if they don't have a valid UUID yet
       if (customerName.trim() && customerName.trim().toUpperCase() !== 'CASH CUSTOMER') {
-        try {
-          const rawLocalCusts = localStorage.getItem('lk_customers') || '[]';
-          const localCusts: any[] = JSON.parse(rawLocalCusts);
-          const cNameUpper = customerName.trim().toUpperCase();
-          const existingIdx = localCusts.findIndex((c: any) => 
-            (matchedCustomer && c.id === matchedCustomer.id) ||
-            (c.customer_name && c.customer_name.trim().toUpperCase() === cNameUpper)
-          );
-          if (existingIdx >= 0) {
-            localCusts[existingIdx].outstanding = newOutstanding;
-          } else {
-            localCusts.unshift({
-              id: matchedCustomer?.id || ('cust-' + Date.now()),
-              tenant_id: tenantId,
-              customer_name: cNameUpper,
-              phone: customerPhone.trim() || '',
-              credit_limit: 50000,
-              outstanding: newOutstanding,
-              created_at: new Date().toISOString()
-            });
-          }
-          localStorage.setItem('lk_customers', JSON.stringify(localCusts));
-          window.dispatchEvent(new Event('lk_customers_updated'));
-        } catch (e) {}
-
         if (!matchedCustomer || !isValidUUID(matchedCustomer.id)) {
           try {
-            const { data: newCust } = await supabase
-              .from('customers')
-              .insert({
-                tenant_id: tenantId,
-                customer_name: customerName.trim().toUpperCase(),
-                phone: customerPhone.trim(),
-                credit_limit: 50000,
-                outstanding: newOutstanding
-              })
-              .select()
-              .single();
-
-            if (newCust) matchedCustomer = newCust;
+            const createRes = await CustomerService.createCustomer({
+              tenant_id: tenantId,
+              customer_name: customerName.trim().toUpperCase(),
+              phone: customerPhone.trim(),
+              credit_limit: 50000,
+              outstanding: newOutstanding
+            });
+            if (createRes.data) matchedCustomer = createRes.data;
           } catch (e) {}
         } else {
           try {
-            await supabase
-              .from('customers')
-              .update({ outstanding: newOutstanding })
-              .eq('id', matchedCustomer.id);
-          } catch(e) {}
+            await CustomerService.updateCustomer(matchedCustomer.id, { outstanding: newOutstanding });
+          } catch (e) {}
         }
       }
 
       if (appliedToPreviousUdhar > 0 && matchedCustomer && isValidUUID(matchedCustomer.id)) {
         // Log collection payment for previous udhar repaid
         try {
-          await supabase.from('customer_payments').insert({
+          await PaymentService.recordCustomerPayment({
             tenant_id: tenantId,
             customer_id: matchedCustomer.id,
             amount: appliedToPreviousUdhar,
@@ -376,55 +258,21 @@ export function useBilling(tenantId: string) {
 
       let invoice: any = { ...invoicePayload };
 
-      if (isValidUUID(tenantId)) {
-        try {
-          const { data: invData, error: invErr } = await supabase
-            .from('sales_invoices')
-            .insert(invoicePayload)
-            .select()
-            .single();
+      const itemsPayload = cart.map(item => ({
+        product_id: item.product.id,
+        qty: item.qty,
+        rate: item.rate,
+        amount: item.qty * item.rate
+      }));
 
-          if (!invErr && invData) {
-            invoice = invData;
-          }
-        } catch (e) {
-          console.warn('Remote invoice save note (saved locally):', e);
-        }
+      const res = await SaleService.createSale(invoicePayload as any, itemsPayload);
+      if (res.data) {
+        invoice = res.data;
       }
 
-      // 3. Save Invoice Line Items and update product stock locally and remotely
+      // 3. Update product stock in Supabase via central InventoryService
       try {
-        const localProdsStr = localStorage.getItem('lk_products') || '[]';
-        const localProds: Product[] = JSON.parse(localProdsStr);
-
-        for (const item of cart) {
-          // Decrement stock level in Base Stock Unit (Rule 5)
-          const piecesPerPack = Math.max(1, Number(item.product.pieces_per_pack || 1));
-          const totalDeductedBaseUnits = item.isLoose ? item.qty : (item.qty * piecesPerPack);
-          
-          const pIdx = localProds.findIndex(p => p.id === item.product.id);
-          if (pIdx >= 0) {
-            localProds[pIdx].current_stock = Math.max(0, Number(localProds[pIdx].current_stock || 0) - totalDeductedBaseUnits);
-          }
-
-          if (isValidUUID(tenantId) && isValidUUID(invoice.id)) {
-            try {
-              await supabase.from('sales_items').insert({
-                invoice_id: invoice.id,
-                product_id: item.product.id,
-                qty: item.qty,
-                rate: item.rate,
-                amount: item.qty * item.rate
-              });
-
-              if (pIdx >= 0) {
-                await supabase.from('products').update({ current_stock: localProds[pIdx].current_stock }).eq('id', item.product.id);
-              }
-            } catch (e) {}
-          }
-        }
-
-        localStorage.setItem('lk_products', JSON.stringify(localProds));
+        await InventoryService.deductStockForInvoice(cart);
       } catch (e) {}
 
       // Return compiled invoice object (including item lines mapped for printing and udhar ledger breakdown)
@@ -453,22 +301,9 @@ export function useBilling(tenantId: string) {
         }))
       };
 
-      // Cache invoice into local storage for immediate product card history matching
       try {
-        const cached = localStorage.getItem('lk_sales') || '[]';
-        const list = JSON.parse(cached);
-        const existingIdx = list.findIndex((i: any) => (i.invoice_number && i.invoice_number === compiledInvoice.invoice_number) || i.id === compiledInvoice.id);
-        if (existingIdx >= 0) {
-          list[existingIdx] = compiledInvoice;
-        } else {
-          list.unshift(compiledInvoice);
-        }
-        localStorage.setItem('lk_sales', JSON.stringify(list));
+        await refreshAllData();
       } catch (e) {}
-
-      // Refresh list locally
-      setSales(prev => [compiledInvoice, ...prev.filter(s => s.id !== compiledInvoice.id)]);
-      window.dispatchEvent(new Event('storage')); // notify other tabs to refresh their listings
 
       setCart([]);
       setCustomerName('Cash Customer');

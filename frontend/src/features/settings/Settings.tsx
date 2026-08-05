@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../api/supabase';
+import { useErpContext } from '../../context/ErpContext';
+import { SettingsService } from '../../services/settingsService';
 
 interface SettingsProps {
   tenantId: string;
@@ -7,6 +9,7 @@ interface SettingsProps {
 }
 
 export default function Settings({ tenantId, onSettingsSaved }: SettingsProps) {
+  const { refreshAllData } = useErpContext();
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState('');
@@ -116,16 +119,15 @@ export default function Settings({ tenantId, onSettingsSaved }: SettingsProps) {
 
       if (tenantErr) throw tenantErr;
 
-      // Cache settings locally for synchronous legacy reporting utilities
-      const config = {
-        company_name: companyName,
-        logo_url: logoUrl,
+      await SettingsService.saveSettings({
+        tenant_id: tenantId,
+        invoice_prefix: invoicePrefix,
         gstin: gstin,
         address: address,
-        invoice_prefix: invoicePrefix,
+        logo_url: logoUrl,
         business_type: 'Hardware Shop'
-      };
-      localStorage.setItem('lk_settings', JSON.stringify(config));
+      });
+      await refreshAllData();
       
       // Sync with active session tenant name so sidebars update instantly
       const sessionStr = localStorage.getItem('lk_session');

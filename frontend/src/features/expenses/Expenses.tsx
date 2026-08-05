@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { useAuth } from '../../hooks/useAuth';
-import { supabase } from '../../api/supabase';
+import { useErpContext } from '../../context/ErpContext';
+import { ExpenseService } from '../../services/expenseService';
 import { t } from '../../utils/i18n';
 
 interface Expense {
@@ -21,10 +21,8 @@ interface ExpensesProps {
 }
 
 export default function Expenses({ autoOpenModal, onModalClosed }: ExpensesProps = {}) {
-  const { tenant } = useAuth();
-  const tenantId = tenant?.id || 'default-hardware-erp';
-
-  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const { expenses: contextExpenses, refreshAllData } = useErpContext();
+  const expenses: Expense[] = (contextExpenses || []) as Expense[];
   const [search, setSearch] = useState('');
   
   // Modals
@@ -47,33 +45,6 @@ export default function Expenses({ autoOpenModal, onModalClosed }: ExpensesProps
     expense_date: new Date().toISOString().slice(0, 10)
   });
 
-  const fetchExpensesData = async () => {
-    if (!tenantId) return;
-    try {
-      const { data: expsData, error } = await supabase
-        .from('expenses')
-        .select('*')
-        .eq('tenant_id', tenantId)
-        .order('expense_date', { ascending: false });
-
-      if (error) throw error;
-
-      let currentExps = (expsData || []) as Expense[];
-
-      setExpenses(currentExps);
-      // Bridge cache for standard localStorage statistics calculators
-      localStorage.setItem('lk_expenses', JSON.stringify(currentExps));
-    } catch (e) {
-      console.error('Failed to sync expenses with Supabase:', e);
-    }
-  };
-
-  useEffect(() => {
-    fetchExpensesData();
-    window.addEventListener('storage', fetchExpensesData);
-    return () => window.removeEventListener('storage', fetchExpensesData);
-  }, [tenantId]);
-
   const handleOpenAdd = () => {
     setFormData({
       category: 'Rent',
@@ -90,43 +61,21 @@ export default function Expenses({ autoOpenModal, onModalClosed }: ExpensesProps
     e.preventDefault();
     if (formData.amount <= 0) return;
 
-    const newExpObj: Expense = {
-      id: 'exp-' + Date.now(),
-      tenant_id: tenantId || 'default-hardware-erp',
-      category: formData.category,
-      amount: Number(formData.amount),
-      payment_mode: formData.payment_mode,
-      ref_number: formData.ref_number || 'GEN-EXP',
-      description: formData.description,
-      expense_date: new Date(formData.expense_date).toISOString()
-    };
-
-    // 1. Immediate local cache and state update
     try {
-      const localExps = JSON.parse(localStorage.getItem('lk_expenses') || '[]');
-      localStorage.setItem('lk_expenses', JSON.stringify([newExpObj, ...localExps]));
-      setExpenses(prev => [newExpObj, ...prev.filter(e => e.id !== newExpObj.id)]);
-    } catch (err) {}
-
-    // 2. Background attempt to save to remote Supabase if UUID
-    const isValidUUID = (id: any) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-    if (isValidUUID(tenantId)) {
-      try {
-        await supabase
-          .from('expenses')
-          .insert({
-            tenant_id: tenantId,
-            category: formData.category,
-            amount: formData.amount,
-            payment_mode: formData.payment_mode,
-            ref_number: formData.ref_number || 'GEN-EXP',
-            description: formData.description,
-            expense_date: newExpObj.expense_date
-          });
-      } catch (err) {}
+      await ExpenseService.createExpense({
+        tenant_id: '00000000-0000-0000-0000-000000000000',
+        category: formData.category,
+        amount: Number(formData.amount),
+        payment_mode: formData.payment_mode,
+        ref_number: formData.ref_number || 'GEN-EXP',
+        description: formData.description,
+        expense_date: new Date(formData.expense_date).toISOString()
+      });
+      await refreshAllData();
+    } catch (err) {
+      console.warn('Expense save exception:', err);
     }
 
-    window.dispatchEvent(new Event('storage'));
     setModalOpen(false);
     alert('Expense successfully recorded.');
   };
@@ -134,20 +83,11 @@ export default function Expenses({ autoOpenModal, onModalClosed }: ExpensesProps
   const handleDeleteExpense = async (id: string) => {
     if (!window.confirm('Delete this expense entry?')) return;
     try {
-      const localExps = JSON.parse(localStorage.getItem('lk_expenses') || '[]');
-      const updated = localExps.filter((e: any) => e.id !== id);
-      localStorage.setItem('lk_expenses', JSON.stringify(updated));
-      setExpenses(prev => prev.filter(e => e.id !== id));
-    } catch (err) {}
-
-    const isValidUUID = (idStr: any) => typeof idStr === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idStr);
-    if (isValidUUID(id)) {
-      try {
-        await supabase.from('expenses').delete().eq('id', id);
-      } catch (err) {}
+      await ExpenseService.deleteExpense(id);
+      await refreshAllData();
+    } catch (err) {
+      console.warn('Expense delete exception:', err);
     }
-
-    window.dispatchEvent(new Event('storage'));
   };
 
   // Calculate category aggregates

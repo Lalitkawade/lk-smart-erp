@@ -2,12 +2,12 @@ import React, { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from './hooks/useAuth';
 import { supabase } from './api/supabase';
+import { ErpDataProvider } from './context/ErpContext';
 
 // Lazy Loaded Feature Modules for Instant Initial Load & Code-Splitting
 const Products = lazy(() => import('./features/products/Products'));
 const Sales = lazy(() => import('./features/sales/Sales'));
 const Dashboard = lazy(() => import('./features/dashboard/Dashboard'));
-const Reports = lazy(() => import('./features/reports/Reports'));
 const Customers = lazy(() => import('./features/customers/Customers'));
 const Suppliers = lazy(() => import('./features/suppliers/Suppliers'));
 const Purchases = lazy(() => import('./features/purchases/Purchases'));
@@ -35,13 +35,13 @@ const SectionSkeleton = () => (
   </div>
 );
 
-export default function App() {
+function App() {
   const { user, profile, tenant, loading, signIn, signOut } = useAuth();
   const { highDemandAlerts } = useDemandTracker(tenant?.id);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [theme, setTheme] = useState(localStorage.getItem('lk_theme') || 'light');
   const [lang, setLang] = useState<Language>((localStorage.getItem('lk_lang') as Language) || 'en');
-  const [businessType, setBusinessType] = useState('Hardware Shop');
+  const [businessType] = useState('Hardware Shop');
   const [purchaseAutoOpen, setPurchaseAutoOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -124,71 +124,7 @@ export default function App() {
   const [role, setRole] = useState('Owner');
   const [authLoading, setAuthLoading] = useState(false);
 
-  // Safe cache parsing helper
-  const safeParseArray = (key: string): any[] => {
-    try {
-      const raw = localStorage.getItem(key);
-      if (!raw) return [];
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch (e) {
-      return [];
-    }
-  };
 
-  // Atomic local cache updater
-  const saveLocalCache = (cacheObj: {
-    sales: any[];
-    purchases: any[];
-    expenses: any[];
-    products: any[];
-    customers: any[];
-    suppliers: any[];
-  }) => {
-    try {
-      const snapshot = {
-        lk_sales: JSON.stringify(cacheObj.sales || []),
-        lk_purchases: JSON.stringify(cacheObj.purchases || []),
-        lk_expenses: JSON.stringify(cacheObj.expenses || []),
-        lk_products: JSON.stringify(cacheObj.products || []),
-        lk_customers: JSON.stringify(cacheObj.customers || []),
-        lk_suppliers: JSON.stringify(cacheObj.suppliers || [])
-      };
-      Object.entries(snapshot).forEach(([key, val]) => localStorage.setItem(key, val));
-    } catch (e) {
-      console.warn('Local cache storage write error:', e);
-    }
-  };
-
-  // Consolidated merge helper that respects remote deletions, entity-specific keys, and preserves offline drafts
-  const mergeRemoteWithOfflineDrafts = (
-    remoteItems: any[],
-    localItems: any[],
-    getKey: (item: any) => string | undefined
-  ): any[] => {
-    const validRemote = Array.isArray(remoteItems) ? remoteItems : [];
-    const validLocal = Array.isArray(localItems) ? localItems : [];
-
-    const map = new Map<string, any>();
-    validRemote.forEach(item => {
-      if (item) {
-        const key = getKey(item);
-        if (key) map.set(key, item);
-      }
-    });
-
-    // Preserve local items that are not present in remote (so local drafts/records are never erased)
-    validLocal.forEach(item => {
-      if (item) {
-        const key = getKey(item);
-        if (key && !map.has(key)) {
-          map.set(key, item);
-        }
-      }
-    });
-
-    return Array.from(map.values());
-  };
 
   // Load metrics and config settings
   const loadAppState = async () => {
@@ -242,68 +178,12 @@ export default function App() {
     }
 
     if (isRemoteSuccessful) {
-      const localSales = safeParseArray('lk_sales');
-      const localPurchases = safeParseArray('lk_purchases').filter((p: any) => !String(p?.id || '').startsWith('pb-sample-'));
-      const localExpenses = safeParseArray('lk_expenses');
-      const localProducts = safeParseArray('lk_products');
-      const localCustomers = safeParseArray('lk_customers');
-      const localSuppliers = safeParseArray('lk_suppliers');
-
-      const mergedSales = salesData !== null 
-        ? mergeRemoteWithOfflineDrafts(salesData, localSales, s => s.invoice_number || s.id)
-        : localSales;
-
-      const mergedPurchases = purchData !== null 
-        ? mergeRemoteWithOfflineDrafts(purchData, localPurchases, p => p.bill_number || p.id)
-        : localPurchases;
-
-      const mergedExpenses = expData !== null 
-        ? mergeRemoteWithOfflineDrafts(expData, localExpenses, e => e.id)
-        : localExpenses;
-
-      const mergedProducts = prodData !== null 
-        ? mergeRemoteWithOfflineDrafts(prodData, localProducts, p => p.id)
-        : localProducts;
-
-      const mergedCustomers = custData !== null 
-        ? mergeRemoteWithOfflineDrafts(custData, localCustomers, c => c.id)
-        : localCustomers;
-
-      const mergedSuppliers = supData !== null 
-        ? mergeRemoteWithOfflineDrafts(supData, localSuppliers, s => s.id)
-        : localSuppliers;
-
-      setSales(mergedSales);
-      setPurchases(mergedPurchases);
-      setExpenses(mergedExpenses);
-      setProductsList(mergedProducts);
-      setCustomersList(mergedCustomers);
-      setSuppliersList(mergedSuppliers);
-
-      // Atomic cache update
-      saveLocalCache({
-        sales: mergedSales,
-        purchases: mergedPurchases,
-        expenses: mergedExpenses,
-        products: mergedProducts,
-        customers: mergedCustomers,
-        suppliers: mergedSuppliers
-      });
-    } else {
-      // Offline fallback: restore from validated local cache
-      const cachedSales = safeParseArray('lk_sales');
-      const cachedPurchases = safeParseArray('lk_purchases').filter((p: any) => !String(p?.id || '').startsWith('pb-sample-'));
-      const cachedExpenses = safeParseArray('lk_expenses');
-      const cachedProducts = safeParseArray('lk_products');
-      const cachedCustomers = safeParseArray('lk_customers');
-      const cachedSuppliers = safeParseArray('lk_suppliers');
-
-      setSales(cachedSales);
-      setPurchases(cachedPurchases);
-      setExpenses(cachedExpenses);
-      setProductsList(cachedProducts);
-      setCustomersList(cachedCustomers);
-      setSuppliersList(cachedSuppliers);
+      setSales(salesData || []);
+      setPurchases(purchData || []);
+      setExpenses(expData || []);
+      setProductsList(prodData || []);
+      setCustomersList(custData || []);
+      setSuppliersList(supData || []);
     }
   };
 
@@ -542,10 +422,8 @@ export default function App() {
   
   const getCustomerDues = () => {
     try {
-      const c = localStorage.getItem('lk_customers');
-      if (c) {
-        const parsed = JSON.parse(c);
-        return parsed.reduce((acc: number, item: any) => acc + Number(item.outstanding || 0), 0);
+      if (Array.isArray(customersList) && customersList.length > 0) {
+        return customersList.reduce((acc: number, item: any) => acc + Number(item.outstanding || 0), 0);
       }
     } catch(e){}
     return 0;
@@ -553,10 +431,8 @@ export default function App() {
 
   const getSupplierDues = () => {
     try {
-      const s = localStorage.getItem('lk_suppliers');
-      if (s) {
-        const parsed = JSON.parse(s);
-        return parsed.reduce((acc: number, item: any) => acc + Number(item.outstanding || 0), 0);
+      if (Array.isArray(suppliersList) && suppliersList.length > 0) {
+        return suppliersList.reduce((acc: number, item: any) => acc + Number(item.outstanding || 0), 0);
       }
     } catch(e){}
     return 0;
@@ -1383,5 +1259,13 @@ export default function App() {
         }}
       />
     </div>
+  );
+}
+
+export default function AppWrapper() {
+  return (
+    <ErpDataProvider>
+      <App />
+    </ErpDataProvider>
   );
 }
