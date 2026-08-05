@@ -36,28 +36,36 @@ export function useSuppliers(tenantId: string) {
 
     try {
       const isExisting = contextSuppliers.some(s => s.id === supplierId);
+      let res;
       if (isExisting) {
-        await SupplierService.updateSupplier(supplierId, cleanPayload);
+        res = await SupplierService.updateSupplier(supplierId, cleanPayload);
       } else {
-        await SupplierService.createSupplier(cleanPayload);
+        res = await SupplierService.createSupplier(cleanPayload);
+      }
+      if (res.error) {
+        throw new Error(res.error);
       }
       await refreshAllData();
-    } catch (err) {
-      console.warn('Supplier save exception:', err);
+      return res.data || cleanPayload;
+    } catch (err: any) {
+      console.error('Supplier save error:', err.message || err);
+      throw err;
     } finally {
       setIsSaving(false);
     }
-
-    return cleanPayload;
   };
 
   const deleteSupplier = async (supplierId: string) => {
     setIsDeleting(true);
     try {
-      await SupplierService.deleteSupplier(supplierId);
+      const res = await SupplierService.deleteSupplier(supplierId);
+      if (res.error) {
+        throw new Error(res.error);
+      }
       await refreshAllData();
-    } catch (err) {
-      console.warn('Supplier delete exception:', err);
+    } catch (err: any) {
+      console.error('Supplier delete error:', err.message || err);
+      throw err;
     } finally {
       setIsDeleting(false);
     }

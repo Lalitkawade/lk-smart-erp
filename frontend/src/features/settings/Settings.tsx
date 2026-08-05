@@ -119,7 +119,7 @@ export default function Settings({ tenantId, onSettingsSaved }: SettingsProps) {
 
       if (tenantErr) throw tenantErr;
 
-      await SettingsService.saveSettings({
+      const res = await SettingsService.saveSettings({
         tenant_id: tenantId,
         invoice_prefix: invoicePrefix,
         gstin: gstin,
@@ -127,6 +127,9 @@ export default function Settings({ tenantId, onSettingsSaved }: SettingsProps) {
         logo_url: logoUrl,
         business_type: 'Hardware Shop'
       });
+      if (res.error) {
+        throw new Error(res.error);
+      }
       await refreshAllData();
       
       // Sync with active session tenant name so sidebars update instantly

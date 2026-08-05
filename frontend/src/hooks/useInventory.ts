@@ -73,28 +73,36 @@ export function useInventory(tenantId: string, _businessType?: string) {
 
     try {
       const isExisting = contextProducts.some(p => p.id === productId);
+      let res;
       if (isExisting) {
-        await ProductService.updateProduct(productId, cleanPayload);
+        res = await ProductService.updateProduct(productId, cleanPayload);
       } else {
-        await ProductService.createProduct(cleanPayload);
+        res = await ProductService.createProduct(cleanPayload);
+      }
+      if (res.error) {
+        throw new Error(res.error);
       }
       await refreshAllData();
-    } catch (err) {
-      console.warn('Product save exception:', err);
+      return res.data || cleanPayload;
+    } catch (err: any) {
+      console.error('Product save error:', err.message || err);
+      throw err;
     } finally {
       setIsSaving(false);
     }
-
-    return cleanPayload;
   };
 
   const deleteProduct = async (productId: string) => {
     setIsDeleting(true);
     try {
-      await ProductService.deleteProduct(productId);
+      const res = await ProductService.deleteProduct(productId);
+      if (res.error) {
+        throw new Error(res.error);
+      }
       await refreshAllData();
-    } catch (err) {
-      console.warn('Product delete exception:', err);
+    } catch (err: any) {
+      console.error('Product delete error:', err.message || err);
+      throw err;
     } finally {
       setIsDeleting(false);
     }

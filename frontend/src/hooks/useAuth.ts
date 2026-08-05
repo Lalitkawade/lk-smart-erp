@@ -1,264 +1,251 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../api/supabase';
 import type { Profile, Tenant } from '../types/erp.types';
 import { authRateLimiter } from '../utils/rateLimiter';
-
-const DEFAULT_FALLBACK_TENANT_ID = 'default-hardware-erp';
 
 export function useAuth() {
   const [user, setUser] = useState<any | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [tenant, setTenant] = useState<Tenant | null>(null);
+  const [hasTenants, setHasTenants] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Load local auth session on mount & configure live listener
-  useEffect(() => {
-    const sessionStr = localStorage.getItem('lk_session');
-    if (sessionStr) {
-      try {
-        const session = JSON.parse(sessionStr);
-        if (session && session.user) {
-          setUser(session.user);
-          setProfile(session.profile || null);
-          setTenant(session.tenant || null);
-        }
-      } catch (e) {
-        localStorage.removeItem('lk_session');
-      }
+  // Helper to load user profile & tenant from Supabase DB
+  const loadUserContext = useCallback(async (authUser: any) => {
+    if (!authUser || !authUser.id) {
+      setUser(null);
+      setProfile(null);
+      setTenant(null);
+      return;
     }
-    setLoading(false);
 
-    // Sync state with live Supabase authentication state shifts
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_OUT' || !session?.user) {
-        setUser(null);
-        setProfile(null);
-        setTenant(null);
-        localStorage.removeItem('lk_session');
-        return;
-      }
+    try {
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', authUser.id)
+        .maybeSingle();
 
-      try {
-        const { data: profileData } = await supabase
-          .from('profiles')
+      let tenantData: Tenant | null = null;
+      if (profileData?.tenant_id) {
+        const { data: tData } = await supabase
+          .from('tenants')
           .select('*')
-          .eq('id', session.user.id)
+          .eq('id', profileData.tenant_id)
           .maybeSingle();
-
-        let tenantData: Tenant | null = null;
-        if (profileData && profileData.tenant_id) {
-          const { data: tData } = await supabase
-            .from('tenants')
-            .select('*')
-            .eq('id', profileData.tenant_id)
-            .maybeSingle();
-          tenantData = tData;
-        }
-
-        const fallbackUsername = session.user.email ? session.user.email.split('@')[0].toUpperCase() : 'OPERATOR';
-        const activeProfile: Profile = profileData || {
-          id: session.user.id,
-          tenant_id: DEFAULT_FALLBACK_TENANT_ID,
-          username: fallbackUsername,
-          role: 'Owner',
-          status: 'Active',
-          created_at: new Date().toISOString()
-        };
-
-        const activeTenant: Tenant = tenantData || {
-          id: DEFAULT_FALLBACK_TENANT_ID,
-          company_code: 'LKHARDWARE',
-          company_name: 'Maharudra Hardware',
-          owner_name: 'Store Owner',
-          owner_email: session.user.email || '',
-          plan: 'Enterprise',
-          status: 'Active',
-          created_at: new Date().toISOString()
-        };
-
-        setUser(session.user);
-        setProfile(activeProfile);
-        setTenant(activeTenant);
-
-        localStorage.setItem('lk_session', JSON.stringify({
-          user: session.user,
-          profile: activeProfile,
-          tenant: activeTenant
-        }));
-      } catch (e) {
-        console.warn('onAuthStateChange fallback:', e);
-        const fallbackProfile: Profile = {
-          id: session.user.id,
-          tenant_id: DEFAULT_FALLBACK_TENANT_ID,
-          username: session.user.email ? session.user.email.split('@')[0].toUpperCase() : 'OPERATOR',
-          role: 'Owner',
-          status: 'Active',
-          created_at: new Date().toISOString()
-        };
-        const fallbackTenant: Tenant = {
-          id: DEFAULT_FALLBACK_TENANT_ID,
-          company_code: 'LKHARDWARE',
-          company_name: 'Maharudra Hardware',
-          owner_name: 'Store Owner',
-          owner_email: session.user.email || '',
-          plan: 'Enterprise',
-          status: 'Active',
-          created_at: new Date().toISOString()
-        };
-
-        setUser(session.user);
-        setProfile(fallbackProfile);
-        setTenant(fallbackTenant);
-
-        localStorage.setItem('lk_session', JSON.stringify({
-          user: session.user,
-          profile: fallbackProfile,
-          tenant: fallbackTenant
-        }));
+        tenantData = tData;
       }
-    });
 
-    return () => subscription.unsubscribe();
+      setUser(authUser);
+      setProfile(profileData as Profile || null);
+      setTenant(tenantData as Tenant || null);
+    } catch (err) {
+      console.error('Error loading user context:', err);
+    }
   }, []);
 
-  const signIn = async (email: string, password: string, role: string) => {
+  // Check if system has any registered tenants in Supabase DB
+  const checkTenantCount = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.from('tenants').select('id').limit(1);
+      if (!error) {
+        setHasTenants(data && data.length > 0);
+      }
+    } catch (e) {
+      console.warn('Tenant count check error:', e);
+    }
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function initializeAuth() {
+      await checkTenantCount();
+
+      // 1. Restore session directly from Supabase Auth client storage
+      const { data: { session } } = await supabase.auth.getSession();
+      if (mounted) {
+        if (session?.user) {
+          await loadUserContext(session.user);
+        } else {
+          setUser(null);
+          setProfile(null);
+          setTenant(null);
+        }
+        setLoading(false);
+      }
+
+      // 2. Register live listener for auth state shifts
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+        if (!mounted) return;
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') {
+          if (session?.user) {
+            await loadUserContext(session.user);
+          } else {
+            setUser(null);
+            setProfile(null);
+            setTenant(null);
+          }
+        } else if (event === 'SIGNED_OUT' || !session?.user) {
+          setUser(null);
+          setProfile(null);
+          setTenant(null);
+        }
+        setLoading(false);
+      });
+
+      return () => {
+        subscription.unsubscribe();
+      };
+    }
+
+    initializeAuth();
+
+    return () => {
+      mounted = false;
+    };
+  }, [checkTenantCount, loadUserContext]);
+
+  // Standard Login Handler using Supabase Auth
+  const signIn = async (email: string, password: string, _role?: string) => {
     setLoading(true);
     try {
-      // 1. Validate inputs securely
       if (!email || !password) {
         throw new Error('Email and password are required.');
       }
 
-      // 2. Rate limiting check to prevent brute force attempts
       if (!authRateLimiter.isAllowed(email.toLowerCase(), { maxAttempts: 5, windowMs: 60000 })) {
         throw new Error('Too many login attempts. Please wait 1 minute before trying again.');
       }
 
-      // 3. Authenticate with Supabase Auth
-      let { data, error } = await supabase.auth.signInWithPassword({ email, password });
-
-      // If user doesn't exist yet, attempt registration
-      if (error && (error.message.includes('User not found') || error.message.includes('Invalid login credentials'))) {
-        const signupRes = await supabase.auth.signUp({ email, password });
-        if (signupRes.error) {
-          throw new Error('Invalid email or password. Please verify your credentials.');
-        }
-        data = { user: signupRes.data.user, session: signupRes.data.session } as any;
-        error = null;
-      } else if (error) {
-        throw new Error(error.message || 'Authentication failed');
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) {
+        throw new Error(error.message || 'Invalid login credentials.');
       }
 
       if (!data?.user) {
-        throw new Error('Authentication failed: No user returned');
+        throw new Error('Authentication failed: No user session returned.');
       }
 
-      const userId = data.user.id;
-
-      // Fetch or provision profile & tenant records
-      let { data: profileData } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
-
-      let tenantData: Tenant | null = null;
-
-      if (!profileData) {
-        const { data: existingTenants } = await supabase
-          .from('tenants')
-          .select('*')
-          .limit(1);
-
-        let tenantId = '';
-        if (existingTenants && existingTenants.length > 0) {
-          tenantData = existingTenants[0];
-          tenantId = tenantData.id;
-        } else {
-          const { data: newTenant, error: createTenErr } = await supabase
-            .from('tenants')
-            .insert({
-              company_code: 'LKHARDWARE',
-              company_name: 'Maharudra Hardware',
-              owner_name: 'Store Owner',
-              owner_email: email,
-              plan: 'Enterprise',
-              status: 'Active'
-            })
-            .select()
-            .single();
-
-          if (createTenErr) throw createTenErr;
-          tenantData = newTenant;
-          tenantId = newTenant.id;
-
-          await supabase.from('settings').insert({
-            tenant_id: tenantId,
-            invoice_prefix: 'INV',
-            gstin: '27LKSERP401Z2B5',
-            address: '123 Market Road, Pune, Maharashtra',
-            currency: 'INR'
-          });
-        }
-
-        const { data: newProfile, error: createProfErr } = await supabase
-          .from('profiles')
-          .insert({
-            id: userId,
-            tenant_id: tenantId,
-            username: email.split('@')[0].toUpperCase(),
-            role: role || 'Owner',
-            status: 'Active'
-          })
-          .select()
-          .single();
-
-        if (createProfErr) throw createProfErr;
-        profileData = newProfile;
-      } else if (profileData.tenant_id) {
-        const { data: tenantFetch } = await supabase
-          .from('tenants')
-          .select('*')
-          .eq('id', profileData.tenant_id)
-          .single();
-
-        if (tenantFetch) {
-          tenantData = tenantFetch;
-        }
-      }
-
-      const activeProfile: Profile = profileData || {
-        id: data.user.id,
-        tenant_id: DEFAULT_FALLBACK_TENANT_ID,
-        username: (email.split('@')[0] || 'OPERATOR').toUpperCase(),
-        role: role || 'Owner',
-        status: 'Active',
-        created_at: new Date().toISOString()
-      };
-
-      const activeTenant: Tenant = tenantData || {
-        id: DEFAULT_FALLBACK_TENANT_ID,
-        company_code: 'LKHARDWARE',
-        company_name: 'Maharudra Hardware',
-        owner_name: 'Store Owner',
-        owner_email: email,
-        plan: 'Enterprise',
-        status: 'Active',
-        created_at: new Date().toISOString()
-      };
-
-      // Clear rate limiter on successful authentication
       authRateLimiter.reset(email.toLowerCase());
-
-      setUser(data.user);
-      setProfile(activeProfile);
-      setTenant(activeTenant);
-
-      const session = { user: data.user, profile: activeProfile, tenant: activeTenant };
-      localStorage.setItem('lk_session', JSON.stringify(session));
-      return session;
+      await loadUserContext(data.user);
+      return data.user;
     } catch (err: any) {
-      console.error('Authentication Error:', err?.message || err);
+      console.error('Sign In Error:', err.message || err);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // First-Time Provisioning Wizard Handler
+  const provisionFirstTimeOwner = async (data: {
+    companyName: string;
+    companyCode: string;
+    ownerName: string;
+    ownerEmail: string;
+    password: string;
+  }) => {
+    setLoading(true);
+    try {
+      const { companyName, companyCode, ownerName, ownerEmail, password } = data;
+
+      if (!companyName || !ownerEmail || !password) {
+        throw new Error('Company name, owner email, and password are required.');
+      }
+
+      // 1. Register Owner Auth User in Supabase Auth first so auth.uid() is active
+      let authUser: any = null;
+      const { data: signUpRes, error: signUpErr } = await supabase.auth.signUp({
+        email: ownerEmail,
+        password: password
+      });
+
+      if (signUpErr && signUpErr.message.includes('already registered')) {
+        const { data: loginData, error: loginErr } = await supabase.auth.signInWithPassword({
+          email: ownerEmail,
+          password: password
+        });
+        if (loginErr) throw new Error('Account exists but sign in failed: ' + loginErr.message);
+        authUser = loginData.user;
+      } else if (signUpErr) {
+        throw new Error('Failed to register Auth user: ' + signUpErr.message);
+      } else {
+        authUser = signUpRes.user;
+        if (!authUser) {
+          const { data: loginData } = await supabase.auth.signInWithPassword({
+            email: ownerEmail,
+            password: password
+          });
+          authUser = loginData?.user;
+        }
+      }
+
+      if (!authUser) {
+        throw new Error('Auth registration completed but user instance could not be retrieved.');
+      }
+
+      // 2. Create Tenant Record
+      const tenantId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : '00000000-0000-4000-8000-000000000001';
+      const { data: newTenant, error: tenErr } = await supabase
+        .from('tenants')
+        .insert({
+          id: tenantId,
+          company_code: companyCode || 'LKHARDWARE',
+          company_name: companyName,
+          owner_name: ownerName,
+          owner_email: ownerEmail,
+          plan: 'Enterprise',
+          status: 'Active'
+        })
+        .select()
+        .single();
+
+      if (tenErr) {
+        throw new Error('Failed to create tenant: ' + tenErr.message);
+      }
+
+      // 3. Create Profile Linked to Tenant
+      const { data: newProfile, error: profErr } = await supabase
+        .from('profiles')
+        .insert({
+          id: authUser.id,
+          tenant_id: newTenant.id,
+          username: ownerName.toUpperCase() || 'OWNER',
+          role: 'Owner',
+          status: 'Active'
+        })
+        .select()
+        .single();
+
+      if (profErr) {
+        console.warn('Profile creation warning:', profErr.message);
+      }
+
+      // 4. Create Initial Store Settings
+      await supabase.from('settings').insert({
+        tenant_id: newTenant.id,
+        invoice_prefix: 'INV',
+        gstin: '27LKSERP401Z2B5',
+        address: 'Main Store Location',
+        currency: 'INR',
+        business_type: 'Hardware Shop'
+      });
+
+      // 5. Sign user in to activate session
+      await supabase.auth.signInWithPassword({
+        email: ownerEmail,
+        password: password
+      });
+
+      setUser(authUser);
+      setProfile(newProfile as Profile || { id: authUser.id, tenant_id: newTenant.id, username: ownerName, role: 'Owner', status: 'Active', created_at: new Date().toISOString() });
+      setTenant(newTenant as Tenant);
+      setHasTenants(true);
+
+      return { user: authUser, tenant: newTenant, profile: newProfile };
+    } catch (err: any) {
+      console.error('Provisioning Error:', err.message || err);
       throw err;
     } finally {
       setLoading(false);
@@ -268,7 +255,9 @@ export function useAuth() {
   const signOut = async () => {
     try {
       await supabase.auth.signOut();
-    } catch (e) {}
+    } catch (e) {
+      console.warn('Sign Out Warning:', e);
+    }
     setUser(null);
     setProfile(null);
     setTenant(null);
@@ -279,8 +268,10 @@ export function useAuth() {
     user,
     profile,
     tenant,
+    hasTenants,
     loading,
     signIn,
+    provisionFirstTimeOwner,
     signOut,
     isAdmin: profile?.role === 'Platform Super Admin' || profile?.role === 'Company Owner' || profile?.role === 'Owner'
   };

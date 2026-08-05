@@ -62,7 +62,7 @@ export default function Expenses({ autoOpenModal, onModalClosed }: ExpensesProps
     if (formData.amount <= 0) return;
 
     try {
-      await ExpenseService.createExpense({
+      const res = await ExpenseService.createExpense({
         tenant_id: '00000000-0000-0000-0000-000000000000',
         category: formData.category,
         amount: Number(formData.amount),
@@ -71,22 +71,29 @@ export default function Expenses({ autoOpenModal, onModalClosed }: ExpensesProps
         description: formData.description,
         expense_date: new Date(formData.expense_date).toISOString()
       });
+      if (res.error) {
+        alert('Failed to record expense: ' + res.error);
+        return;
+      }
       await refreshAllData();
-    } catch (err) {
-      console.warn('Expense save exception:', err);
+      setModalOpen(false);
+      alert('Expense successfully recorded.');
+    } catch (err: any) {
+      alert('Failed to record expense: ' + (err.message || err));
     }
-
-    setModalOpen(false);
-    alert('Expense successfully recorded.');
   };
 
   const handleDeleteExpense = async (id: string) => {
     if (!window.confirm('Delete this expense entry?')) return;
     try {
-      await ExpenseService.deleteExpense(id);
+      const res = await ExpenseService.deleteExpense(id);
+      if (res.error) {
+        alert('Failed to delete expense: ' + res.error);
+        return;
+      }
       await refreshAllData();
-    } catch (err) {
-      console.warn('Expense delete exception:', err);
+    } catch (err: any) {
+      alert('Failed to delete expense: ' + (err.message || err));
     }
   };
 

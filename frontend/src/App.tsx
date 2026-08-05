@@ -15,6 +15,7 @@ const ExcelExport = lazy(() => import('./features/export/ExcelExport'));
 const Expenses = lazy(() => import('./features/expenses/Expenses'));
 const DemandModal = lazy(() => import('./features/demands/DemandModal'));
 
+import SetupWizard from './features/auth/SetupWizard';
 import { useDemandTracker } from './hooks/useDemandTracker';
 import type { SalesInvoice, PurchaseBill, Expense } from './types/erp.types';
 import { t, Language } from './utils/i18n';
@@ -36,7 +37,7 @@ const SectionSkeleton = () => (
 );
 
 function App() {
-  const { user, profile, tenant, loading, signIn, signOut } = useAuth();
+  const { user, profile, tenant, hasTenants, loading, signIn, provisionFirstTimeOwner, signOut } = useAuth();
   const { highDemandAlerts } = useDemandTracker(tenant?.id);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [theme, setTheme] = useState(localStorage.getItem('lk_theme') || 'light');
@@ -310,11 +311,16 @@ function App() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center space-y-4">
-        <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-        <span className="text-sm font-semibold text-slate-400">Loading Enterprise Portal...</span>
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 gap-4">
+        <div className="w-12 h-12 border-4 border-amber-500/20 border-t-amber-500 rounded-full animate-spin"></div>
+        <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Connecting to Live Supabase Auth...</span>
       </div>
     );
+  }
+
+  // First-Time Setup Wizard (Renders when database has 0 tenants)
+  if (hasTenants === false) {
+    return <SetupWizard onComplete={provisionFirstTimeOwner} />;
   }
 
   // Operator Login Panel

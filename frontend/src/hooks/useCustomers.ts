@@ -37,28 +37,36 @@ export function useCustomers(tenantId: string) {
 
     try {
       const isExisting = contextCustomers.some(c => c.id === customerId);
+      let res;
       if (isExisting) {
-        await CustomerService.updateCustomer(customerId, cleanPayload);
+        res = await CustomerService.updateCustomer(customerId, cleanPayload);
       } else {
-        await CustomerService.createCustomer(cleanPayload);
+        res = await CustomerService.createCustomer(cleanPayload);
+      }
+      if (res.error) {
+        throw new Error(res.error);
       }
       await refreshAllData();
-    } catch (err) {
-      console.warn('Customer save exception:', err);
+      return res.data || cleanPayload;
+    } catch (err: any) {
+      console.error('Customer save error:', err.message || err);
+      throw err;
     } finally {
       setIsSaving(false);
     }
-
-    return cleanPayload;
   };
 
   const deleteCustomer = async (customerId: string) => {
     setIsDeleting(true);
     try {
-      await CustomerService.deleteCustomer(customerId);
+      const res = await CustomerService.deleteCustomer(customerId);
+      if (res.error) {
+        throw new Error(res.error);
+      }
       await refreshAllData();
-    } catch (err) {
-      console.warn('Customer delete exception:', err);
+    } catch (err: any) {
+      console.error('Customer delete error:', err.message || err);
+      throw err;
     } finally {
       setIsDeleting(false);
     }

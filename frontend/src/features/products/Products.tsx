@@ -789,11 +789,11 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
   const handleDeleteProduct = async (pId: string) => {
     if (!window.confirm('Delete this product item?')) return;
     try {
-      deleteProduct(pId);
+      await deleteProduct(pId);
       triggerToast('Product item removed');
       window.dispatchEvent(new Event('storage'));
     } catch (err: any) {
-      triggerToast(err.message);
+      triggerToast('⚠️ Delete failed: ' + err.message);
     }
   };
 
