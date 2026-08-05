@@ -71,8 +71,7 @@ export class SaleService {
     if (itemsPayload && itemsPayload.length > 0) {
       const cleanItems = itemsPayload.map(item => ({
         ...item,
-        invoice_id: newSale.id,
-        tenant_id: newSale.tenant_id
+        invoice_id: newSale.id
       }));
 
       const itemsRes = await handleServiceCall<SalesItemRow[]>(

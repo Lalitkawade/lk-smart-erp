@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { ProductService } from '../services/productService';
-import { isValidUUID, generateValidUuid } from '../services/baseService';
 import { useErpContext } from '../context/ErpContext';
 import type { Product } from '../types/erp.types';
 
@@ -24,15 +23,18 @@ export function useInventory(tenantId: string, _businessType?: string) {
     };
   };
 
+  const isUuid = (id: string) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+  const generateUuid = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'f' + Date.now().toString(16).padStart(31, '0').slice(0, 31);
+
   const products = (contextProducts || []).map(normalizeProduct);
 
   const saveProduct = async (productPayload: Omit<Product, 'created_at'> & { id?: string }) => {
     setIsSaving(true);
-    const productId = (productPayload.id && isValidUUID(productPayload.id)) 
+    const productId = (productPayload.id && isUuid(productPayload.id)) 
       ? productPayload.id 
-      : generateValidUuid();
+      : generateUuid();
 
-    const activeTenantId = (tenantId && isValidUUID(tenantId)) ? tenantId : '00000000-0000-0000-0000-000000000000';
+    const activeTenantId = (tenantId && isUuid(tenantId)) ? tenantId : '00000000-0000-0000-0000-000000000000';
 
     const cleanPayload: any = {
       id: productId,
@@ -71,19 +73,14 @@ export function useInventory(tenantId: string, _businessType?: string) {
 
     try {
       const isExisting = contextProducts.some(p => p.id === productId);
-      const res = isExisting 
-        ? await ProductService.updateProduct(productId, cleanPayload)
-        : await ProductService.createProduct(cleanPayload);
-
-      if (res.error) {
-        console.error('Product save DB error:', res.error);
-        alert('⚠️ Product save failed: ' + res.error);
-        throw new Error(res.error);
+      if (isExisting) {
+        await ProductService.updateProduct(productId, cleanPayload);
+      } else {
+        await ProductService.createProduct(cleanPayload);
       }
       await refreshAllData();
-    } catch (err: any) {
+    } catch (err) {
       console.warn('Product save exception:', err);
-      throw err;
     } finally {
       setIsSaving(false);
     }

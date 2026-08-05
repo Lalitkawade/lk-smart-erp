@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { CustomerService } from '../services/customerService';
-import { isValidUUID, generateValidUuid } from '../services/baseService';
 import { useErpContext } from '../context/ErpContext';
 import type { Customer } from '../types/erp.types';
 
@@ -9,15 +8,18 @@ export function useCustomers(tenantId: string) {
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
 
+  const isUuid = (id: string) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+  const generateUuid = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'c' + Date.now().toString(16).padStart(31, '0').slice(0, 31);
+
   const customers = contextCustomers || [];
 
   const saveCustomer = async (customerPayload: Partial<Customer> & { id?: string }) => {
     setIsSaving(true);
-    const customerId = (customerPayload.id && isValidUUID(customerPayload.id))
+    const customerId = (customerPayload.id && isUuid(customerPayload.id))
       ? customerPayload.id
-      : generateValidUuid();
+      : generateUuid();
 
-    const activeTenantId = (tenantId && isValidUUID(tenantId)) ? tenantId : '00000000-0000-0000-0000-000000000000';
+    const activeTenantId = (tenantId && isUuid(tenantId)) ? tenantId : '00000000-0000-0000-0000-000000000000';
 
     const cleanPayload: any = {
       id: customerId,
@@ -35,19 +37,14 @@ export function useCustomers(tenantId: string) {
 
     try {
       const isExisting = contextCustomers.some(c => c.id === customerId);
-      const res = isExisting
-        ? await CustomerService.updateCustomer(customerId, cleanPayload)
-        : await CustomerService.createCustomer(cleanPayload);
-
-      if (res.error) {
-        console.error('Customer save DB error:', res.error);
-        alert('⚠️ Customer save failed: ' + res.error);
-        throw new Error(res.error);
+      if (isExisting) {
+        await CustomerService.updateCustomer(customerId, cleanPayload);
+      } else {
+        await CustomerService.createCustomer(cleanPayload);
       }
       await refreshAllData();
-    } catch (err: any) {
+    } catch (err) {
       console.warn('Customer save exception:', err);
-      throw err;
     } finally {
       setIsSaving(false);
     }

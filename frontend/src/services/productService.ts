@@ -41,7 +41,7 @@ export class ProductService {
     let query = supabase
       .from('products')
       .select('*')
-      .or(`product_name.ilike.${term},category.ilike.${term},barcode.ilike.${term}`)
+      .or(`product_name.ilike.${term},category_name.ilike.${term},barcode.ilike.${term}`)
       .order('product_name', { ascending: true });
 
     if (tenantId) {

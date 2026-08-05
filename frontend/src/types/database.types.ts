@@ -104,6 +104,10 @@ export type ProductRow = {
   supplier_name?: string | null;
   supplier_phone?: string | null;
   created_at?: string;
+  updated_at?: string;
+  allow_decimal?: boolean | null;
+  allow_purchase_unit_selling?: boolean | null;
+  track_base_unit?: boolean | null;
 }
 export type ProductInsert = {
   id?: string;
@@ -142,6 +146,10 @@ export type ProductInsert = {
   supplier_name?: string | null;
   supplier_phone?: string | null;
   created_at?: string;
+  updated_at?: string;
+  allow_decimal?: boolean | null;
+  allow_purchase_unit_selling?: boolean | null;
+  track_base_unit?: boolean | null;
 }
 export type ProductUpdate = {
   id?: string;
@@ -179,6 +187,10 @@ export type ProductUpdate = {
   supplier_id?: string | null;
   supplier_name?: string | null;
   supplier_phone?: string | null;
+  updated_at?: string;
+  allow_decimal?: boolean | null;
+  allow_purchase_unit_selling?: boolean | null;
+  track_base_unit?: boolean | null;
 }
 
 // ==========================================
@@ -198,6 +210,11 @@ export type SalesInvoiceRow = {
   status?: string;
   sale_date?: string;
   created_at: string;
+  ref_number?: string | null;
+  subtotal?: number;
+  discount_amount?: number;
+  paid_amount?: number;
+  due_amount?: number;
 }
 export type SalesInvoiceInsert = {
   id?: string;
@@ -213,6 +230,11 @@ export type SalesInvoiceInsert = {
   status?: string;
   sale_date?: string;
   created_at?: string;
+  ref_number?: string | null;
+  subtotal?: number;
+  discount_amount?: number;
+  paid_amount?: number;
+  due_amount?: number;
 }
 export type SalesInvoiceUpdate = {
   invoice_number?: string;
@@ -225,6 +247,11 @@ export type SalesInvoiceUpdate = {
   payment_status?: string;
   status?: string;
   sale_date?: string;
+  ref_number?: string | null;
+  subtotal?: number;
+  discount_amount?: number;
+  paid_amount?: number;
+  due_amount?: number;
 }
 
 // ==========================================
@@ -479,6 +506,7 @@ export type CustomerRow = {
   credit_limit: number;
   outstanding: number;
   created_at: string;
+  updated_at?: string;
 }
 export type CustomerInsert = {
   id?: string;
@@ -491,6 +519,7 @@ export type CustomerInsert = {
   credit_limit?: number;
   outstanding?: number;
   created_at?: string;
+  updated_at?: string;
 }
 export type CustomerUpdate = {
   customer_name?: string;
@@ -500,6 +529,7 @@ export type CustomerUpdate = {
   dob?: string | null;
   credit_limit?: number;
   outstanding?: number;
+  updated_at?: string;
 }
 
 // ==========================================
@@ -544,6 +574,8 @@ export type SupplierRow = {
   establishment_date: string | null;
   outstanding: number;
   created_at: string;
+  updated_at?: string;
+  gstin?: string | null;
 }
 export type SupplierInsert = {
   id?: string;
@@ -556,6 +588,8 @@ export type SupplierInsert = {
   establishment_date?: string | null;
   outstanding?: number;
   created_at?: string;
+  updated_at?: string;
+  gstin?: string | null;
 }
 export type SupplierUpdate = {
   supplier_name?: string;
@@ -565,6 +599,8 @@ export type SupplierUpdate = {
   dob?: string | null;
   establishment_date?: string | null;
   outstanding?: number;
+  updated_at?: string;
+  gstin?: string | null;
 }
 
 // ==========================================
