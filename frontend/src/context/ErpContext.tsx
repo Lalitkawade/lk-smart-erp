@@ -39,7 +39,9 @@ export const ErpDataProvider: React.FC<{ children: ReactNode }> = ({ children })
   const tenantId = tenant?.id;
 
   const refreshAllData = async () => {
-    setIsLoading(true);
+    if (products.length === 0 && salesInvoices.length === 0) {
+      setIsLoading(true);
+    }
     try {
       const [salesRes, purchRes, expRes, prodRes, custRes, supRes, custPayRes, supPayRes, settingsRes] = await Promise.allSettled([
         supabase.from('sales_invoices').select('*, items:sales_items(*, product:products(*))').order('sale_date', { ascending: false }),

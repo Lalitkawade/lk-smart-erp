@@ -27,6 +27,7 @@ interface PaymentRecord {
   payment_mode: string;
   ref_number: string;
   payment_date: string;
+  customer_name?: string;
 }
 
 interface CustomersProps {
@@ -40,6 +41,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
   const tenantId = tenant?.id || 'default-hardware-erp';
   const { customers, isLoading, saveCustomer, deleteCustomer } = useCustomers(tenantId);
   const { customerPayments: contextCustomerPayments, sales: contextSales, refreshAllData } = useErpContext();
+  const sales: any[] = contextSales || [];
   const payments: PaymentRecord[] = contextCustomerPayments || [];
 
   const [search, setSearch] = useState('');
@@ -61,7 +63,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
   const [statementTab, setStatementTab] = useState<'ledger' | 'invoices' | 'products'>('ledger');
 
   // Filter Tab State
-  const [filterTab, setFilterTab] = useState<'all' | 'outstanding' | 'cleared' | 'recent' | 'high_udhar'>('all');
+  const [filterTab, setFilterTab] = useState<'all' | 'outstanding'>('all');
 
   // Form State
   const [formData, setFormData] = useState({
@@ -146,15 +148,21 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
       created_at: editingCustomer?.created_at
     };
 
-    setModalOpen(false);
-    triggerToast('⚡ Customer account saved successfully!');
-
-    await saveCustomer(customerPayload);
+    try {
+      await saveCustomer(customerPayload);
+      setModalOpen(false);
+      triggerToast('⚡ Customer account saved successfully!');
+    } catch (err: any) {
+      triggerToast('⚠️ Failed to save customer: ' + (err?.message || 'Error occurred'));
+    }
   };
 
   const handleDeleteCustomer = async (id: string) => {
     if (!window.confirm('Are you sure you want to delete this customer?')) return;
     try {
+      if (statementCustomer && statementCustomer.id === id) {
+        setStatementCustomer(null);
+      }
       await deleteCustomer(id);
       triggerToast('✓ Customer record deleted.');
     } catch (e: any) {
@@ -179,11 +187,12 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
     e.preventDefault();
     if (payFormData.amount <= 0) return;
 
-    const targetCustomer = customers.find(c => c.id === payFormData.customer_id);
+    const targetCustomer = masterCustomersList.find(c => c.id === payFormData.customer_id);
     if (!targetCustomer) return;
 
+    const currentUdhar = customerStatsMap.get(targetCustomer.id)?.realtimeOutstanding ?? Number(targetCustomer.outstanding || 0);
     const paidAmt = Number(payFormData.amount);
-    const newOutstanding = Math.max(0, Number(targetCustomer.outstanding || 0) - paidAmt);
+    const newOutstanding = Math.max(0, currentUdhar - paidAmt);
 
     const isUuid = (id: string) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
     const nowIso = new Date().toISOString();
@@ -221,18 +230,20 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
   // Raw Customer Invoices
   const rawCustomerInvoices = useMemo(() => {
     if (!statementCustomer) return [];
-    const allInvoices: any[] = contextSales || [];
-    return allInvoices.filter(i => 
+    return sales.filter(i => 
       i.customer_name && statementCustomer.customer_name &&
       i.customer_name.toUpperCase() === statementCustomer.customer_name.toUpperCase()
     );
-  }, [statementCustomer, contextSales]);
+  }, [statementCustomer, sales]);
 
   // Compile specific customer ledger entries (Invoice bills vs payment logs)
   const statementLedger = useMemo(() => {
     if (!statementCustomer) return [];
 
-    const customerPayments = payments.filter(p => p.customer_id === statementCustomer.id);
+    const customerPayments = payments.filter((p, index, self) => 
+      (p.customer_id === statementCustomer.id || (statementCustomer.customer_name && p.customer_name && p.customer_name.toUpperCase() === statementCustomer.customer_name.toUpperCase())) &&
+      self.findIndex(x => (x.id ? x.id === p.id : x === p)) === index
+    );
 
     // Merge & sort
     const ledger: Array<{ date: string; type: string; ref: string; amount: number; isCredit: boolean }> = [];
@@ -287,10 +298,6 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
     return Array.from(map.values()).sort((a, b) => b.totalSpent - a.totalSpent);
   }, [rawCustomerInvoices]);
 
-  const allSalesInvoices = useMemo(() => {
-    return contextSales || [];
-  }, [contextSales]);
-
   // Comprehensive Master Customer List (Combines registered customers + past invoice customer records)
   const masterCustomersList = useMemo(() => {
     const map = new Map<string, Customer>();
@@ -303,7 +310,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
     });
 
     // 2. Add customers who exist in sales invoices (e.g. Lalit Kawade, etc.)
-    allSalesInvoices.forEach((inv: any) => {
+    sales.forEach((inv: any) => {
       const name = (inv.customer_name || '').trim().toUpperCase();
       if (name && name !== 'CASH CUSTOMER') {
         if (!map.has(name)) {
@@ -330,7 +337,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
     });
 
     return Array.from(map.values());
-  }, [customers, allSalesInvoices]);
+  }, [customers, sales]);
 
   // Pre-calculate per-customer stats (total spent, dynamic realtime outstanding, last purchase date, last payment date)
   const customerStatsMap = useMemo(() => {
@@ -343,7 +350,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
 
     masterCustomersList.forEach(c => {
       const custNameUpper = c.customer_name.toUpperCase();
-      const custInvoices = allSalesInvoices.filter((inv: any) => 
+      const custInvoices = sales.filter((inv: any) => 
         inv.customer_name && inv.customer_name.toUpperCase() === custNameUpper
       );
       const custPayments = payments.filter((p: any) => 
@@ -364,11 +371,10 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
       const totalPaymentsReceived = custPayments.reduce((acc: number, p: any) => acc + Number(p.amount || 0), 0);
 
       // Compute dynamic realtime outstanding:
-      // If customer has sales invoices, use totalInvoiceDues - totalPaymentsReceived.
-      // Otherwise, use initial static opening balance - totalPaymentsReceived.
+      // Subtract totalPaymentsReceived from invoice dues or opening balance
       let realtimeOutstanding = 0;
       if (custInvoices.length > 0) {
-        realtimeOutstanding = Math.max(0, totalInvoiceDues);
+        realtimeOutstanding = Math.max(0, totalInvoiceDues - totalPaymentsReceived);
       } else {
         realtimeOutstanding = Math.max(0, Number(c.outstanding || 0) - totalPaymentsReceived);
       }
@@ -398,11 +404,11 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
     });
 
     return map;
-  }, [masterCustomersList, allSalesInvoices, payments]);
+  }, [masterCustomersList, sales, payments]);
 
   // Filter & sort customer records based on selected filter tab & search query
   const processedCustomers = useMemo(() => {
-    let list = masterCustomersList.filter(c => {
+    return masterCustomersList.filter(c => {
       const matchSearch = c.customer_name.toLowerCase().includes(search.toLowerCase()) ||
                           (c.phone && c.phone.includes(search));
       if (!matchSearch) return false;
@@ -411,22 +417,8 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
       const outstanding = stats ? stats.realtimeOutstanding : Number(c.outstanding || 0);
 
       if (filterTab === 'outstanding') return outstanding > 0;
-      if (filterTab === 'cleared') return outstanding <= 0;
       return true;
     });
-
-    if (filterTab === 'recent') {
-      return [...list].sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-    }
-    if (filterTab === 'high_udhar') {
-      return [...list].sort((a, b) => {
-        const statsA = customerStatsMap.get(a.id)?.realtimeOutstanding || Number(a.outstanding || 0);
-        const statsB = customerStatsMap.get(b.id)?.realtimeOutstanding || Number(b.outstanding || 0);
-        return statsB - statsA;
-      });
-    }
-
-    return list;
   }, [masterCustomersList, search, filterTab, customerStatsMap]);
 
   return (
@@ -456,7 +448,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
           className={`w-full py-2.5 px-2 rounded-t-xl transition flex items-center justify-center gap-1.5 cursor-pointer text-center ${filterTab === 'all' ? 'bg-secondary border-t-2 border-x border-primary text-primary font-extrabold shadow-2xs' : 'bg-background/50 border-t border-x border-border text-textMuted hover:text-foreground'}`}
         >
           <span className="truncate">👥 All Customers</span>
-          <span className="bg-background px-1.5 py-0.5 rounded text-[10px] text-foreground font-mono shrink-0">{customers.length}</span>
+          <span className="bg-background px-1.5 py-0.5 rounded text-[10px] text-foreground font-mono shrink-0">{masterCustomersList.length}</span>
         </button>
         <button
           type="button"
@@ -465,7 +457,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
         >
           <span className="truncate">⚠️ Pending Outstanding</span>
           <span className="bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold shrink-0">
-            {customers.filter(c => (customerStatsMap.get(c.id)?.realtimeOutstanding || Number(c.outstanding || 0)) > 0).length}
+            {masterCustomersList.filter(c => (customerStatsMap.get(c.id)?.realtimeOutstanding || Number(c.outstanding || 0)) > 0).length}
           </span>
         </button>
       </div>
@@ -508,7 +500,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                 </td>
               </tr>
             ) : processedCustomers.map((c) => {
-              const stats = customerStatsMap.get(c.id) || { totalPurchases: 0, realtimeOutstanding: Number(c.outstanding || 0), lastPurchaseDate: null, lastPaymentDate: null };
+              const stats = customerStatsMap.get(c.id)!;
               const hasUdhar = stats.realtimeOutstanding > 0;
 
               return (
@@ -729,7 +721,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
 
             {/* Target Customer Info Banner */}
             {(() => {
-              const targetCust = customers.find(c => c.id === payFormData.customer_id) || masterCustomersList.find(c => c.id === payFormData.customer_id);
+              const targetCust = masterCustomersList.find(c => c.id === payFormData.customer_id);
               if (!targetCust) return null;
 
               const stats = customerStatsMap.get(targetCust.id);
@@ -797,7 +789,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
 
               {/* Live Calculation Preview Banner */}
               {(() => {
-                const targetCust = customers.find(c => c.id === payFormData.customer_id) || masterCustomersList.find(c => c.id === payFormData.customer_id);
+                const targetCust = masterCustomersList.find(c => c.id === payFormData.customer_id);
                 if (!targetCust) return null;
                 const stats = customerStatsMap.get(targetCust.id);
                 const currentOutstanding = stats ? stats.realtimeOutstanding : Number(targetCust.outstanding || 0);

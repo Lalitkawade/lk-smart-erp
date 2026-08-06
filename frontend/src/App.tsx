@@ -1001,7 +1001,7 @@ function App() {
                 tenantId={tenant?.id || 'default-hardware-erp'} 
                 businessType={businessType as any} 
                 mode="catalog" 
-                autoOpenPurchaseModal={true} 
+                autoOpenPurchaseModal={purchaseAutoOpen} 
                 onModalClosed={() => setPurchaseAutoOpen(false)} 
               />
             )}

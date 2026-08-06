@@ -72,6 +72,11 @@ export class ProductService {
    * Delete a product by ID
    */
   static async deleteProduct(id: string): Promise<ServiceResponse<null>> {
+    try {
+      await supabase.from('purchase_items').update({ product_id: null }).eq('product_id', id);
+      await supabase.from('sales_items').update({ product_id: null }).eq('product_id', id);
+    } catch (e) {}
+
     return handleServiceCall(
       supabase.from('products').delete().eq('id', id)
     );

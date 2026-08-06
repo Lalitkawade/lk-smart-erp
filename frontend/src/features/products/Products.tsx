@@ -238,47 +238,64 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
     setProdSalesHistory(matchedSales);
 
     // 2. Purchases movement history from ErpContext
-
     const matchedPurchases: any[] = [];
+    const piecesPerPack = Math.max(1, Number(p.pieces_per_pack || 1));
+    const pieceCostRate = piecesPerPack > 1 ? (Number(p.purchase_price || 0) / piecesPerPack) : Number(p.purchase_price || 0);
+    const pieceSellingRate = Number(p.selling_price || (p as any).piece_selling_price || 0);
+
     purchasesList.forEach((bill: any) => {
+      const billProdId = bill.product_id;
+      const billProdName = bill.product_name || bill.item_name;
+      const isBillMatch = (billProdId && String(billProdId) === String(p.id)) ||
+        (billProdName && p.product_name && billProdName.toLowerCase().trim() === p.product_name.toLowerCase().trim());
+
       const lineItems = bill.items || bill.purchase_items || [];
-      if (!lineItems || lineItems.length === 0) {
-        const itemProdId = bill.product_id;
-        const itemProdName = bill.product_name;
-        const isMatch = (itemProdId && String(itemProdId) === String(p.id)) ||
-          (itemProdName && p.product_name && itemProdName.toLowerCase().trim() === p.product_name.toLowerCase().trim());
-        if (isMatch) {
-          matchedPurchases.push({
-            date: bill.purchase_date || bill.created_at || new Date().toISOString(),
-            bill_number: bill.bill_number || bill.id || 'N/A',
-            supplier_name: bill.supplier_name || 'Vendor Supplier',
-            payment_mode: bill.payment_mode || 'Cash',
-            qty: Number(bill.qty || bill.quantity || 1),
-            rate: Number(bill.rate || bill.price || bill.purchase_price || 0),
-            selling_price: Number(bill.selling_price || p.selling_price || 0),
-            amount: Number(bill.amount || bill.total_amount || (bill.qty * bill.rate) || 0)
-          });
-        }
-      } else {
+      if (lineItems.length > 0) {
         lineItems.forEach((item: any) => {
-          const itemProdId = item.product_id || item.product?.id;
-          const itemProdName = item.product_name || item.product?.product_name;
+          const itemProdId = item.product_id || item.product?.id || billProdId;
+          const itemProdName = item.product_name || item.product?.product_name || billProdName;
 
           const isMatch = (itemProdId && String(itemProdId) === String(p.id)) ||
-            (itemProdName && p.product_name && itemProdName.toLowerCase().trim() === p.product_name.toLowerCase().trim());
+            (itemProdName && p.product_name && itemProdName.toLowerCase().trim() === p.product_name.toLowerCase().trim()) ||
+            isBillMatch;
 
           if (isMatch) {
+            const rawQty = Number(item.qty || item.quantity || 1);
+            const rawRate = Number(item.rate || item.price || 0);
+            const rawAmount = Number(item.amount || (rawQty * rawRate) || 0);
+
+            const baseQty = (rawRate > 0 && Math.abs(rawAmount - (rawQty * pieceCostRate)) < 0.01) ? rawQty : (rawQty * piecesPerPack);
+            const effectiveRate = baseQty > 0 ? (rawAmount / baseQty) : pieceCostRate;
+
             matchedPurchases.push({
               date: bill.purchase_date || bill.created_at || new Date().toISOString(),
               bill_number: bill.bill_number || bill.id || 'N/A',
               supplier_name: bill.supplier_name || 'Generic Supplier',
               payment_mode: bill.payment_mode || 'N/A',
-              qty: Number(item.qty || item.quantity || 1),
-              rate: Number(item.rate || item.price || 0),
-              selling_price: Number(item.selling_price || p.selling_price || 0),
-              amount: Number(item.amount || (item.qty * item.rate))
+              qty: baseQty,
+              rate: effectiveRate,
+              selling_price: pieceSellingRate,
+              amount: rawAmount
             });
           }
+        });
+      } else if (isBillMatch) {
+        const rawQty = Number(bill.qty || bill.quantity || 1);
+        const rawRate = Number(bill.rate || bill.price || bill.purchase_price || 0);
+        const rawAmount = Number(bill.amount || bill.total_amount || (rawQty * rawRate) || 0);
+
+        const baseQty = (rawRate > 0 && Math.abs(rawAmount - (rawQty * pieceCostRate)) < 0.01) ? rawQty : (rawQty * piecesPerPack);
+        const effectiveRate = baseQty > 0 ? (rawAmount / baseQty) : pieceCostRate;
+
+        matchedPurchases.push({
+          date: bill.purchase_date || bill.created_at || new Date().toISOString(),
+          bill_number: bill.bill_number || bill.id || 'N/A',
+          supplier_name: bill.supplier_name || 'Vendor Supplier',
+          payment_mode: bill.payment_mode || 'Cash',
+          qty: baseQty,
+          rate: effectiveRate,
+          selling_price: pieceSellingRate,
+          amount: rawAmount
         });
       }
     });
@@ -296,25 +313,16 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
         supplier_name: p.supplier_name || 'Store Catalog Inflow',
         payment_mode: 'Catalog Opening',
         qty: initialOpeningQty,
-        rate: Number(p.purchase_price || 0),
-        selling_price: Number(p.selling_price || 0),
-        amount: initialOpeningQty * Number(p.purchase_price || 0)
+        rate: pieceCostRate,
+        selling_price: pieceSellingRate,
+        amount: initialOpeningQty * pieceCostRate
       });
     }
 
     matchedPurchases.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     setProdPurchaseHistory(matchedPurchases);
 
-    // Compute live net sum stock: total inflows minus total sales
-    const finalInflowsSum = matchedPurchases.reduce((sum, pb) => sum + Number(pb.qty || 0), 0);
-    const liveCalculatedStock = Math.max(0, finalInflowsSum - totalSoldQty);
-
-    // Reconcile and update product stock in state and local cache
-    const reconciledProduct = {
-      ...p,
-      current_stock: liveCalculatedStock
-    };
-    setSelectedHistoryProduct(reconciledProduct);
+    setSelectedHistoryProduct(p);
 
     setHistoryModalOpen(true);
   };
@@ -443,6 +451,18 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
       const updatedPaid = Number(editBillData.paid_amount || 0);
       const updatedDue = Math.max(0, updatedTotal - updatedPaid);
 
+      const oldDue = Number(editingBill.due_amount || 0);
+      const oldSupName = (editingBill.supplier_name || '').trim().toUpperCase();
+      const newSupName = (editBillData.supplier_name || '').trim().toUpperCase();
+
+      if (oldSupName !== newSupName) {
+        const newSupExists = suppliers.some(s => s.supplier_name && s.supplier_name.trim().toUpperCase() === newSupName);
+        if (!newSupExists) {
+          triggerToast('⚠️ Supplier not found. Please select an existing supplier.');
+          return;
+        }
+      }
+
       try {
         if (editingBill.id) {
           await PurchaseService.updatePurchase(editingBill.id, {
@@ -454,6 +474,40 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
             due_amount: updatedDue,
             payment_mode: editBillData.payment_mode
           });
+
+          if (oldSupName === newSupName) {
+            const dueDifference = updatedDue - oldDue;
+            if (dueDifference !== 0) {
+              const targetSup = suppliers.find(s => 
+                (editingBill.supplier_id && s.id === editingBill.supplier_id) || 
+                (s.supplier_name && s.supplier_name.toUpperCase() === oldSupName)
+              );
+              if (targetSup?.id) {
+                const currentSupOutstanding = Number(targetSup.outstanding || 0);
+                const newSupOutstanding = Math.max(0, currentSupOutstanding + dueDifference);
+                await SupplierService.updateSupplier(targetSup.id, { outstanding: newSupOutstanding });
+              }
+            }
+          } else {
+            // Supplier was changed during bill edit: deduct old due from old supplier, add new due to new supplier
+            if (oldDue > 0) {
+              const oldSup = suppliers.find(s => 
+                (editingBill.supplier_id && s.id === editingBill.supplier_id) || 
+                (s.supplier_name && s.supplier_name.toUpperCase() === oldSupName)
+              );
+              if (oldSup?.id) {
+                const oldSupOutstanding = Math.max(0, Number(oldSup.outstanding || 0) - oldDue);
+                await SupplierService.updateSupplier(oldSup.id, { outstanding: oldSupOutstanding });
+              }
+            }
+            if (updatedDue > 0) {
+              const newSup = suppliers.find(s => s.supplier_name && s.supplier_name.toUpperCase() === newSupName);
+              if (newSup?.id) {
+                const newSupOutstanding = Number(newSup.outstanding || 0) + updatedDue;
+                await SupplierService.updateSupplier(newSup.id, { outstanding: newSupOutstanding });
+              }
+            }
+          }
         }
         await refreshAllData();
       } catch (e) {}
@@ -565,6 +619,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
       };
       const items = [{
         product_id: isValidUUID(productId) ? productId : null,
+        product_name: _productName,
         qty,
         rate: purchaseRate,
         amount: qty * purchaseRate
@@ -619,18 +674,20 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
         let isMergeOperation = false;
         let existingStock = 0;
 
-        if (!targetProductId && item.product_name.trim()) {
-          const match = products.find(p => {
-            if (item.barcode && p.barcode && p.barcode === item.barcode.trim()) return true;
-            if (item.sku && p.sku && p.sku.toUpperCase() === item.sku.trim().toUpperCase()) return true;
-            return p.product_name.toLowerCase().trim() === item.product_name.toLowerCase().trim();
-          });
+        const matchedExistingProduct = targetProductId 
+          ? products.find(p => p.id === targetProductId)
+          : (item.product_name && item.product_name.trim() 
+              ? products.find(p => {
+                  if (item.barcode && p.barcode && p.barcode === item.barcode.trim()) return true;
+                  if (item.sku && p.sku && p.sku.toUpperCase() === item.sku.trim().toUpperCase()) return true;
+                  return p.product_name && p.product_name.toLowerCase().trim() === item.product_name.toLowerCase().trim();
+                })
+              : undefined);
 
-          if (match) {
-            targetProductId = match.id;
-            isMergeOperation = true;
-            existingStock = Number(match.current_stock || 0);
-          }
+        if (!editingProduct && matchedExistingProduct) {
+          targetProductId = matchedExistingProduct.id;
+          isMergeOperation = true;
+          existingStock = Number(matchedExistingProduct.current_stock || 0);
         }
 
         const conversionFactor = Math.max(1, Number(item.pieces_per_pack || 1));
@@ -659,7 +716,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
 
         const addedStockInflowBaseUnits = purchaseQtyInput > 0 
           ? baseUnitsAdded 
-          : (editingProduct ? Math.max(0, finalStock - currentBaseStockInDb) : finalStock);
+          : (editingProduct ? Math.max(0, finalStock - currentBaseStockInDb) : (isMergeOperation ? newProductBaseStockAdded : finalStock));
 
         const purchasePacksAdded = conversionFactor > 0 ? (addedStockInflowBaseUnits / conversionFactor) : addedStockInflowBaseUnits;
         const itemLineCost = purchasePacksAdded * pPrice;
@@ -710,13 +767,13 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
         savedBillItems.push({
           product_id: effectiveProdId || 'prod-' + Date.now() + '-' + i,
           product_name: item.product_name,
-          qty: addedStockInflowBaseUnits,
+          qty: purchasePacksAdded,
           rate: pPrice,
           amount: itemLineCost
         });
 
-        if (effectiveProdId && (addedStockInflowBaseUnits > 0 || (editingProduct && editingProduct.purchase_price !== item.purchase_price))) {
-          logInflowPurchaseHistory(
+        if (!hasBillDetails && effectiveProdId && (addedStockInflowBaseUnits > 0 || (editingProduct && editingProduct.purchase_price !== item.purchase_price))) {
+          await logInflowPurchaseHistory(
             tenantId,
             effectiveProdId,
             item.product_name,
@@ -728,8 +785,8 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
         }
       }
 
-      // Log purchase bill record if items were saved
-      if (savedBillItems.length > 0 && activeSup) {
+      // Log purchase bill record if items were saved and hasBillDetails is active
+      if (hasBillDetails && savedBillItems.length > 0 && activeSup) {
         const rawDate = purchaseDate ? new Date(purchaseDate) : new Date();
         const safeIsoDate = isNaN(rawDate.getTime()) ? new Date().toISOString() : rawDate.toISOString();
         const effectivePaid = isPartialPayment ? Math.min(totalBillCost, Math.max(0, paidAmount)) : totalBillCost;
@@ -765,7 +822,8 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
         };
 
         const rows = savedBillItems.map(bi => ({
-          product_id: isValidUUID(bi.product_id) ? bi.product_id : null,
+          product_id: (bi.product_id && isValidUUID(bi.product_id)) ? bi.product_id : null,
+          product_name: bi.product_name,
           qty: bi.qty,
           rate: bi.rate,
           amount: bi.amount
@@ -782,13 +840,17 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
           await refreshAllData();
         } catch (e: any) {
           triggerToast('⚠️ Purchase Bill Failed: ' + (e.message || e));
+          if (savedCount > 0) setModalOpen(false);
           return;
         }
       }
 
-      setModalOpen(false);
-      triggerToast(`⚡ ${savedCount} Product(s) saved successfully!`);
-      window.dispatchEvent(new Event('storage'));
+      if (savedCount > 0) {
+        setEditingProduct(null);
+        setModalOpen(false);
+        triggerToast(`⚡ ${savedCount} Product(s) saved successfully!`);
+        window.dispatchEvent(new Event('storage'));
+      }
     } catch (err: any) {
       triggerToast('⚠️ Save failed: ' + err.message);
     }
@@ -1015,7 +1077,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
           >
             <i className="fa-solid fa-receipt text-xs shrink-0"></i>
             <span className="truncate">Procurement & Bills Desk</span>
-            <span className="bg-white/20 px-1.5 py-0.5 rounded text-[10px] shrink-0 font-mono">{uniqueBillsList.length}</span>
+            <span className="bg-white/20 px-1.5 py-0.5 rounded text-[10px] shrink-0 font-mono">{filteredPurchaseBills.length}</span>
           </button>
         </div>
       )}
@@ -1220,7 +1282,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-            {isLoading ? (
+            {isLoading && products.length === 0 ? (
               <tr><td colSpan={7} className="py-8 text-center text-slate-400 text-xs font-medium">Retrieving inventory records...</td></tr>
             ) : filtered.length === 0 ? (
               <tr><td colSpan={7} className="py-8 text-center text-slate-400 text-xs font-medium">No matching stock items found.</td></tr>
@@ -1394,6 +1456,16 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
 
                         <button
                           type="button"
+                          onClick={() => handleShowHistory(p)}
+                          className="text-xs bg-purple-50 dark:bg-purple-950/60 hover:bg-purple-600 hover:text-white border border-purple-200 dark:border-purple-800 text-purple-600 dark:text-purple-400 font-extrabold px-2.5 py-1.5 rounded-lg transition inline-flex items-center gap-1 cursor-pointer shadow-2xs"
+                          title="View complete product purchase & sales history ledger"
+                        >
+                          <i className="fa-solid fa-clock-rotate-left text-[11px]"></i>
+                          <span>History</span>
+                        </button>
+
+                        <button
+                          type="button"
                           onClick={() => handleOpenEdit(p)}
                           className="text-xs bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-600 hover:text-white border border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 font-extrabold px-2.5 py-1.5 rounded-lg transition inline-flex items-center gap-1 cursor-pointer shadow-2xs"
                           title="Edit product details, prices, or stock"
@@ -1415,9 +1487,21 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                     </td>
                   ) : (
                     <td className="py-3.5 px-4 text-center">
-                      <div className="inline-flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-800 dark:text-slate-200">
-                        <i className="fa-solid fa-location-dot text-primary text-[11px]"></i>
-                        <span className="font-mono text-xs">{formattedLocationSeq}</span>
+                      <div className="flex items-center justify-center gap-2 flex-wrap">
+                        <div className="inline-flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-800 dark:text-slate-200">
+                          <i className="fa-solid fa-location-dot text-primary text-[11px]"></i>
+                          <span className="font-mono text-xs">{formattedLocationSeq}</span>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleShowHistory(p)}
+                          className="text-xs bg-purple-50 dark:bg-purple-950/60 hover:bg-purple-600 hover:text-white border border-purple-200 dark:border-purple-800 text-purple-600 dark:text-purple-400 font-extrabold px-2.5 py-1.5 rounded-lg transition inline-flex items-center gap-1 cursor-pointer shadow-2xs"
+                          title="View complete product purchase & sales history ledger"
+                        >
+                          <i className="fa-solid fa-clock-rotate-left text-[11px]"></i>
+                          <span>History</span>
+                        </button>
                       </div>
                     </td>
                   )}
@@ -1746,7 +1830,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                 <span className="text-[10px] font-bold text-primary uppercase tracking-widest">Inventory Management</span>
                 <h3 className="text-lg font-black text-foreground uppercase mt-0.5">{editingProduct ? 'Edit Inventory Product' : 'Add New Inventory Product'}</h3>
               </div>
-              <button type="button" onClick={() => setModalOpen(false)} className="text-textSecondary hover:text-foreground text-xs font-bold bg-background/50 hover:bg-background border border-border px-3 py-1.5 rounded-lg transition">
+              <button type="button" onClick={() => { setEditingProduct(null); setModalOpen(false); }} className="text-textSecondary hover:text-foreground text-xs font-bold bg-background/50 hover:bg-background border border-border px-3 py-1.5 rounded-lg transition">
                 &times; Close
               </button>
             </div>
@@ -2661,7 +2745,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
 
               {/* Sticky Action Footer */}
               <div className="shrink-0 flex gap-3 justify-end pt-3 border-t border-border mt-4">
-                <button type="button" className="px-5 py-2.5 border border-border text-textSecondary rounded-lg text-xs font-bold hover:bg-background transition cursor-pointer" onClick={() => setModalOpen(false)}>Cancel</button>
+                <button type="button" className="px-5 py-2.5 border border-border text-textSecondary rounded-lg text-xs font-bold hover:bg-background transition cursor-pointer" onClick={() => { setEditingProduct(null); setModalOpen(false); }}>Cancel</button>
                 <button type="submit" className="px-5 py-2.5 bg-primary hover:bg-primary/90 text-white font-bold rounded-lg text-xs transition shadow-md cursor-pointer flex items-center gap-2">
                   <i className="fa-solid fa-check"></i>
                   <span>Save {productItems.length > 1 ? `${productItems.length} Products & Bill` : 'Item'}</span>

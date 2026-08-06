@@ -109,17 +109,19 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
 
     // 1. Registered Customers
     registeredCustomers.forEach(c => {
-      const nameUpper = (c.customer_name || '').toUpperCase();
+      const nameUpper = (c.customer_name || '').toUpperCase().trim();
       if (!nameUpper) return;
       seenNames.add(nameUpper);
 
-      const invs = (sales as any[]).filter(s => s.customer_name && s.customer_name.toUpperCase() === nameUpper);
+      const invs = (sales as any[]).filter(s => s.customer_name && s.customer_name.toUpperCase().trim() === nameUpper);
+      const pastDuesSum = invs.reduce((sum, inv) => sum + Number(inv.due_amount || 0), 0);
+      const effectiveOutstanding = Number(c.outstanding || 0) > 0 ? Number(c.outstanding) : pastDuesSum;
 
       list.push({
         id: c.id,
         customer_name: c.customer_name,
         phone: c.phone || '',
-        outstanding: Number(c.outstanding || 0),
+        outstanding: effectiveOutstanding,
         isRegistered: true,
         invCount: invs.length
       });
@@ -127,16 +129,17 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
 
     // 2. Add non-registered past invoice customers
     (sales as any[]).forEach(s => {
-      const nameUpper = (s.customer_name || '').toUpperCase();
+      const nameUpper = (s.customer_name || '').toUpperCase().trim();
       if (!nameUpper || nameUpper === 'CASH CUSTOMER' || seenNames.has(nameUpper)) return;
 
       seenNames.add(nameUpper);
-      const invs = (sales as any[]).filter(inv => inv.customer_name && inv.customer_name.toUpperCase() === nameUpper);
+      const invs = (sales as any[]).filter(inv => inv.customer_name && inv.customer_name.toUpperCase().trim() === nameUpper);
+      const pastDuesSum = invs.reduce((sum, inv) => sum + Number(inv.due_amount || 0), 0);
 
       list.push({
         customer_name: s.customer_name,
         phone: s.customer_phone || '',
-        outstanding: 0,
+        outstanding: pastDuesSum,
         isRegistered: false,
         invCount: invs.length
       });
@@ -155,7 +158,15 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
       c => (c.customer_name && c.customer_name.trim().toUpperCase() === nameUpper) ||
            (phoneVal && c.phone && c.phone.trim() === phoneVal)
     );
-    if (foundReg) return foundReg;
+    if (foundReg) {
+      const invs = (sales as any[]).filter(s => s.customer_name && s.customer_name.trim().toUpperCase() === nameUpper);
+      const pastDuesSum = invs.reduce((sum, inv) => sum + Number(inv.due_amount || 0), 0);
+      const effectiveOutstanding = Number(foundReg.outstanding || 0) > 0 ? Number(foundReg.outstanding) : pastDuesSum;
+      return {
+        ...foundReg,
+        outstanding: effectiveOutstanding
+      };
+    }
 
     // 2. Search all searchable customers (which includes past sales invoice customers!)
     const foundSearchable = allSearchableCustomers.find(
