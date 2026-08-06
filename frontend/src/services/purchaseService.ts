@@ -126,13 +126,12 @@ export class PurchaseService {
 
     if (itemsPayload) {
       // Replace existing line items
-      await supabase.from('purchase_items').delete().eq('purchase_bill_id' as any, id);
+      await supabase.from('purchase_items').delete().eq('bill_id', id);
 
       if (itemsPayload.length > 0) {
         const cleanItems = itemsPayload.map(item => ({
           ...item,
-          purchase_bill_id: id,
-          tenant_id: updatedBill.tenant_id
+          bill_id: id
         }));
         const itemsRes = await handleServiceCall<PurchaseItemRow[]>(
           supabase.from('purchase_items').insert(cleanItems as any).select()
@@ -161,7 +160,7 @@ export class PurchaseService {
    * Delete a purchase bill and its associated line items
    */
   static async deletePurchase(id: string): Promise<ServiceResponse<null>> {
-    await supabase.from('purchase_items').delete().eq('purchase_bill_id' as any, id);
+    await supabase.from('purchase_items').delete().eq('bill_id', id);
     return handleServiceCall(
       supabase.from('purchase_bills').delete().eq('id', id)
     );

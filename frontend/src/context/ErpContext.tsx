@@ -44,8 +44,8 @@ export const ErpDataProvider: React.FC<{ children: ReactNode }> = ({ children })
     }
     try {
       const [salesRes, purchRes, expRes, prodRes, custRes, supRes, custPayRes, supPayRes, settingsRes] = await Promise.allSettled([
-        supabase.from('sales_invoices').select('*, items:sales_items(*, product:products(*))').order('sale_date', { ascending: false }),
-        supabase.from('purchase_bills').select('*, items:purchase_items(*, product:products(*))').order('purchase_date', { ascending: false }),
+        supabase.from('sales_invoices').select('*, sales_items(*)').order('sale_date', { ascending: false }),
+        supabase.from('purchase_bills').select('*, purchase_items(*)').order('purchase_date', { ascending: false }),
         supabase.from('expenses').select('*').order('expense_date', { ascending: false }),
         supabase.from('products').select('*').order('product_name', { ascending: true }),
         supabase.from('customers').select('*').order('customer_name', { ascending: true }),
@@ -56,10 +56,18 @@ export const ErpDataProvider: React.FC<{ children: ReactNode }> = ({ children })
       ]);
 
       if (salesRes.status === 'fulfilled' && !salesRes.value.error && salesRes.value.data) {
-        setSalesInvoices(salesRes.value.data as SalesInvoice[]);
+        const cleanSales = (salesRes.value.data as any[]).map(s => ({
+          ...s,
+          items: s.items || s.sales_items || []
+        }));
+        setSalesInvoices(cleanSales as SalesInvoice[]);
       }
       if (purchRes.status === 'fulfilled' && !purchRes.value.error && purchRes.value.data) {
-        setPurchaseBills(purchRes.value.data as PurchaseBill[]);
+        const cleanPurchases = (purchRes.value.data as any[]).map(p => ({
+          ...p,
+          items: p.items || p.purchase_items || []
+        }));
+        setPurchaseBills(cleanPurchases as PurchaseBill[]);
       }
       if (expRes.status === 'fulfilled' && !expRes.value.error && expRes.value.data) {
         setExpenses(expRes.value.data as Expense[]);

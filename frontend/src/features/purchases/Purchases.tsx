@@ -50,7 +50,7 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
   const { suppliers: contextSuppliers, products: contextProducts, refreshAllData } = useErpContext();
   const suppliers = contextSuppliers || [];
   const products = contextProducts || [];
-  const { purchases: bills, savePurchase } = usePurchases(tenantId);
+  const { purchases: bills, savePurchase, deletePurchase } = usePurchases(tenantId);
   const [search, setSearch] = useState('');
   
   // Modals
@@ -522,16 +522,33 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
                 <td className="py-2.5 px-3 text-center text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">
                   ₹{line.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </td>
-                <td className="py-2.5 px-3 text-center text-xs">
+                <td className="py-2.5 px-3 text-center text-xs flex items-center justify-center gap-1.5">
                   <button 
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       setViewingBill(line.rawBill);
                     }}
-                    className="px-2.5 py-1 bg-primary/10 hover:bg-primary text-primary hover:text-white font-extrabold text-xs rounded-lg border border-primary/30 transition cursor-pointer flex items-center gap-1 mx-auto"
+                    className="px-2 py-1 bg-primary/10 hover:bg-primary text-primary hover:text-white font-extrabold text-xs rounded-lg border border-primary/30 transition cursor-pointer flex items-center gap-1"
                   >
-                    <i className="fa-solid fa-eye text-[10px]"></i> View Bill
+                    <i className="fa-solid fa-eye text-[10px]"></i> View
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      const bNum = line.rawBill?.bill_number || line.rawBill?.id;
+                      if (!window.confirm(`Are you sure you want to delete Procurement Bill ${bNum}? This action cannot be undone.`)) return;
+                      try {
+                        await deletePurchase(line.rawBill.id);
+                        alert('✓ Procurement Bill successfully deleted.');
+                      } catch (err: any) {
+                        alert('Failed to delete procurement bill: ' + (err.message || err));
+                      }
+                    }}
+                    className="px-2 py-1 bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white font-extrabold text-xs rounded-lg border border-rose-500/30 transition cursor-pointer flex items-center gap-1"
+                  >
+                    <i className="fa-solid fa-trash-can text-[10px]"></i> Delete
                   </button>
                 </td>
               </tr>
@@ -1095,6 +1112,23 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
                 <span className="text-lg font-black text-emerald-400">₹{Number(viewingBill.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
               </div>
               <div className="flex gap-2">
+                <button 
+                  type="button" 
+                  onClick={async () => {
+                    const bNum = viewingBill.bill_number || viewingBill.id;
+                    if (!window.confirm(`Are you sure you want to delete Procurement Bill ${bNum}? This action cannot be undone.`)) return;
+                    try {
+                      await deletePurchase(viewingBill.id);
+                      setViewingBill(null);
+                      alert('✓ Procurement Bill successfully deleted.');
+                    } catch (err: any) {
+                      alert('Failed to delete procurement bill: ' + (err.message || err));
+                    }
+                  }}
+                  className="px-3.5 py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-lg shadow-md transition flex items-center gap-1.5 cursor-pointer"
+                >
+                  <i className="fa-solid fa-trash-can text-[10px]"></i> Delete Bill
+                </button>
                 <button 
                   type="button" 
                   onClick={() => window.print()}

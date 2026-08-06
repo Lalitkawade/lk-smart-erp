@@ -316,6 +316,12 @@ export function useBilling(tenantId: string) {
     }
   };
 
+  const deleteSale = async (saleId: string) => {
+    const res = await SaleService.deleteSale(saleId);
+    if (res.error) throw new Error(res.error);
+    await refreshAllData();
+  };
+
   return {
     cart,
     customerName,
@@ -332,6 +338,7 @@ export function useBilling(tenantId: string) {
     updateCartUnit,
     removeFromCart,
     processCheckout,
+    deleteSale,
     sales,
     isProcessing: false
   };

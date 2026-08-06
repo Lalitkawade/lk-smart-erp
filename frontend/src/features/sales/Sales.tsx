@@ -38,6 +38,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
     updateCartUnit,
     removeFromCart,
     processCheckout,
+    deleteSale,
     sales
   } = useBilling(tenantId);
 
@@ -491,10 +492,26 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                 <td className="py-2.5 px-3 text-center text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">
                   ₹{line.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </td>
-                <td className="py-2.5 px-3 text-center">
+                <td className="py-2.5 px-3 text-center flex items-center justify-center gap-1.5">
                   <button className="text-xs bg-primary/10 hover:bg-primary hover:text-white border border-primary/20 text-primary px-2.5 py-1 rounded-lg font-bold transition-all active:scale-95 cursor-pointer inline-flex items-center gap-1"
                     onClick={() => setPrintInvoice(line.rawSaleObj)}>
                     <i className="fa-solid fa-print text-[10px]"></i> Print
+                  </button>
+                  <button 
+                    className="text-xs bg-rose-500/10 hover:bg-rose-500 hover:text-white border border-rose-500/30 text-rose-500 px-2.5 py-1 rounded-lg font-bold transition-all active:scale-95 cursor-pointer inline-flex items-center gap-1"
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      const invNum = line.rawSaleObj?.invoice_number || line.rawSaleObj?.id;
+                      if (!window.confirm(`Are you sure you want to delete Sales Invoice ${invNum}? This action cannot be undone.`)) return;
+                      try {
+                        await deleteSale(line.rawSaleObj.id);
+                        alert('✓ Sales Invoice deleted successfully.');
+                      } catch (err: any) {
+                        alert('Failed to delete sales invoice: ' + (err.message || err));
+                      }
+                    }}
+                  >
+                    <i className="fa-solid fa-trash-can text-[10px]"></i> Delete
                   </button>
                 </td>
               </tr>
@@ -1264,8 +1281,25 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
               </div>
               <div className="flex items-center gap-2">
                 <button 
+                  onClick={async () => {
+                    const invNum = printInvoice.invoice_number || printInvoice.id;
+                    if (!window.confirm(`Are you sure you want to delete Sales Invoice ${invNum}? This action cannot be undone.`)) return;
+                    try {
+                      await deleteSale(printInvoice.id);
+                      setPrintInvoice(null);
+                      alert('✓ Sales Invoice deleted successfully.');
+                    } catch (err: any) {
+                      alert('Failed to delete invoice: ' + (err.message || err));
+                    }
+                  }}
+                  className="flex-1 sm:flex-none px-3.5 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-xs transition text-center cursor-pointer flex items-center justify-center gap-1.5 shadow-md"
+                >
+                  <i className="fa-solid fa-trash-can text-[10px]"></i>
+                  <span>Delete Invoice</span>
+                </button>
+                <button 
                   onClick={() => setPrintInvoice(null)}
-                  className="flex-1 sm:flex-none px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition text-center"
+                  className="flex-1 sm:flex-none px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition text-center cursor-pointer"
                 >
                   Close
                 </button>
@@ -1589,7 +1623,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                           </div>
                         </div>
 
-                        <div className="text-right">
+                        <div className="text-right flex items-center gap-2">
                           {isPending ? (
                             <div className="inline-flex items-center gap-1.5 bg-rose-500/20 border border-rose-500/50 px-2.5 py-1 rounded-lg">
                               <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
@@ -1602,6 +1636,22 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                               ✓ Fully Paid
                             </div>
                           )}
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (!window.confirm(`Delete invoice ${inv.invoice_number}?`)) return;
+                              try {
+                                await deleteSale(inv.id);
+                                alert('✓ Invoice deleted successfully.');
+                              } catch (err: any) {
+                                alert('Failed to delete invoice: ' + (err.message || err));
+                              }
+                            }}
+                            className="px-2 py-1 bg-rose-500/20 hover:bg-rose-500 text-rose-300 hover:text-white font-bold text-xs rounded border border-rose-500/40 transition cursor-pointer flex items-center gap-1"
+                            title="Delete sales invoice"
+                          >
+                            <i className="fa-solid fa-trash-can text-[10px]"></i> Delete
+                          </button>
                         </div>
                       </div>
 

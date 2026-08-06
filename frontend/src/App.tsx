@@ -147,16 +147,20 @@ function App() {
 
     try {
       const [salesRes, purchRes, expRes, prodRes, custRes, supRes] = await Promise.allSettled([
-        supabase.from('sales_invoices').select('*, items:sales_items(*, product:products(*))').order('sale_date', { ascending: false }),
-        supabase.from('purchase_bills').select('*, items:purchase_items(*, product:products(*))').order('purchase_date', { ascending: false }),
+        supabase.from('sales_invoices').select('*, sales_items(*)').order('sale_date', { ascending: false }),
+        supabase.from('purchase_bills').select('*, purchase_items(*)').order('purchase_date', { ascending: false }),
         supabase.from('expenses').select('*').order('expense_date', { ascending: false }),
         supabase.from('products').select('*').order('product_name', { ascending: true }),
         supabase.from('customers').select('*').order('customer_name', { ascending: true }),
         supabase.from('suppliers').select('*').order('supplier_name', { ascending: true })
       ]);
 
-      if (salesRes.status === 'fulfilled' && !salesRes.value.error && salesRes.value.data) salesData = salesRes.value.data as SalesInvoice[];
-      if (purchRes.status === 'fulfilled' && !purchRes.value.error && purchRes.value.data) purchData = purchRes.value.data as PurchaseBill[];
+      if (salesRes.status === 'fulfilled' && !salesRes.value.error && salesRes.value.data) {
+        salesData = (salesRes.value.data as any[]).map(s => ({ ...s, items: s.items || s.sales_items || [] }));
+      }
+      if (purchRes.status === 'fulfilled' && !purchRes.value.error && purchRes.value.data) {
+        purchData = (purchRes.value.data as any[]).map(p => ({ ...p, items: p.items || p.purchase_items || [] }));
+      }
       if (expRes.status === 'fulfilled' && !expRes.value.error && expRes.value.data) expData = expRes.value.data as Expense[];
       if (prodRes.status === 'fulfilled' && !prodRes.value.error && prodRes.value.data) prodData = prodRes.value.data;
       if (custRes.status === 'fulfilled' && !custRes.value.error && custRes.value.data) custData = custRes.value.data;
@@ -440,8 +444,7 @@ function App() {
     {
       title: t('inventory', lang),
       items: [
-        { tab: 'inventory-stock', icon: 'fa-warehouse', label: t('inventoryStock', lang) },
-        { tab: 'reports', icon: 'fa-chart-pie', label: t('materialTracking', lang) }
+        { tab: 'inventory-stock', icon: 'fa-warehouse', label: t('inventoryStock', lang) }
       ]
     },
     {

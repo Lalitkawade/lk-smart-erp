@@ -4,6 +4,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useErpContext } from '../../context/ErpContext';
 import { useCustomers } from '../../hooks/useCustomers';
 import { CustomerService } from '../../services/customerService';
+import { SaleService } from '../../services/saleService';
 import { PaymentService } from '../../services/paymentService';
 import { supabase } from '../../api/supabase';
 import { t } from '../../utils/i18n';
@@ -1052,7 +1053,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                               <div className="font-mono font-black text-sm text-foreground uppercase">{inv.invoice_number}</div>
                               <div className="text-xs text-textMuted">{new Date(inv.sale_date || inv.created_at).toLocaleString()}</div>
                             </div>
-                            <div className="text-right">
+                            <div className="text-right flex items-center gap-2">
                               {isPending ? (
                                 <div className="inline-flex items-center gap-1 bg-rose-500/20 border border-rose-500/50 px-2.5 py-1 rounded-lg">
                                   <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
@@ -1063,6 +1064,24 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                                   ✓ Fully Paid
                                 </div>
                               )}
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  if (!window.confirm(`Delete sales invoice ${inv.invoice_number}? This action cannot be undone.`)) return;
+                                  try {
+                                    const res = await SaleService.deleteSale(inv.id);
+                                    if (res.error) throw new Error(res.error);
+                                    await refreshAllData();
+                                    alert('✓ Invoice deleted successfully.');
+                                  } catch (err: any) {
+                                    alert('Failed to delete invoice: ' + (err.message || err));
+                                  }
+                                }}
+                                className="px-2 py-1 bg-rose-500/10 hover:bg-rose-500 hover:text-white text-rose-500 font-bold text-xs rounded-lg border border-rose-500/30 transition cursor-pointer flex items-center gap-1"
+                                title="Delete sales invoice"
+                              >
+                                <i className="fa-solid fa-trash-can text-[10px]"></i> Delete
+                              </button>
                             </div>
                           </div>
 

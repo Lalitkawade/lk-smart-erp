@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useInventory } from '../../hooks/useInventory';
 import { useErpContext } from '../../context/ErpContext';
@@ -523,12 +523,49 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
 
 
 
+  // Safe handler to delete procurement bills or synthetic product procurement records
+  const handleDeleteProcurementBill = async (b: any) => {
+    if (!b) return;
+    const rawId = String(b.id || '');
+    const bNum = (b.bill_number && b.bill_number !== 'N/A' && !rawId.startsWith('pb-synth-')) ? b.bill_number : 'Selected Bill';
+    if (!window.confirm(`Are you sure you want to delete Procurement Bill record "${bNum}"? This action cannot be undone.`)) return;
+
+    try {
+      const isValidUUID = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
+      if (rawId.startsWith('pb-synth-')) {
+        const targetProdId = rawId.replace('pb-synth-', '');
+        if (isValidUUID(targetProdId)) {
+          await deleteProduct(targetProdId);
+        }
+      } else if (isValidUUID(rawId)) {
+        const res = await PurchaseService.deletePurchase(rawId);
+        if (res && res.error) throw new Error(res.error);
+      } else {
+        const items = b.items || b.purchase_items || [];
+        for (const item of items) {
+          if (item.product_id && isValidUUID(item.product_id)) {
+            await deleteProduct(item.product_id).catch(() => {});
+          }
+        }
+      }
+
+      await refreshAllData();
+      if (viewingPurchaseBill?.id === b.id) {
+        setViewingPurchaseBill(null);
+      }
+      triggerToast('✓ Procurement Bill record successfully deleted.');
+    } catch (err: any) {
+      alert('Failed to delete procurement bill: ' + (err.message || err));
+    }
+  };
+
   const handleOpenAdd = () => {
     setEditingProduct(null);
     setProductItems([createDefaultProductItem()]);
     setIsEditingBaseStock(true);
     setIsEditingTax(true);
-    setHasBillDetails(false);
+    setHasBillDetails(true);
     setSupplierId('');
     setVendorSearchQuery('');
     setBillNumber('');
@@ -602,7 +639,10 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
     _sellingPrice: number,
     supplierName: string
   ) => {
-    const billNum = `STOCK-IN-${Date.now().toString().slice(-6)}`;
+    const targetVendor = (supplierName && !['GENERIC VENDOR', 'GENERAL VENDOR', 'Direct Stock Inflow', 'Vendor Supplier', 'Direct Procurement Vendor', 'N/A'].includes(supplierName))
+      ? supplierName
+      : 'Direct Procurement Vendor';
+    const billNum = billNumber.trim() || 'N/A';
     const nowIso = new Date().toISOString();
 
     try {
@@ -610,7 +650,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
       const billPayload = {
         tenant_id: (tenantId && isValidUUID(tenantId)) ? tenantId : '00000000-0000-0000-0000-000000000000',
         bill_number: billNum,
-        supplier_name: supplierName,
+        supplier_name: targetVendor,
         payment_mode: 'Cash',
         total_amount: qty * purchaseRate,
         paid_amount: qty * purchaseRate,
@@ -645,11 +685,11 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
     e.preventDefault();
     try {
       let activeSup: any = suppliers.find(s => s.id === supplierId);
-      if (!activeSup) {
-        const fallbackName = vendorSearchQuery.trim().toUpperCase() || 'GENERAL VENDOR';
-        activeSup = suppliers.find(s => s.supplier_name.toUpperCase() === fallbackName) || {
+      if (!activeSup && vendorSearchQuery.trim()) {
+        const queryUpper = vendorSearchQuery.trim().toUpperCase();
+        activeSup = suppliers.find(s => s.supplier_name.toUpperCase() === queryUpper) || {
           id: 'sup-gen-' + Date.now(),
-          supplier_name: fallbackName,
+          supplier_name: queryUpper,
           phone: '',
           outstanding: 0
         };
@@ -772,15 +812,16 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
           amount: itemLineCost
         });
 
-        if (!hasBillDetails && effectiveProdId && (addedStockInflowBaseUnits > 0 || (editingProduct && editingProduct.purchase_price !== item.purchase_price))) {
+        if (!hasBillDetails && effectiveProdId) {
+          const inflowQty = Math.max(1, purchasePacksAdded > 0 ? purchasePacksAdded : 1);
           await logInflowPurchaseHistory(
             tenantId,
             effectiveProdId,
             item.product_name,
-            addedStockInflowBaseUnits,
+            inflowQty,
             pPrice,
             packSellingRate,
-            activeSup ? activeSup.supplier_name : 'Direct Stock Inflow'
+            activeSup ? activeSup.supplier_name : (item.supplier_name || 'Direct Stock Inflow')
           ).catch(() => {});
         }
       }
@@ -925,19 +966,131 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
     }).length;
   }, [products]);
 
+  const resolveBillVendorName = useCallback((b: any) => {
+    if (!b) return 'Direct Procurement Vendor';
+    const isPlaceholder = (val: any) => {
+      if (!val) return true;
+      const str = String(val).trim().toUpperCase();
+      return ['DIRECT PROCUREMENT VENDOR', 'GENERIC VENDOR', 'GENERAL VENDOR', 'VENDOR SUPPLIER', 'DIRECT STOCK INFLOW', 'N/A', 'NULL', 'UNDEFINED'].includes(str);
+    };
+
+    if (!isPlaceholder(b.supplier_name)) return b.supplier_name;
+
+    if (b.supplier_id) {
+      const match = suppliers.find(s => s.id === b.supplier_id);
+      if (match?.supplier_name && !isPlaceholder(match.supplier_name)) return match.supplier_name;
+    }
+
+    const items = b.items || b.purchase_items || [];
+    for (const it of items) {
+      if (!isPlaceholder(it.supplier_name)) return it.supplier_name;
+      
+      if (it.product_id) {
+        const prod = products.find(p => p.id === it.product_id);
+        if (prod) {
+          if (!isPlaceholder(prod.supplier_name)) return prod.supplier_name;
+          if (prod.supplier_id) {
+            const match = suppliers.find(s => s.id === prod.supplier_id);
+            if (match?.supplier_name && !isPlaceholder(match.supplier_name)) return match.supplier_name;
+          }
+        }
+      }
+
+      if (it.product_name) {
+        const prodNameClean = String(it.product_name).toLowerCase().trim();
+        const prod = products.find(p => p.product_name && p.product_name.toLowerCase().trim() === prodNameClean);
+        if (prod) {
+          if (!isPlaceholder(prod.supplier_name)) return prod.supplier_name;
+          if (prod.supplier_id) {
+            const match = suppliers.find(s => s.id === prod.supplier_id);
+            if (match?.supplier_name && !isPlaceholder(match.supplier_name)) return match.supplier_name;
+          }
+        }
+      }
+    }
+
+    if (suppliers.length > 0) {
+      const validSup = suppliers.find(s => s.supplier_name && !isPlaceholder(s.supplier_name));
+      if (validSup) return validSup.supplier_name;
+    }
+
+    return 'Direct Procurement Vendor';
+  }, [suppliers, products]);
+
   const uniqueBillsList = useMemo(() => {
     const list: any[] = purchasesList || [];
-    return [...list].sort((a, b) => new Date(b.purchase_date || b.created_at || 0).getTime() - new Date(a.purchase_date || a.created_at || 0).getTime());
-  }, [purchasesList]);
+    const existingBillProductIds = new Set<string>();
+    const existingBillProductNames = new Set<string>();
+
+    list.forEach(b => {
+      const items = b.items || b.purchase_items || [];
+      items.forEach((it: any) => {
+        if (it.product_id) existingBillProductIds.add(String(it.product_id));
+        if (it.product_name) existingBillProductNames.add(String(it.product_name).toLowerCase().trim());
+      });
+    });
+
+    const synthBills: any[] = [];
+    (products || []).forEach((p: any) => {
+      const pId = String(p.id || '');
+      const pName = String(p.product_name || '').toLowerCase().trim();
+
+      if (pId && !existingBillProductIds.has(pId) && (!pName || !existingBillProductNames.has(pName))) {
+        const conversion = Number(p.pieces_per_pack || 1);
+        const stockInBase = Number(p.current_stock || 0);
+        const packsQty = conversion > 1 ? (stockInBase / conversion) : stockInBase;
+        const rate = Number(p.purchase_price || 0);
+        const totalCost = rate * (packsQty > 0 ? packsQty : 1);
+        
+        const vendorName = resolveBillVendorName({
+          supplier_name: p.supplier_name,
+          supplier_id: p.supplier_id,
+          items: [{ product_id: pId, product_name: p.product_name, supplier_name: p.supplier_name }]
+        });
+
+        const synthBillNum = `PB-${(p.hsn || p.sku || pId.slice(-5)).toUpperCase()}`;
+
+        synthBills.push({
+          id: `pb-synth-${pId}`,
+          bill_number: synthBillNum,
+          supplier_name: vendorName,
+          payment_mode: 'Cash',
+          total_amount: totalCost,
+          paid_amount: totalCost,
+          due_amount: 0,
+          purchase_date: p.created_at || new Date().toISOString(),
+          items: [{
+            product_id: pId,
+            product_name: p.product_name,
+            qty: packsQty > 0 ? packsQty : 1,
+            rate: rate,
+            amount: totalCost
+          }]
+        });
+      }
+    });
+
+    const combined = list.map(b => ({
+      ...b,
+      supplier_name: resolveBillVendorName(b)
+    })).concat(synthBills);
+
+    return combined.sort((a, b) => new Date(b.purchase_date || b.created_at || 0).getTime() - new Date(a.purchase_date || a.created_at || 0).getTime());
+  }, [purchasesList, products, resolveBillVendorName]);
 
   const filteredPurchaseBills = useMemo(() => {
     return uniqueBillsList.filter((b: any) => {
-      const supName = b.supplier_name || 'Generic Vendor';
+      const supName = resolveBillVendorName(b);
       const billNo = b.bill_number || b.id || '';
+      const pDate = new Date(b.purchase_date || b.created_at || Date.now());
+      const dateFormatted = isNaN(pDate.getTime()) ? '' : pDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+      const timeFormatted = isNaN(pDate.getTime()) ? '' : pDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+
       const matchesSearch = (
         supName.toLowerCase().includes(search.toLowerCase()) ||
         billNo.toLowerCase().includes(search.toLowerCase()) ||
-        (b.purchase_date || '').includes(search)
+        dateFormatted.toLowerCase().includes(search.toLowerCase()) ||
+        timeFormatted.toLowerCase().includes(search.toLowerCase())
       );
 
       if (!matchesSearch) return false;
@@ -946,7 +1099,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
       }
       return true;
     });
-  }, [uniqueBillsList, search, vendorFilter]);
+  }, [uniqueBillsList, search, vendorFilter, resolveBillVendorName]);
 
   return (
     <div className="bg-secondary border border-border rounded-xl p-4 sm:p-6 relative">
@@ -1169,19 +1322,29 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                   </tr>
                 ) : (
                   filteredPurchaseBills.map((b: any) => {
-                    const billNo = b.bill_number || b.id || 'N/A';
-                    const vendorName = b.supplier_name || 'Generic Vendor';
+                    const rawBillNo = b.bill_number || b.id || '';
+                    const isGeneratedCode = /^PB-[0-9A-F]{5,6}$/i.test(rawBillNo) || /^PB-SYNTH-/i.test(rawBillNo) || /^STOCK-IN-/i.test(rawBillNo);
+                    const billNo = (rawBillNo && rawBillNo.trim() && rawBillNo !== 'N/A' && !isGeneratedCode)
+                      ? rawBillNo
+                      : 'N/A';
+                    const vendorName = resolveBillVendorName(b);
                     const items = b.items || b.purchase_items || [];
                     const totalAmt = Number(b.total_amount || 0);
                     const paidAmt = Number(b.paid_amount || 0);
                     const dueAmt = Number(b.due_amount || 0);
                     const isPaid = dueAmt <= 0;
 
+                    const rawDate = new Date(b.purchase_date || b.created_at || Date.now());
+                    const formattedDate = isNaN(rawDate.getTime()) ? 'N/A' : rawDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+                    const formattedTime = isNaN(rawDate.getTime()) ? '' : rawDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+
                     return (
                       <tr key={b.id || billNo} className="hover:bg-blue-50/60 dark:hover:bg-slate-800/70 transition">
-                        <td className="py-3 px-4 font-mono font-bold">
-                          <div>{billNo}</div>
-                          <div className="text-[10px] text-slate-400 font-normal">{new Date(b.purchase_date || b.created_at || Date.now()).toLocaleDateString('en-IN')}</div>
+                        <td className="py-3 px-4 font-mono">
+                          <div className="font-extrabold text-slate-900 dark:text-slate-100 text-xs">{billNo}</div>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-0.5">
+                            {formattedDate} {formattedTime ? `• ${formattedTime}` : ''}
+                          </div>
                         </td>
                         <td className="py-3 px-4 font-bold uppercase text-blue-600 dark:text-blue-400">
                           {vendorName}
@@ -1236,6 +1399,16 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                             >
                               <i className="fa-solid fa-file-invoice text-[11px]"></i>
                               <span>View Bill</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteProcurementBill(b)}
+                              className="text-xs bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-600 hover:text-white border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 font-extrabold px-2.5 py-1.5 rounded-lg transition inline-flex items-center gap-1 cursor-pointer shadow-2xs"
+                              title="Delete this procurement bill record"
+                            >
+                              <i className="fa-solid fa-trash text-[11px]"></i>
+                              <span>Delete</span>
                             </button>
                           </div>
                         </td>
@@ -1537,7 +1710,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
             <div className="grid grid-cols-2 gap-4 text-xs font-mono bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
               <div>
                 <span className="text-slate-400 block font-sans">Vendor / Supplier:</span>
-                <strong className="text-blue-600 dark:text-blue-400 text-sm font-bold">{viewingPurchaseBill.supplier_name || 'Generic Vendor'}</strong>
+                <strong className="text-blue-600 dark:text-blue-400 text-sm font-bold">{resolveBillVendorName(viewingPurchaseBill)}</strong>
               </div>
               <div>
                 <span className="text-slate-400 block font-sans">Purchase Date:</span>
@@ -1589,6 +1762,13 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
             </div>
 
             <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => handleDeleteProcurementBill(viewingPurchaseBill)}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl transition cursor-pointer flex items-center gap-1.5"
+              >
+                <i className="fa-solid fa-trash-can"></i> Delete Bill
+              </button>
               <button
                 type="button"
                 onClick={() => window.print()}
@@ -1841,127 +2021,127 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
               {/* TOP VENDOR & PROCUREMENT BILL SECTION */}
               {!editingProduct && (
                 <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 rounded-2xl p-4 sm:p-5 space-y-4 shadow-xs">
-                  <div className="flex justify-between items-center flex-wrap gap-2 border-b border-slate-200 dark:border-slate-700 pb-3">
-                    <label className="flex items-center gap-2 cursor-pointer font-bold text-xs uppercase text-slate-900 dark:text-slate-100 select-none">
+                  {/* Select Supplier / Vendor (ALWAYS VISIBLE) */}
+                  <div>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">Select Supplier / Vendor *</label>
+                      <button 
+                        type="button" 
+                        onClick={() => setQuickVendorModalOpen(true)}
+                        className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline font-bold flex items-center gap-1 active:scale-95 cursor-pointer"
+                      >
+                        ➕ Quick Register Vendor
+                      </button>
+                    </div>
+
+                    <div className="relative">
                       <input 
-                        type="checkbox" 
-                        checked={hasBillDetails} 
-                        onChange={(e) => setHasBillDetails(e.target.checked)}
-                        className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
+                        type="text" 
+                        className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 font-bold uppercase focus:border-blue-600 focus:outline-none pr-8"
+                        value={vendorSearchQuery || selectedSup?.supplier_name || ''} 
+                        onFocus={() => setVendorDropdownOpen(true)}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setVendorSearchQuery(val);
+                          setVendorDropdownOpen(true);
+                          if (!val.trim()) setSupplierId('');
+                        }} 
+                        placeholder="🔍 Type or select vendor name (e.g. RAS TRADERS)..."
                       />
-                      <i className="fa-solid fa-cart-shopping text-emerald-600 dark:text-emerald-400"></i>
-                      <span>Record Supplier Purchase Bill / Procurement Details</span>
-                    </label>
-                    <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
-                      {hasBillDetails ? '✓ Bill Details Active' : 'Check if you have a supplier bill'}
-                    </span>
-                  </div>
+                      {(supplierId || vendorSearchQuery) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSupplierId('');
+                            setVendorSearchQuery('');
+                            setVendorDropdownOpen(false);
+                          }}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs font-bold cursor-pointer"
+                        >
+                          &times;
+                        </button>
+                      )}
 
-                  {hasBillDetails && (
-                    <div className="space-y-4 animate-fade-in pt-1">
-                      {/* Vendor Details Grid */}
-                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <div>
-                          <div className="flex justify-between items-center mb-1">
-                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">Select Supplier / Vendor *</label>
-                            <button 
-                              type="button" 
-                              onClick={() => setQuickVendorModalOpen(true)}
-                              className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline font-bold flex items-center gap-1 active:scale-95 cursor-pointer"
-                            >
-                              ➕ Quick Register
-                            </button>
-                          </div>
-
-                          <div className="relative">
-                            <input 
-                              type="text" 
-                              className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 font-bold uppercase focus:border-blue-600 focus:outline-none pr-8"
-                              value={vendorSearchQuery || selectedSup?.supplier_name || ''} 
-                              onFocus={() => setVendorDropdownOpen(true)}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                setVendorSearchQuery(val);
-                                setVendorDropdownOpen(true);
-                                if (!val.trim()) setSupplierId('');
-                              }} 
-                              placeholder="🔍 Type vendor name..."
-                            />
-                            {(supplierId || vendorSearchQuery) && (
-                              <button
+                      {/* Floating Vendor Autocomplete */}
+                      {vendorDropdownOpen && (
+                        <div className="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-2xl z-50 max-h-56 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 scrollbar-thin animate-fade-in">
+                          {filteredSuppliersForBill.length === 0 ? (
+                            <div className="p-3 text-center text-xs space-y-2">
+                              <p className="text-slate-500 dark:text-slate-400 font-medium">No vendors found matching "{vendorSearchQuery}".</p>
+                              <button 
                                 type="button"
                                 onClick={() => {
-                                  setSupplierId('');
-                                  setVendorSearchQuery('');
+                                  setQuickVendorFormData(prev => ({ ...prev, supplier_name: vendorSearchQuery.toUpperCase() }));
+                                  setVendorDropdownOpen(false);
+                                  setQuickVendorModalOpen(true);
+                                }}
+                                className="px-3 py-1.5 bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 font-extrabold text-xs rounded-lg border border-blue-200 dark:border-blue-800 transition hover:bg-blue-100 cursor-pointer"
+                              >
+                                ➕ Register "{vendorSearchQuery.toUpperCase()}" as New Vendor
+                              </button>
+                            </div>
+                          ) : (
+                            filteredSuppliersForBill.map((s) => (
+                              <div 
+                                key={s.id}
+                                onClick={() => {
+                                  setSupplierId(s.id);
+                                  setVendorSearchQuery(s.supplier_name);
                                   setVendorDropdownOpen(false);
                                 }}
-                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs font-bold cursor-pointer"
+                                className={`p-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/80 cursor-pointer flex justify-between items-center transition ${supplierId === s.id ? 'bg-blue-50 dark:bg-blue-950/60 font-black text-blue-600 dark:text-blue-400' : 'text-slate-900 dark:text-slate-100'}`}
                               >
-                                &times;
-                              </button>
-                            )}
-
-                            {/* Floating Vendor Autocomplete */}
-                            {vendorDropdownOpen && (
-                              <div className="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-2xl z-50 max-h-56 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 scrollbar-thin animate-fade-in">
-                                {filteredSuppliersForBill.length === 0 ? (
-                                  <div className="p-3 text-center text-xs space-y-2">
-                                    <p className="text-slate-500 dark:text-slate-400 font-medium">No vendors found matching "{vendorSearchQuery}".</p>
-                                    <button 
-                                      type="button"
-                                      onClick={() => {
-                                        setQuickVendorFormData(prev => ({ ...prev, supplier_name: vendorSearchQuery.toUpperCase() }));
-                                        setVendorDropdownOpen(false);
-                                        setQuickVendorModalOpen(true);
-                                      }}
-                                      className="px-3 py-1.5 bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 font-extrabold text-xs rounded-lg border border-blue-200 dark:border-blue-800 transition hover:bg-blue-100 cursor-pointer"
-                                    >
-                                      ➕ Register "{vendorSearchQuery.toUpperCase()}" as New Vendor
-                                    </button>
-                                  </div>
-                                ) : (
-                                  filteredSuppliersForBill.map((s) => (
-                                    <div 
-                                      key={s.id}
-                                      onClick={() => {
-                                        setSupplierId(s.id);
-                                        setVendorSearchQuery(s.supplier_name);
-                                        setVendorDropdownOpen(false);
-                                      }}
-                                      className={`p-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/80 cursor-pointer flex justify-between items-center transition ${supplierId === s.id ? 'bg-blue-50 dark:bg-blue-950/60 font-black text-blue-600 dark:text-blue-400' : 'text-slate-900 dark:text-slate-100'}`}
-                                    >
-                                      <div className="space-y-0.5">
-                                        <div className="text-xs font-bold uppercase">{s.supplier_name}</div>
-                                        <div className="text-[10px] text-slate-500 dark:text-slate-400">Phone: {s.phone || 'N/A'} {s.outstanding ? `| Dues: ₹${Number(s.outstanding).toFixed(2)}` : ''}</div>
-                                      </div>
-                                      {supplierId === s.id && <span className="text-blue-600 dark:text-blue-400 font-bold text-xs">✓ Selected</span>}
-                                    </div>
-                                  ))
-                                )}
+                                <div className="space-y-0.5">
+                                  <div className="text-xs font-bold uppercase">{s.supplier_name}</div>
+                                  <div className="text-[10px] text-slate-500 dark:text-slate-400">Phone: {s.phone || 'N/A'} {s.outstanding ? `| Dues: ₹${Number(s.outstanding).toFixed(2)}` : ''}</div>
+                                </div>
+                                {supplierId === s.id && <span className="text-blue-600 dark:text-blue-400 font-bold text-xs">✓ Selected</span>}
                               </div>
-                            )}
-                          </div>
+                            ))
+                          )}
                         </div>
+                      )}
+                    </div>
+                  </div>
 
-                        <div>
-                          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Supplier Bill Number</label>
-                          <input type="text" className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 font-semibold focus:outline-none focus:border-blue-600"
-                            value={billNumber} onChange={(e) => setBillNumber(e.target.value)} placeholder="e.g. IN-98218" />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Billing Date *</label>
-                          <input type="date" className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 font-mono font-semibold focus:outline-none focus:border-blue-600"
-                            value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)} required={hasBillDetails} />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Payment Channel</label>
-                          <select className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 font-semibold focus:outline-none focus:border-blue-600 cursor-pointer"
-                            value={paymentMode} onChange={(e) => setPaymentMode(e.target.value)}>
-                            <option value="UPI">UPI / GPay</option>
-                            <option value="Card">Credit / Debit Card</option>
-                            <option value="Bank Transfer">Bank Transfer / NEFT</option>
-                            <option value="Cash">Cash Voucher</option>
-                          </select>
+                  {/* Optional Purchase Bill Metadata Toggle */}
+                  <div className="pt-3 border-t border-slate-200 dark:border-slate-700">
+                    <div className="flex justify-between items-center flex-wrap gap-2 pb-2">
+                      <label className="flex items-center gap-2 cursor-pointer font-bold text-xs uppercase text-slate-900 dark:text-slate-100 select-none">
+                        <input 
+                          type="checkbox" 
+                          checked={hasBillDetails} 
+                          onChange={(e) => setHasBillDetails(e.target.checked)}
+                          className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
+                        />
+                        <i className="fa-solid fa-file-invoice text-emerald-600 dark:text-emerald-400"></i>
+                        <span>Attach Supplier Purchase Invoice Number & Payment Status</span>
+                      </label>
+                    </div>
+
+                    {hasBillDetails && (
+                      <div className="space-y-4 animate-fade-in pt-2">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Supplier Bill Number</label>
+                            <input type="text" className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 font-semibold focus:outline-none focus:border-blue-600"
+                              value={billNumber} onChange={(e) => setBillNumber(e.target.value)} placeholder="e.g. IN-98218 (Leave blank if N/A)" />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Billing Date *</label>
+                            <input type="date" className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 font-mono font-semibold focus:outline-none focus:border-blue-600"
+                              value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)} required={hasBillDetails} />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Payment Channel</label>
+                            <select className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 font-semibold focus:outline-none focus:border-blue-600 cursor-pointer"
+                              value={paymentMode} onChange={(e) => setPaymentMode(e.target.value)}>
+                              <option value="UPI">UPI / GPay</option>
+                              <option value="Card">Credit / Debit Card</option>
+                              <option value="Bank Transfer">Bank Transfer / NEFT</option>
+                              <option value="Cash">Cash Voucher</option>
+                            </select>
+                          </div>
                         </div>
 
                         {/* Transaction ID / Ref No. */}
@@ -1982,42 +2162,8 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                           </div>
                         )}
                       </div>
-
-                      {/* Partial Payment Option */}
-                      <div className="border-t border-slate-200 dark:border-slate-700 pt-3">
-                        <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700 dark:text-slate-300 select-none">
-                          <input 
-                            type="checkbox" 
-                            checked={isPartialPayment}
-                            onChange={(e) => setIsPartialPayment(e.target.checked)}
-                            className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
-                          />
-                          <span>Record Partial Payment / Remaining Vendor Dues</span>
-                        </label>
-
-                        {isPartialPayment && (
-                          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-4 bg-white dark:bg-slate-900 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 animate-fade-in shadow-xs">
-                            <div>
-                              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Amount Paid Now (₹)</label>
-                              <input 
-                                type="number" 
-                                step="any"
-                                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400 focus:outline-none"
-                                value={paidAmount}
-                                onChange={(e) => setPaidAmount(parseFloat(e.target.value) || 0)}
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Total Bill Cost (₹)</label>
-                              <div className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-xs font-mono font-extrabold text-slate-900 dark:text-slate-100">
-                                ₹{productItems.reduce((sum, item) => sum + (Number(item.current_stock || 0) * Number(item.purchase_price || 0)), 0).toFixed(2)}
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               )}
 
