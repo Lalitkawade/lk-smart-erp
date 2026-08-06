@@ -569,9 +569,14 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
         rate: purchaseRate,
         amount: qty * purchaseRate
       }];
-      await PurchaseService.createPurchase(billPayload as any, items);
+      const pRes = await PurchaseService.createPurchase(billPayload as any, items);
+      if (pRes.error) {
+        throw new Error(pRes.error);
+      }
       await refreshAllData();
-    } catch (e) {}
+    } catch (e: any) {
+      console.error('Quick purchase error:', e.message || e);
+    }
   };
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -584,18 +589,15 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      let activeSup: any = null;
-      if (hasBillDetails) {
-        activeSup = suppliers.find(s => s.id === supplierId);
-        if (!activeSup) {
-          const fallbackName = vendorSearchQuery.trim().toUpperCase() || 'GENERAL VENDOR';
-          activeSup = suppliers.find(s => s.supplier_name.toUpperCase() === fallbackName) || {
-            id: 'sup-gen-' + Date.now(),
-            supplier_name: fallbackName,
-            phone: '',
-            outstanding: 0
-          };
-        }
+      let activeSup: any = suppliers.find(s => s.id === supplierId);
+      if (!activeSup) {
+        const fallbackName = vendorSearchQuery.trim().toUpperCase() || 'GENERAL VENDOR';
+        activeSup = suppliers.find(s => s.supplier_name.toUpperCase() === fallbackName) || {
+          id: 'sup-gen-' + Date.now(),
+          supplier_name: fallbackName,
+          phone: '',
+          outstanding: 0
+        };
       }
 
       const savedBillItems: any[] = [];
@@ -726,8 +728,8 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
         }
       }
 
-      // Log purchase bill record if Vendor & Procurement details are active
-      if (hasBillDetails && activeSup && savedBillItems.length > 0) {
+      // Log purchase bill record if items were saved
+      if (savedBillItems.length > 0 && activeSup) {
         const rawDate = purchaseDate ? new Date(purchaseDate) : new Date();
         const safeIsoDate = isNaN(rawDate.getTime()) ? new Date().toISOString() : rawDate.toISOString();
         const effectivePaid = isPartialPayment ? Math.min(totalBillCost, Math.max(0, paidAmount)) : totalBillCost;
@@ -770,12 +772,18 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
         }));
 
         try {
-          await PurchaseService.createPurchase(billPayload as any, rows);
+          const pRes = await PurchaseService.createPurchase(billPayload as any, rows);
+          if (pRes.error) {
+            throw new Error(pRes.error);
+          }
           if (dueAmount > 0 && activeSup?.id) {
             await SupplierService.updateSupplier(activeSup.id, { outstanding: Number(activeSup.outstanding || 0) + dueAmount });
           }
           await refreshAllData();
-        } catch (e) {}
+        } catch (e: any) {
+          triggerToast('⚠️ Purchase Bill Failed: ' + (e.message || e));
+          return;
+        }
       }
 
       setModalOpen(false);
@@ -857,8 +865,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
 
   const uniqueBillsList = useMemo(() => {
     const list: any[] = purchasesList || [];
-    const confirmed = list.filter((b: any) => !(b.bill_number && String(b.bill_number).toUpperCase().startsWith('STOCK-IN')));
-    return confirmed.sort((a, b) => new Date(b.purchase_date || b.created_at || 0).getTime() - new Date(a.purchase_date || a.created_at || 0).getTime());
+    return [...list].sort((a, b) => new Date(b.purchase_date || b.created_at || 0).getTime() - new Date(a.purchase_date || a.created_at || 0).getTime());
   }, [purchasesList]);
 
   const filteredPurchaseBills = useMemo(() => {

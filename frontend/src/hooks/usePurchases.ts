@@ -40,19 +40,23 @@ export function usePurchases(tenantId: string) {
 
     try {
       const isExisting = contextPurchases.some(p => p.id === purchaseId);
+      let res;
       if (isExisting) {
-        await PurchaseService.updatePurchase(purchaseId, cleanBillPayload, itemsPayload);
+        res = await PurchaseService.updatePurchase(purchaseId, cleanBillPayload, itemsPayload);
       } else {
-        await PurchaseService.createPurchase(cleanBillPayload, itemsPayload);
+        res = await PurchaseService.createPurchase(cleanBillPayload, itemsPayload);
+      }
+      if (res.error) {
+        throw new Error(res.error);
       }
       await refreshAllData();
-    } catch (err) {
-      console.warn('Purchase save exception:', err);
+      return res.data || cleanBillPayload;
+    } catch (err: any) {
+      console.error('Purchase save error:', err.message || err);
+      throw err;
     } finally {
       setIsSaving(false);
     }
-
-    return cleanBillPayload;
   };
 
   const deletePurchase = async (purchaseId: string) => {
