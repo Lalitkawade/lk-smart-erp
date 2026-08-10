@@ -85,6 +85,7 @@ window.addEventListener('click', (e) => {
 }, true);
 
 import { registerSW } from 'virtual:pwa-register';
+import { perfTracker } from './utils/perfTracker';
 
 // Register PWA service worker with auto-update capability
 const updateSW = registerSW({
@@ -97,6 +98,24 @@ const updateSW = registerSW({
   },
 });
 
+console.time('⏱️ [PERF UI] React Root Mount');
+perfTracker.incrementCall('React Mount');
+perfTracker.reactMountTime = performance.now();
+
+// Observe First Contentful Render (FCR)
+if (typeof PerformanceObserver !== 'undefined') {
+  try {
+    const observer = new PerformanceObserver((entryList) => {
+      for (const entry of entryList.getEntries()) {
+        if (entry.name === 'first-contentful-paint') {
+          console.log(`🎨 [PERF UI] First Contentful Render (FCR): ${entry.startTime.toFixed(2)} ms`);
+        }
+      }
+    });
+    observer.observe({ type: 'paint', buffered: true });
+  } catch (e) {}
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
@@ -104,3 +123,5 @@ createRoot(document.getElementById('root')!).render(
     </ErrorBoundary>
   </StrictMode>
 );
+console.timeEnd('⏱️ [PERF UI] React Root Mount');
+

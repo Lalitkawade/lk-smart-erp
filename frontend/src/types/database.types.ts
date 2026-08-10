@@ -291,7 +291,6 @@ export type PurchaseBillRow = {
   supplier_phone?: string | null;
   payment_mode?: string;
   ref_number?: string | null;
-  transaction_id?: string | null;
   total_amount: number;
   paid_amount?: number;
   due_amount?: number;
@@ -307,7 +306,6 @@ export type PurchaseBillInsert = {
   supplier_phone?: string | null;
   payment_mode?: string;
   ref_number?: string | null;
-  transaction_id?: string | null;
   total_amount?: number;
   paid_amount?: number;
   due_amount?: number;
@@ -321,7 +319,6 @@ export type PurchaseBillUpdate = {
   supplier_phone?: string | null;
   payment_mode?: string;
   ref_number?: string | null;
-  transaction_id?: string | null;
   total_amount?: number;
   paid_amount?: number;
   due_amount?: number;
@@ -336,6 +333,9 @@ export type PurchaseItemRow = {
   id: string;
   bill_id: string;
   product_id: string | null;
+  product_name?: string | null;
+  hsn?: string | null;
+  gst_percent?: number | null;
   qty: number;
   rate: number;
   amount: number;
@@ -344,12 +344,18 @@ export type PurchaseItemInsert = {
   id?: string;
   bill_id: string;
   product_id?: string | null;
+  product_name?: string | null;
+  hsn?: string | null;
+  gst_percent?: number | null;
   qty: number;
   rate: number;
   amount: number;
 }
 export type PurchaseItemUpdate = {
   product_id?: string | null;
+  product_name?: string | null;
+  hsn?: string | null;
+  gst_percent?: number | null;
   qty?: number;
   rate?: number;
   amount?: number;

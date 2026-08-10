@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from './hooks/useAuth';
-import { supabase } from './api/supabase';
-import { ErpDataProvider } from './context/ErpContext';
+import { ErpDataProvider, useErpContext } from './context/ErpContext';
 
 // Lazy Loaded Feature Modules for Instant Initial Load & Code-Splitting
 const Products = lazy(() => import('./features/products/Products'));
@@ -13,10 +12,10 @@ const Suppliers = lazy(() => import('./features/suppliers/Suppliers'));
 const Purchases = lazy(() => import('./features/purchases/Purchases'));
 const ExcelExport = lazy(() => import('./features/export/ExcelExport'));
 const Expenses = lazy(() => import('./features/expenses/Expenses'));
+const Reports = lazy(() => import('./features/reports/Reports'));
 const DemandModal = lazy(() => import('./features/demands/DemandModal'));
 
 import { useDemandTracker } from './hooks/useDemandTracker';
-import type { SalesInvoice, PurchaseBill, Expense } from './types/erp.types';
 import { t, Language } from './utils/i18n';
 
 // Section Loading Skeleton Fallback for Smooth Transitions
@@ -95,13 +94,14 @@ function App() {
     return 'Good evening 👋';
   };
 
-  // Dynamic metrics state
-  const [sales, setSales] = useState<SalesInvoice[]>([]);
-  const [purchases, setPurchases] = useState<PurchaseBill[]>([]);
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [productsList, setProductsList] = useState<any[]>([]);
-  const [customersList, setCustomersList] = useState<any[]>([]);
-  const [suppliersList, setSuppliersList] = useState<any[]>([]);
+  // Consume single source of truth from ErpContext
+  const { products, customers, suppliers, salesInvoices, purchaseBills, expenses } = useErpContext();
+  const sales = salesInvoices || [];
+  const purchases = purchaseBills || [];
+  const productsList = products || [];
+  const customersList = customers || [];
+  const suppliersList = suppliers || [];
+
   const [salesAutoCustomer, setSalesAutoCustomer] = useState<string | null>(null);
   const [salesAutoOpen, setSalesAutoOpen] = useState(false);
   const [productAutoOpen, setProductAutoOpen] = useState(false);
@@ -116,75 +116,7 @@ function App() {
   const [role, setRole] = useState('Owner');
   const [authLoading, setAuthLoading] = useState(false);
 
-
-
-  // Load metrics and config settings
-  const loadAppState = async () => {
-    // 1. Load Local settings
-    const settingsStr = localStorage.getItem('lk_settings');
-    if (!settingsStr) {
-      const defaults = {
-        company_name: 'LK Hardware ERP',
-        logo_url: '',
-        gstin: '27LKSERP401Z2B5',
-        address: '123 Market Road, Pune, Maharashtra',
-        invoice_prefix: 'INV',
-        business_type: 'Hardware Shop',
-        module_garage: false,
-        module_mobile: false,
-        module_fertilizer: false
-      };
-      try { localStorage.setItem('lk_settings', JSON.stringify(defaults)); } catch (e) {}
-    }
-
-    let isRemoteSuccessful = false;
-    let salesData: SalesInvoice[] | null = null;
-    let purchData: PurchaseBill[] | null = null;
-    let expData: Expense[] | null = null;
-    let prodData: any[] | null = null;
-    let custData: any[] | null = null;
-    let supData: any[] | null = null;
-
-    try {
-      const [salesRes, purchRes, expRes, prodRes, custRes, supRes] = await Promise.allSettled([
-        supabase.from('sales_invoices').select('*, sales_items(*)').order('sale_date', { ascending: false }),
-        supabase.from('purchase_bills').select('*, purchase_items(*)').order('purchase_date', { ascending: false }),
-        supabase.from('expenses').select('*').order('expense_date', { ascending: false }),
-        supabase.from('products').select('*').order('product_name', { ascending: true }),
-        supabase.from('customers').select('*').order('customer_name', { ascending: true }),
-        supabase.from('suppliers').select('*').order('supplier_name', { ascending: true })
-      ]);
-
-      if (salesRes.status === 'fulfilled' && !salesRes.value.error && salesRes.value.data) {
-        salesData = (salesRes.value.data as any[]).map(s => ({ ...s, items: s.items || s.sales_items || [] }));
-      }
-      if (purchRes.status === 'fulfilled' && !purchRes.value.error && purchRes.value.data) {
-        purchData = (purchRes.value.data as any[]).map(p => ({ ...p, items: p.items || p.purchase_items || [] }));
-      }
-      if (expRes.status === 'fulfilled' && !expRes.value.error && expRes.value.data) expData = expRes.value.data as Expense[];
-      if (prodRes.status === 'fulfilled' && !prodRes.value.error && prodRes.value.data) prodData = prodRes.value.data;
-      if (custRes.status === 'fulfilled' && !custRes.value.error && custRes.value.data) custData = custRes.value.data;
-      if (supRes.status === 'fulfilled' && !supRes.value.error && supRes.value.data) supData = supRes.value.data;
-
-      if (salesData !== null || purchData !== null || expData !== null || prodData !== null || custData !== null || supData !== null) {
-        isRemoteSuccessful = true;
-      }
-    } catch (err) {
-      console.warn('Supabase state load note:', err);
-    }
-
-    if (isRemoteSuccessful) {
-      setSales(salesData || []);
-      setPurchases(purchData || []);
-      setExpenses(expData || []);
-      setProductsList(prodData || []);
-      setCustomersList(custData || []);
-      setSuppliersList(supData || []);
-    }
-  };
-
   useEffect(() => {
-    loadAppState();
     document.documentElement.setAttribute('data-theme', theme);
     document.body.setAttribute('data-theme', theme);
     if (theme === 'dark') {
@@ -192,16 +124,7 @@ function App() {
     } else {
       document.documentElement.classList.remove('dark');
     }
-
-    // Listen to storage events so child page logs immediately update parent dashboards
-    window.addEventListener('storage', loadAppState);
-    window.addEventListener('focus', loadAppState);
-
-    return () => {
-      window.removeEventListener('storage', loadAppState);
-      window.removeEventListener('focus', loadAppState);
-    };
-  }, [theme, tenant, activeTab]);
+  }, [theme]);
 
 
   const toggleTheme = () => {
@@ -896,7 +819,7 @@ function App() {
                   <button 
                     onClick={() => {
                       setPurchaseAutoOpen(true);
-                      setActiveTab('products');
+                      setActiveTab('purchases');
                     }}
                     className="bg-secondary border border-border hover:border-blue-500/60 rounded-2xl p-6 sm:p-7 flex flex-col items-center justify-center text-center gap-4 group transition-all duration-200 shadow-md hover:shadow-xl hover:-translate-y-1 cursor-pointer min-h-[200px]"
                   >
@@ -1000,11 +923,8 @@ function App() {
               />
             )}
             {activeTab === 'purchases' && (
-              <Products 
-                tenantId={tenant?.id || 'default-hardware-erp'} 
-                businessType={businessType as any} 
-                mode="catalog" 
-                autoOpenPurchaseModal={purchaseAutoOpen} 
+              <Purchases 
+                autoOpenModal={purchaseAutoOpen} 
                 onModalClosed={() => setPurchaseAutoOpen(false)} 
               />
             )}
@@ -1028,7 +948,7 @@ function App() {
               <Products tenantId={tenant?.id || 'default-hardware-erp'} businessType={businessType as any} mode="stock" autoOpenModal={productAutoOpen} onModalClosed={() => setProductAutoOpen(false)} />
             )}
             {activeTab === 'reports' && (
-              <Purchases autoOpenModal={false} />
+              <Reports tenantId={tenant?.id || 'default-hardware-erp'} sales={sales} purchases={purchases} />
             )}
             {activeTab === 'excel-export' && (
               <ExcelExport />

@@ -68,8 +68,17 @@ export class PurchaseService {
     billPayload: Partial<PurchaseBillRow>,
     itemsPayload: Partial<PurchaseItemRow>[] = []
   ): Promise<ServiceResponse<PurchaseWithItems>> {
+    const cleanBillNumber = (billPayload.bill_number && billPayload.bill_number.trim()) ? billPayload.bill_number.trim() : 'N/A';
+    const cleanSupplierName = (billPayload.supplier_name && billPayload.supplier_name.trim()) ? billPayload.supplier_name.trim() : 'GENERAL VENDOR';
+
+    const billPayloadToSave = {
+      ...billPayload,
+      bill_number: cleanBillNumber,
+      supplier_name: cleanSupplierName
+    };
+
     const billRes = await handleServiceCall<PurchaseBillRow>(
-      supabase.from('purchase_bills').insert([billPayload as any]).select().single()
+      supabase.from('purchase_bills').insert([billPayloadToSave as any]).select().single()
     );
 
     if (billRes.error || !billRes.data) {
@@ -79,14 +88,35 @@ export class PurchaseService {
     const createdBill = billRes.data;
 
     if (itemsPayload.length > 0) {
-      const cleanItems = itemsPayload.map(item => ({
-        ...item,
-        bill_id: createdBill.id
+      const cleanItemsFull = itemsPayload.map(item => ({
+        bill_id: createdBill.id,
+        product_id: item.product_id || null,
+        product_name: item.product_name || null,
+        hsn: item.hsn || null,
+        gst_percent: Number(item.gst_percent || 0),
+        qty: Number(item.qty || 1),
+        rate: Number(item.rate || 0),
+        amount: Number(item.amount || (Number(item.qty || 1) * Number(item.rate || 0)))
       }));
 
-      const itemsRes = await handleServiceCall<PurchaseItemRow[]>(
-        supabase.from('purchase_items').insert(cleanItems as any).select()
+      let itemsRes = await handleServiceCall<PurchaseItemRow[]>(
+        supabase.from('purchase_items').insert(cleanItemsFull as any).select()
       );
+
+      if (itemsRes.error) {
+        console.warn('⚠️ purchase_items full schema insert notice, retrying with core columns:', itemsRes.error);
+        const cleanItemsCore = itemsPayload.map(item => ({
+          bill_id: createdBill.id,
+          product_id: item.product_id || null,
+          qty: Number(item.qty || 1),
+          rate: Number(item.rate || 0),
+          amount: Number(item.amount || (Number(item.qty || 1) * Number(item.rate || 0)))
+        }));
+
+        itemsRes = await handleServiceCall<PurchaseItemRow[]>(
+          supabase.from('purchase_items').insert(cleanItemsCore as any).select()
+        );
+      }
 
       return {
         data: {
@@ -130,8 +160,14 @@ export class PurchaseService {
 
       if (itemsPayload.length > 0) {
         const cleanItems = itemsPayload.map(item => ({
-          ...item,
-          bill_id: id
+          bill_id: id,
+          product_id: item.product_id || null,
+          product_name: item.product_name || null,
+          hsn: item.hsn || null,
+          gst_percent: Number(item.gst_percent || 0),
+          qty: Number(item.qty || 1),
+          rate: Number(item.rate || 0),
+          amount: Number(item.amount || (Number(item.qty || 1) * Number(item.rate || 0)))
         }));
         const itemsRes = await handleServiceCall<PurchaseItemRow[]>(
           supabase.from('purchase_items').insert(cleanItems as any).select()

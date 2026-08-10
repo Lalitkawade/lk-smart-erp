@@ -113,8 +113,11 @@ CREATE TABLE IF NOT EXISTS purchase_bills (
 CREATE TABLE IF NOT EXISTS purchase_items (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     bill_id UUID NOT NULL REFERENCES purchase_bills(id) ON DELETE CASCADE,
-    product_id UUID NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
-    qty INTEGER NOT NULL DEFAULT 1,
+    product_id UUID REFERENCES products(id) ON DELETE RESTRICT,
+    product_name VARCHAR(255),
+    hsn VARCHAR(50),
+    gst_percent NUMERIC(5, 2) DEFAULT 0.00,
+    qty NUMERIC(12, 2) NOT NULL DEFAULT 1.00,
     rate NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
     amount NUMERIC(12, 2) NOT NULL DEFAULT 0.00
 );

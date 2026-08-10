@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useInventory } from '../../hooks/useInventory';
 import { useErpContext } from '../../context/ErpContext';
@@ -42,8 +42,6 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
   const [purchaseDate, setPurchaseDate] = useState(new Date().toISOString().slice(0, 10));
   const [paymentMode, setPaymentMode] = useState('UPI');
   const [transactionId, setTransactionId] = useState('');
-  const [paidAmount, setPaidAmount] = useState(0);
-  const [isPartialPayment, setIsPartialPayment] = useState(false);
   const [vendorSearchQuery, setVendorSearchQuery] = useState('');
   const [vendorDropdownOpen, setVendorDropdownOpen] = useState(false);
 
@@ -84,8 +82,6 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
     setVendorSearchQuery('');
     setBillNumber('');
     setTransactionId('');
-    setPaidAmount(0);
-    setIsPartialPayment(false);
     setIsEditingBaseStock(true);
     setIsEditingTax(true);
     setHasBillDetails(true);
@@ -184,16 +180,18 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [historyTab, setHistoryTab] = useState<'purchases' | 'sales'>('purchases');
   const [selectedHistoryProduct, setSelectedHistoryProduct] = useState<Product | null>(null);
-  const [prodPurchaseHistory, setProdPurchaseHistory] = useState<any[]>([]);
-  const [prodSalesHistory, setProdSalesHistory] = useState<any[]>([]);
 
-  const handleShowHistory = async (p: Product) => {
+  const handleShowHistory = (p: Product) => {
     setSelectedHistoryProduct(p);
+    setHistoryModalOpen(true);
+  };
 
-    // 1. Sales history from ErpContext
+  const prodSalesHistory = useMemo(() => {
+    if (!selectedHistoryProduct) return [];
+    const p = selectedHistoryProduct;
     const salesList: any[] = contextSales || [];
-
     const matchedSales: any[] = [];
+
     salesList.forEach((invoice: any) => {
       const lineItems = invoice.items || invoice.sales_items || [];
       if (!lineItems || lineItems.length === 0) {
@@ -203,7 +201,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
           (itemProdName && p.product_name && itemProdName.toLowerCase().trim() === p.product_name.toLowerCase().trim());
         if (isMatch) {
           matchedSales.push({
-            date: invoice.sale_date || invoice.created_at || new Date().toISOString(),
+            date: invoice.created_at || invoice.sale_date || new Date().toISOString(),
             id: invoice.invoice_number || invoice.id,
             customer_name: invoice.customer_name || 'Walk-in Customer',
             payment_mode: invoice.payment_mode || 'Cash',
@@ -215,14 +213,14 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
       } else {
         lineItems.forEach((item: any) => {
           const itemProdId = item.product_id || item.product?.id;
-          const itemProdName = item.product_name || item.product?.product_name;
+          const itemProdName = item.product_name || item.product?.product_name || products.find(pr => pr.id === itemProdId)?.product_name;
 
           const isMatch = (itemProdId && String(itemProdId) === String(p.id)) ||
             (itemProdName && p.product_name && itemProdName.toLowerCase().trim() === p.product_name.toLowerCase().trim());
 
           if (isMatch) {
             matchedSales.push({
-              date: invoice.sale_date || invoice.created_at || new Date().toISOString(),
+              date: invoice.created_at || invoice.sale_date || new Date().toISOString(),
               id: invoice.invoice_number || invoice.id,
               customer_name: invoice.customer_name || 'Walk-in Customer',
               payment_mode: invoice.payment_mode || 'Cash',
@@ -235,15 +233,24 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
       }
     });
     matchedSales.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    setProdSalesHistory(matchedSales);
+    return matchedSales;
+  }, [selectedHistoryProduct, contextSales, products]);
 
-    // 2. Purchases movement history from ErpContext
+  const prodPurchaseHistory = useMemo(() => {
+    if (!selectedHistoryProduct) return [];
+    const p = selectedHistoryProduct;
     const matchedPurchases: any[] = [];
     const piecesPerPack = Math.max(1, Number(p.pieces_per_pack || 1));
+    const pUnit = p.p_unit || 'Box';
+    const sUnit = p.s_unit || p.unit || 'Pcs';
+    const isDualUnit = piecesPerPack > 1 || (pUnit && sUnit && pUnit.toLowerCase() !== sUnit.toLowerCase());
+
     const pieceCostRate = piecesPerPack > 1 ? (Number(p.purchase_price || 0) / piecesPerPack) : Number(p.purchase_price || 0);
     const pieceSellingRate = Number(p.selling_price || (p as any).piece_selling_price || 0);
 
-    purchasesList.forEach((bill: any) => {
+    const list: any[] = purchasesList || [];
+
+    list.forEach((bill: any) => {
       const billProdId = bill.product_id;
       const billProdName = bill.product_name || bill.item_name;
       const isBillMatch = (billProdId && String(billProdId) === String(p.id)) ||
@@ -253,7 +260,8 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
       if (lineItems.length > 0) {
         lineItems.forEach((item: any) => {
           const itemProdId = item.product_id || item.product?.id || billProdId;
-          const itemProdName = item.product_name || item.product?.product_name || billProdName;
+          const itemProdName = item.product_name || item.product?.product_name || billProdName ||
+            products.find(pr => pr.id === itemProdId)?.product_name;
 
           const isMatch = (itemProdId && String(itemProdId) === String(p.id)) ||
             (itemProdName && p.product_name && itemProdName.toLowerCase().trim() === p.product_name.toLowerCase().trim()) ||
@@ -264,18 +272,28 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
             const rawRate = Number(item.rate || item.price || 0);
             const rawAmount = Number(item.amount || (rawQty * rawRate) || 0);
 
-            const baseQty = (rawRate > 0 && Math.abs(rawAmount - (rawQty * pieceCostRate)) < 0.01) ? rawQty : (rawQty * piecesPerPack);
-            const effectiveRate = baseQty > 0 ? (rawAmount / baseQty) : pieceCostRate;
+            const isPackRate = piecesPerPack > 1 && rawRate > (pieceCostRate * 1.5);
+            const packRate = isPackRate ? rawRate : (rawRate * piecesPerPack);
+            const pieceRate = isPackRate ? (rawRate / piecesPerPack) : (rawRate || pieceCostRate);
+
+            const packQty = isPackRate ? rawQty : (piecesPerPack > 1 ? (rawQty / piecesPerPack) : rawQty);
+            const baseQty = isPackRate ? (rawQty * piecesPerPack) : rawQty;
 
             matchedPurchases.push({
-              date: bill.purchase_date || bill.created_at || new Date().toISOString(),
-              bill_number: bill.bill_number || bill.id || 'N/A',
-              supplier_name: bill.supplier_name || 'Generic Supplier',
-              payment_mode: bill.payment_mode || 'N/A',
-              qty: baseQty,
-              rate: effectiveRate,
+              id: bill.id,
+              date: bill.created_at || bill.purchase_date || new Date().toISOString(),
+              bill_number: (bill.bill_number && bill.bill_number !== 'N/A' && !bill.bill_number.toLowerCase().startsWith('pb-')) ? bill.bill_number : '-',
+              supplier_name: bill.supplier_name || 'Generic Vendor',
+              payment_mode: bill.payment_mode || 'Cash',
+              pack_qty: packQty,
+              base_qty: baseQty,
+              pack_rate: packRate,
+              piece_rate: pieceRate,
               selling_price: pieceSellingRate,
-              amount: rawAmount
+              amount: rawAmount,
+              p_unit: pUnit,
+              s_unit: sUnit,
+              isDualUnit
             });
           }
         });
@@ -284,48 +302,143 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
         const rawRate = Number(bill.rate || bill.price || bill.purchase_price || 0);
         const rawAmount = Number(bill.amount || bill.total_amount || (rawQty * rawRate) || 0);
 
-        const baseQty = (rawRate > 0 && Math.abs(rawAmount - (rawQty * pieceCostRate)) < 0.01) ? rawQty : (rawQty * piecesPerPack);
-        const effectiveRate = baseQty > 0 ? (rawAmount / baseQty) : pieceCostRate;
+        const isPackRate = piecesPerPack > 1 && rawRate > (pieceCostRate * 1.5);
+        const packRate = isPackRate ? rawRate : (rawRate * piecesPerPack);
+        const pieceRate = isPackRate ? (rawRate / piecesPerPack) : (rawRate || pieceCostRate);
+
+        const packQty = isPackRate ? rawQty : (piecesPerPack > 1 ? (rawQty / piecesPerPack) : rawQty);
+        const baseQty = isPackRate ? (rawQty * piecesPerPack) : rawQty;
 
         matchedPurchases.push({
-          date: bill.purchase_date || bill.created_at || new Date().toISOString(),
-          bill_number: bill.bill_number || bill.id || 'N/A',
+          id: bill.id,
+          date: bill.created_at || bill.purchase_date || new Date().toISOString(),
+          bill_number: (bill.bill_number && bill.bill_number !== 'N/A' && !bill.bill_number.toLowerCase().startsWith('pb-')) ? bill.bill_number : '-',
           supplier_name: bill.supplier_name || 'Vendor Supplier',
           payment_mode: bill.payment_mode || 'Cash',
-          qty: baseQty,
-          rate: effectiveRate,
+          pack_qty: packQty,
+          base_qty: baseQty,
+          pack_rate: packRate,
+          piece_rate: pieceRate,
           selling_price: pieceSellingRate,
-          amount: rawAmount
+          amount: rawAmount,
+          p_unit: pUnit,
+          s_unit: sUnit,
+          isDualUnit
         });
       }
     });
 
-    // Calculate total stock sold and total recorded inflows to reconstruct full history
-    const totalSoldQty = matchedSales.reduce((sum, s) => sum + Number(s.qty || 0), 0);
-    const totalRecordedInflowQty = matchedPurchases.reduce((sum, pb) => sum + Number(pb.qty || 0), 0);
-    const requiredTotalInflow = Number(p.current_stock || 0) + totalSoldQty;
-    const initialOpeningQty = Math.max(0, requiredTotalInflow - totalRecordedInflowQty);
+    matchedPurchases.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-    if (initialOpeningQty > 0) {
-      matchedPurchases.push({
-        date: (p as any).created_at || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-        bill_number: 'OPENING-STOCK',
-        supplier_name: p.supplier_name || 'Store Catalog Inflow',
-        payment_mode: 'Catalog Opening',
-        qty: initialOpeningQty,
-        rate: pieceCostRate,
-        selling_price: pieceSellingRate,
-        amount: initialOpeningQty * pieceCostRate
-      });
+    for (let i = 0; i < matchedPurchases.length; i++) {
+      if (i === 0) {
+        matchedPurchases[i].variance = 0;
+      } else {
+        const prevRate = matchedPurchases[i - 1].piece_rate;
+        const currRate = matchedPurchases[i].piece_rate;
+        matchedPurchases[i].variance = currRate - prevRate;
+      }
     }
 
-    matchedPurchases.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    setProdPurchaseHistory(matchedPurchases);
+    return matchedPurchases.reverse();
+  }, [selectedHistoryProduct, purchasesList, products]);
 
-    setSelectedHistoryProduct(p);
+  const purchaseStats = useMemo(() => {
+    if (!prodPurchaseHistory || prodPurchaseHistory.length === 0) {
+      return { lowest: null, highest: null, latest: null, avgPieceRate: 0 };
+    }
 
-    setHistoryModalOpen(true);
-  };
+    let lowest = prodPurchaseHistory[0];
+    let highest = prodPurchaseHistory[0];
+    let sumRate = 0;
+
+    prodPurchaseHistory.forEach(item => {
+      if (item.piece_rate < lowest.piece_rate && item.piece_rate > 0) lowest = item;
+      if (item.piece_rate > highest.piece_rate) highest = item;
+      sumRate += item.piece_rate;
+    });
+
+    const latest = prodPurchaseHistory[0];
+    const avgPieceRate = sumRate / prodPurchaseHistory.length;
+
+    return { lowest, highest, latest, avgPieceRate };
+  }, [prodPurchaseHistory]);
+
+  // Calculate Live Total Initial/Procured Stock Ever per product (Current Available Stock + Total Sold Quantity / Procured Qty)
+  const totalStockAddedMap = useMemo(() => {
+    const map = new Map<string, { baseInflow: number; packInflow: number }>();
+
+    (products || []).forEach(p => {
+      const piecesPerPack = Math.max(1, Number(p.pieces_per_pack || 1));
+      const currentBaseStock = Number(p.current_stock || 0);
+
+      // 1. Stored initial stock on product
+      const storedInitialBase = Number((p as any).initial_stock || (p as any).opening_stock || (p as any).total_stock_added || 0);
+
+      // 2. Sum procured base stock from purchase bills
+      let purchasedBaseQty = 0;
+      (purchasesList || []).forEach((pBill: any) => {
+        const items = pBill.items || pBill.purchase_items || [];
+        items.forEach((pItem: any) => {
+          const prodId = pItem.product_id || pItem.product?.id;
+          const prodName = pItem.product_name || pItem.product?.product_name;
+
+          const isMatch = (prodId && String(prodId) === String(p.id)) ||
+            (prodName && p.product_name && prodName.toLowerCase().trim() === p.product_name.toLowerCase().trim());
+
+          if (isMatch) {
+            const rawQty = Number(pItem.qty || pItem.quantity || 0);
+            const isPack = pItem.unit && p.p_unit && pItem.unit.toLowerCase().trim() === p.p_unit.toLowerCase().trim();
+            const baseQty = isPack ? (rawQty * piecesPerPack) : rawQty;
+            purchasedBaseQty += baseQty;
+          }
+        });
+      });
+
+      // 3. Sum sold base stock from contextSales
+      let soldBaseQty = 0;
+      (contextSales || []).forEach((saleBill: any) => {
+        const saleItems = saleBill.items || saleBill.sales_items || [];
+        saleItems.forEach((sItem: any) => {
+          const prodId = sItem.product_id || sItem.product?.id;
+          const prodName = sItem.product_name || sItem.product?.product_name;
+
+          const isMatch = (prodId && String(prodId) === String(p.id)) ||
+            (prodName && p.product_name && prodName.toLowerCase().trim() === p.product_name.toLowerCase().trim());
+
+          if (isMatch) {
+            const rawQty = Number(sItem.qty || sItem.quantity || 0);
+            const isLoose = sItem.isLoose ?? true;
+            const baseQty = isLoose ? rawQty : (rawQty * piecesPerPack);
+            soldBaseQty += baseQty;
+          }
+        });
+      });
+
+      // Calculate Total Initial Base Stock Ever (Rounded to clean Pack boundary if dual unit)
+      const rawInflow = Math.max(currentBaseStock, storedInitialBase, currentBaseStock + soldBaseQty, purchasedBaseQty);
+
+      let finalPackInflow = piecesPerPack > 0 ? (rawInflow / piecesPerPack) : rawInflow;
+      let finalBaseInflow = rawInflow;
+
+      if (piecesPerPack > 1) {
+        if (storedInitialBase > 0 && storedInitialBase % piecesPerPack === 0) {
+          finalPackInflow = storedInitialBase / piecesPerPack;
+          finalBaseInflow = storedInitialBase;
+        } else {
+          finalPackInflow = Math.ceil(rawInflow / piecesPerPack);
+          finalBaseInflow = finalPackInflow * piecesPerPack;
+        }
+      }
+
+      map.set(p.id, {
+        baseInflow: finalBaseInflow,
+        packInflow: finalPackInflow
+      });
+    });
+
+    return map;
+  }, [products, purchasesList, contextSales]);
 
 
   // Form State for Multi-Product Procurement & Catalog Management
@@ -344,7 +457,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
     current_stock: 0,
     min_stock_level: 10,
     hsn: '',
-    gst: 18,
+    gst: 0,
     godown: '',
     rack_number: '',
     shelf_number: '',
@@ -523,31 +636,19 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
 
 
 
-  // Safe handler to delete procurement bills or synthetic product procurement records
+  // Safe handler to delete procurement bill records
   const handleDeleteProcurementBill = async (b: any) => {
-    if (!b) return;
+    if (!b || !b.id) return;
     const rawId = String(b.id || '');
-    const bNum = (b.bill_number && b.bill_number !== 'N/A' && !rawId.startsWith('pb-synth-')) ? b.bill_number : 'Selected Bill';
+    const bNum = (b.bill_number && b.bill_number !== 'N/A') ? b.bill_number : 'Selected Bill';
     if (!window.confirm(`Are you sure you want to delete Procurement Bill record "${bNum}"? This action cannot be undone.`)) return;
 
     try {
       const isValidUUID = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
-      if (rawId.startsWith('pb-synth-')) {
-        const targetProdId = rawId.replace('pb-synth-', '');
-        if (isValidUUID(targetProdId)) {
-          await deleteProduct(targetProdId);
-        }
-      } else if (isValidUUID(rawId)) {
+      if (isValidUUID(rawId)) {
         const res = await PurchaseService.deletePurchase(rawId);
         if (res && res.error) throw new Error(res.error);
-      } else {
-        const items = b.items || b.purchase_items || [];
-        for (const item of items) {
-          if (item.product_id && isValidUUID(item.product_id)) {
-            await deleteProduct(item.product_id).catch(() => {});
-          }
-        }
       }
 
       await refreshAllData();
@@ -564,21 +665,19 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
     setEditingProduct(null);
     setProductItems([createDefaultProductItem()]);
     setIsEditingBaseStock(true);
-    setIsEditingTax(true);
+    setIsEditingTax(false);
     setHasBillDetails(true);
     setSupplierId('');
     setVendorSearchQuery('');
     setBillNumber('');
     setTransactionId('');
-    setIsPartialPayment(false);
-    setPaidAmount(0);
     setModalOpen(true);
   };
 
   const handleOpenEdit = (p: any) => {
     setEditingProduct(p);
     setIsEditingBaseStock(false);
-    setIsEditingTax(false);
+    setIsEditingTax(Number(p.gst || 0) > 0);
     
     // Parse location values
     const locationStr = p.warehouse_location || '';
@@ -601,7 +700,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
       current_stock: p.current_stock,
       min_stock_level: p.min_stock_level,
       hsn: p.hsn || '',
-      gst: Number(p.gst || 18),
+      gst: Number(p.gst || 0),
       godown: parsedGodown,
       rack_number: parsedRack,
       shelf_number: parsedShelf,
@@ -629,50 +728,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
 
 
 
-  // Log stock inflow history for product transaction ledger
-  const logInflowPurchaseHistory = async (
-    tenantId: string,
-    productId: string,
-    _productName: string,
-    qty: number,
-    purchaseRate: number,
-    _sellingPrice: number,
-    supplierName: string
-  ) => {
-    const targetVendor = (supplierName && !['GENERIC VENDOR', 'GENERAL VENDOR', 'Direct Stock Inflow', 'Vendor Supplier', 'Direct Procurement Vendor', 'N/A'].includes(supplierName))
-      ? supplierName
-      : 'Direct Procurement Vendor';
-    const billNum = billNumber.trim() || 'N/A';
-    const nowIso = new Date().toISOString();
 
-    try {
-      const isValidUUID = (id: any) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-      const billPayload = {
-        tenant_id: (tenantId && isValidUUID(tenantId)) ? tenantId : '00000000-0000-0000-0000-000000000000',
-        bill_number: billNum,
-        supplier_name: targetVendor,
-        payment_mode: 'Cash',
-        total_amount: qty * purchaseRate,
-        paid_amount: qty * purchaseRate,
-        due_amount: 0,
-        purchase_date: nowIso
-      };
-      const items = [{
-        product_id: isValidUUID(productId) ? productId : null,
-        product_name: _productName,
-        qty,
-        rate: purchaseRate,
-        amount: qty * purchaseRate
-      }];
-      const pRes = await PurchaseService.createPurchase(billPayload as any, items);
-      if (pRes.error) {
-        throw new Error(pRes.error);
-      }
-      await refreshAllData();
-    } catch (e: any) {
-      console.error('Quick purchase error:', e.message || e);
-    }
-  };
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -802,7 +858,6 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
 
         const savedProd = await saveProduct(productPayload as any);
         const effectiveProdId = savedProd?.id || targetProductId;
-        const packSellingRate = sPrice * conversionFactor;
 
         savedBillItems.push({
           product_id: effectiveProdId || 'prod-' + Date.now() + '-' + i,
@@ -811,85 +866,79 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
           rate: pPrice,
           amount: itemLineCost
         });
-
-        if (!hasBillDetails && effectiveProdId) {
-          const inflowQty = Math.max(1, purchasePacksAdded > 0 ? purchasePacksAdded : 1);
-          await logInflowPurchaseHistory(
-            tenantId,
-            effectiveProdId,
-            item.product_name,
-            inflowQty,
-            pPrice,
-            packSellingRate,
-            activeSup ? activeSup.supplier_name : (item.supplier_name || 'Direct Stock Inflow')
-          ).catch(() => {});
-        }
       }
 
       // Log purchase bill record if items were saved and hasBillDetails is active
-      if (hasBillDetails && savedBillItems.length > 0 && activeSup) {
-        const rawDate = purchaseDate ? new Date(purchaseDate) : new Date();
-        const safeIsoDate = isNaN(rawDate.getTime()) ? new Date().toISOString() : rawDate.toISOString();
-        const effectivePaid = isPartialPayment ? Math.min(totalBillCost, Math.max(0, paidAmount)) : totalBillCost;
-        const dueAmount = Math.max(0, totalBillCost - effectivePaid);
+      if (hasBillDetails && savedBillItems.length > 0) {
+        let activeSup: any = suppliers.find(s => s.id === supplierId);
+        if (!activeSup && vendorSearchQuery.trim()) {
+          const queryUpper = vendorSearchQuery.trim().toUpperCase();
+          activeSup = suppliers.find(s => s.supplier_name && s.supplier_name.toUpperCase() === queryUpper);
+        }
 
-        const newBillObj = {
-          id: 'pb-' + Date.now(),
-          bill_number: billNumber.trim() || 'PB-' + Date.now().toString().slice(-5),
-          supplier_name: activeSup.supplier_name,
-          payment_mode: paymentMode,
-          ref_number: transactionId.trim() || null,
-          transaction_id: transactionId.trim() || null,
-          total_amount: totalBillCost,
-          paid_amount: effectivePaid,
-          due_amount: dueAmount,
-          purchase_date: safeIsoDate,
-          is_offline_draft: true,
-          items: savedBillItems
-        };
+        const finalSupName = activeSup ? activeSup.supplier_name : (vendorSearchQuery.trim().toUpperCase() || 'GENERAL VENDOR');
+        const finalBillNumber = billNumber.trim() || 'N/A';
+        const now = new Date();
+        const rawDate = purchaseDate ? new Date(purchaseDate) : now;
+        if (!isNaN(rawDate.getTime())) {
+          rawDate.setHours(now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
+        }
+        const safeIsoDate = isNaN(rawDate.getTime()) ? now.toISOString() : rawDate.toISOString();
+
+        const effectivePaid = totalBillCost;
+        const dueAmount = Math.max(0, totalBillCost - effectivePaid);
 
         const isValidUUID = (id: any) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
         const billPayload = {
-          tenant_id: (tenantId && isValidUUID(tenantId)) ? tenantId : '00000000-0000-0000-0000-000000000000',
-          bill_number: newBillObj.bill_number,
-          supplier_name: activeSup.supplier_name,
-          payment_mode: paymentMode,
+          tenant_id: (tenantId && isValidUUID(tenantId)) ? tenantId : null,
+          bill_number: finalBillNumber,
+          supplier_name: finalSupName,
+          supplier_phone: activeSup?.phone || null,
+          payment_mode: paymentMode || 'Cash',
           ref_number: transactionId.trim() || null,
-          transaction_id: transactionId.trim() || null,
           total_amount: totalBillCost,
           paid_amount: effectivePaid,
           due_amount: dueAmount,
           purchase_date: safeIsoDate
         };
 
-        const rows = savedBillItems.map(bi => ({
-          product_id: (bi.product_id && isValidUUID(bi.product_id)) ? bi.product_id : null,
-          product_name: bi.product_name,
-          qty: bi.qty,
-          rate: bi.rate,
-          amount: bi.amount
-        }));
+        const rows = savedBillItems.map((bi, idx) => {
+          const itemConfig = productItems[idx] || {};
+          return {
+            product_id: (bi.product_id && isValidUUID(bi.product_id)) ? bi.product_id : null,
+            product_name: bi.product_name || itemConfig.product_name || 'Procured Item',
+            hsn: itemConfig.hsn || null,
+            gst_percent: Number(itemConfig.gst || 18),
+            qty: Number(bi.qty || 1),
+            rate: Number(bi.rate || 0),
+            amount: Number(bi.amount || 0)
+          };
+        });
+
+        console.log('⚡ [handleSaveProduct] Preparing purchase bill insertion payload:', billPayload);
+        console.log('⚡ [handleSaveProduct] Preparing line items rows:', rows);
 
         try {
           const pRes = await PurchaseService.createPurchase(billPayload as any, rows);
+          console.log('⚡ [handleSaveProduct] PurchaseService.createPurchase response:', pRes);
+
           if (pRes.error) {
-            throw new Error(pRes.error);
-          }
-          if (dueAmount > 0 && activeSup?.id) {
+            triggerToast('⚠️ Purchase Bill Note: ' + pRes.error);
+            console.error('❌ [handleSaveProduct] Purchase bill creation error:', pRes.error);
+          } else if (dueAmount > 0 && activeSup?.id) {
             await SupplierService.updateSupplier(activeSup.id, { outstanding: Number(activeSup.outstanding || 0) + dueAmount });
           }
-          await refreshAllData();
         } catch (e: any) {
-          triggerToast('⚠️ Purchase Bill Failed: ' + (e.message || e));
-          if (savedCount > 0) setModalOpen(false);
-          return;
+          triggerToast('⚠️ Purchase Bill Error: ' + (e.message || e));
+          console.error('❌ [handleSaveProduct] Purchase bill save exception:', e);
         }
       }
 
       if (savedCount > 0) {
+        await refreshAllData();
         setEditingProduct(null);
         setModalOpen(false);
-        triggerToast(`⚡ ${savedCount} Product(s) saved successfully!`);
+        triggerToast(`⚡ ${savedCount} Product catalog item(s) & Purchase Bill logged successfully!`);
         window.dispatchEvent(new Event('storage'));
       }
     } catch (err: any) {
@@ -966,140 +1015,40 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
     }).length;
   }, [products]);
 
-  const resolveBillVendorName = useCallback((b: any) => {
-    if (!b) return 'Direct Procurement Vendor';
-    const isPlaceholder = (val: any) => {
-      if (!val) return true;
-      const str = String(val).trim().toUpperCase();
-      return ['DIRECT PROCUREMENT VENDOR', 'GENERIC VENDOR', 'GENERAL VENDOR', 'VENDOR SUPPLIER', 'DIRECT STOCK INFLOW', 'N/A', 'NULL', 'UNDEFINED'].includes(str);
-    };
-
-    if (!isPlaceholder(b.supplier_name)) return b.supplier_name;
-
-    if (b.supplier_id) {
-      const match = suppliers.find(s => s.id === b.supplier_id);
-      if (match?.supplier_name && !isPlaceholder(match.supplier_name)) return match.supplier_name;
-    }
-
-    const items = b.items || b.purchase_items || [];
-    for (const it of items) {
-      if (!isPlaceholder(it.supplier_name)) return it.supplier_name;
-      
-      if (it.product_id) {
-        const prod = products.find(p => p.id === it.product_id);
-        if (prod) {
-          if (!isPlaceholder(prod.supplier_name)) return prod.supplier_name;
-          if (prod.supplier_id) {
-            const match = suppliers.find(s => s.id === prod.supplier_id);
-            if (match?.supplier_name && !isPlaceholder(match.supplier_name)) return match.supplier_name;
-          }
-        }
-      }
-
-      if (it.product_name) {
-        const prodNameClean = String(it.product_name).toLowerCase().trim();
-        const prod = products.find(p => p.product_name && p.product_name.toLowerCase().trim() === prodNameClean);
-        if (prod) {
-          if (!isPlaceholder(prod.supplier_name)) return prod.supplier_name;
-          if (prod.supplier_id) {
-            const match = suppliers.find(s => s.id === prod.supplier_id);
-            if (match?.supplier_name && !isPlaceholder(match.supplier_name)) return match.supplier_name;
-          }
-        }
-      }
-    }
-
-    if (suppliers.length > 0) {
-      const validSup = suppliers.find(s => s.supplier_name && !isPlaceholder(s.supplier_name));
-      if (validSup) return validSup.supplier_name;
-    }
-
-    return 'Direct Procurement Vendor';
-  }, [suppliers, products]);
-
-  const uniqueBillsList = useMemo(() => {
-    const list: any[] = purchasesList || [];
-    const existingBillProductIds = new Set<string>();
-    const existingBillProductNames = new Set<string>();
-
-    list.forEach(b => {
-      const items = b.items || b.purchase_items || [];
-      items.forEach((it: any) => {
-        if (it.product_id) existingBillProductIds.add(String(it.product_id));
-        if (it.product_name) existingBillProductNames.add(String(it.product_name).toLowerCase().trim());
-      });
-    });
-
-    const synthBills: any[] = [];
-    (products || []).forEach((p: any) => {
-      const pId = String(p.id || '');
-      const pName = String(p.product_name || '').toLowerCase().trim();
-
-      if (pId && !existingBillProductIds.has(pId) && (!pName || !existingBillProductNames.has(pName))) {
-        const conversion = Number(p.pieces_per_pack || 1);
-        const stockInBase = Number(p.current_stock || 0);
-        const packsQty = conversion > 1 ? (stockInBase / conversion) : stockInBase;
-        const rate = Number(p.purchase_price || 0);
-        const totalCost = rate * (packsQty > 0 ? packsQty : 1);
-        
-        const vendorName = resolveBillVendorName({
-          supplier_name: p.supplier_name,
-          supplier_id: p.supplier_id,
-          items: [{ product_id: pId, product_name: p.product_name, supplier_name: p.supplier_name }]
-        });
-
-        const synthBillNum = `PB-${(p.hsn || p.sku || pId.slice(-5)).toUpperCase()}`;
-
-        synthBills.push({
-          id: `pb-synth-${pId}`,
-          bill_number: synthBillNum,
-          supplier_name: vendorName,
-          payment_mode: 'Cash',
-          total_amount: totalCost,
-          paid_amount: totalCost,
-          due_amount: 0,
-          purchase_date: p.created_at || new Date().toISOString(),
-          items: [{
-            product_id: pId,
-            product_name: p.product_name,
-            qty: packsQty > 0 ? packsQty : 1,
-            rate: rate,
-            amount: totalCost
-          }]
-        });
-      }
-    });
-
-    const combined = list.map(b => ({
-      ...b,
-      supplier_name: resolveBillVendorName(b)
-    })).concat(synthBills);
-
-    return combined.sort((a, b) => new Date(b.purchase_date || b.created_at || 0).getTime() - new Date(a.purchase_date || a.created_at || 0).getTime());
-  }, [purchasesList, products, resolveBillVendorName]);
-
   const filteredPurchaseBills = useMemo(() => {
-    return uniqueBillsList.filter((b: any) => {
-      const supName = resolveBillVendorName(b);
+    const list: any[] = purchasesList || [];
+    const q = search.trim().toLowerCase();
+    const vFilter = vendorFilter.toUpperCase().trim();
+
+    console.log('🔍 [ProcurementDesk Debug] Raw purchasesList count from context:', list.length, list);
+    console.log('🔍 [ProcurementDesk Debug] Active filters:', { search: q, vendorFilter: vFilter });
+
+    const result = list.filter((b: any) => {
+      const supName = (b.supplier_name || '').toUpperCase().trim();
+      const matchedVendor = suppliers.find(s => s.id === b.supplier_id);
+      const matchedVendorName = matchedVendor ? (matchedVendor.supplier_name || '').toUpperCase().trim() : '';
+
+      const passesVendor = (vFilter === 'ALL') || (supName === vFilter) || (matchedVendorName === vFilter);
+      if (!passesVendor) return false;
+
       const billNo = b.bill_number || b.id || '';
       const pDate = new Date(b.purchase_date || b.created_at || Date.now());
       const dateFormatted = isNaN(pDate.getTime()) ? '' : pDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
       const timeFormatted = isNaN(pDate.getTime()) ? '' : pDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
 
-      const matchesSearch = (
-        supName.toLowerCase().includes(search.toLowerCase()) ||
-        billNo.toLowerCase().includes(search.toLowerCase()) ||
-        dateFormatted.toLowerCase().includes(search.toLowerCase()) ||
-        timeFormatted.toLowerCase().includes(search.toLowerCase())
+      const matchesSearch = !q || (
+        supName.toLowerCase().includes(q) ||
+        billNo.toLowerCase().includes(q) ||
+        dateFormatted.toLowerCase().includes(q) ||
+        timeFormatted.toLowerCase().includes(q)
       );
 
-      if (!matchesSearch) return false;
-      if (vendorFilter !== 'ALL' && supName.toUpperCase().trim() !== vendorFilter.toUpperCase().trim()) {
-        return false;
-      }
-      return true;
-    });
-  }, [uniqueBillsList, search, vendorFilter, resolveBillVendorName]);
+      return matchesSearch;
+    }).sort((a: any, b: any) => new Date(b.purchase_date || b.created_at || 0).getTime() - new Date(a.purchase_date || a.created_at || 0).getTime());
+
+    console.log('🔍 [ProcurementDesk Debug] Filtered purchase bills count:', result.length, result);
+    return result;
+  }, [purchasesList, search, vendorFilter, suppliers]);
 
   return (
     <div className="bg-secondary border border-border rounded-xl p-4 sm:p-6 relative">
@@ -1202,35 +1151,47 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
         </div>
       )}
 
-      {/* Catalog vs Vendor Procurement Bills Desk Sub-Tabs - Equal 2-Column Side-by-Side Grid */}
+      {/* Catalog vs Vendor Procurement Bills Desk Sub-Tabs - Equal 2-Column Side-by-Side Grid matching Vendor CSS pattern */}
       {mode === 'catalog' && (
-        <div className="grid grid-cols-2 gap-2 mb-6 border-b border-border pb-3">
+        <div className="grid grid-cols-2 gap-2 border-b border-border text-xs font-bold mb-4">
           <button
             type="button"
             onClick={() => setActiveViewTab('catalog')}
-            className={`w-full py-2.5 px-2 rounded-xl text-xs font-extrabold transition flex items-center justify-center gap-1.5 cursor-pointer text-center ${
+            className={`w-full py-2.5 px-2 rounded-t-xl transition flex items-center justify-center gap-1.5 cursor-pointer text-center ${
               activeViewTab === 'catalog'
-                ? 'bg-primary text-white shadow-md shadow-primary/20'
-                : 'bg-background border border-border text-textSecondary hover:text-foreground'
+                ? 'bg-secondary border-t-2 border-x border-primary text-primary font-extrabold shadow-2xs'
+                : 'bg-background/50 border-t border-x border-border text-textMuted hover:text-foreground'
             }`}
           >
             <i className="fa-solid fa-boxes-stacked text-xs shrink-0"></i>
             <span className="truncate">Product Items & Catalog</span>
-            <span className="bg-white/20 px-1.5 py-0.5 rounded text-[10px] shrink-0 font-mono">{products.length}</span>
+            <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono shrink-0 ${
+              activeViewTab === 'catalog'
+                ? 'bg-background text-foreground font-bold'
+                : 'bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-textMuted'
+            }`}>
+              {products.length}
+            </span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveViewTab('bills')}
-            className={`w-full py-2.5 px-2 rounded-xl text-xs font-extrabold transition flex items-center justify-center gap-1.5 cursor-pointer text-center ${
+            className={`w-full py-2.5 px-2 rounded-t-xl transition flex items-center justify-center gap-1.5 cursor-pointer text-center ${
               activeViewTab === 'bills'
-                ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
-                : 'bg-background border border-border text-textSecondary hover:text-foreground'
+                ? 'bg-secondary border-t-2 border-x border-primary text-primary font-extrabold shadow-2xs'
+                : 'bg-background/50 border-t border-x border-border text-textMuted hover:text-foreground'
             }`}
           >
             <i className="fa-solid fa-receipt text-xs shrink-0"></i>
             <span className="truncate">Procurement & Bills Desk</span>
-            <span className="bg-white/20 px-1.5 py-0.5 rounded text-[10px] shrink-0 font-mono">{filteredPurchaseBills.length}</span>
+            <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono shrink-0 ${
+              activeViewTab === 'bills'
+                ? 'bg-background text-foreground font-bold'
+                : 'bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-textMuted'
+            }`}>
+              {purchasesList.length}
+            </span>
           </button>
         </div>
       )}
@@ -1322,12 +1283,11 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                   </tr>
                 ) : (
                   filteredPurchaseBills.map((b: any) => {
-                    const rawBillNo = b.bill_number || b.id || '';
-                    const isGeneratedCode = /^PB-[0-9A-F]{5,6}$/i.test(rawBillNo) || /^PB-SYNTH-/i.test(rawBillNo) || /^STOCK-IN-/i.test(rawBillNo);
-                    const billNo = (rawBillNo && rawBillNo.trim() && rawBillNo !== 'N/A' && !isGeneratedCode)
+                    const rawBillNo = (b.bill_number || '').trim();
+                    const billNo = (rawBillNo && rawBillNo !== 'N/A' && !rawBillNo.toLowerCase().startsWith('pb-'))
                       ? rawBillNo
-                      : 'N/A';
-                    const vendorName = resolveBillVendorName(b);
+                      : '-';
+                    const vendorName = b.supplier_name || 'Vendor Supplier';
                     const items = b.items || b.purchase_items || [];
                     const totalAmt = Number(b.total_amount || 0);
                     const paidAmt = Number(b.paid_amount || 0);
@@ -1480,7 +1440,17 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
               const isLowStock = baseStockQty <= minStockPacks;
               const costValuation = baseStockQty * costPerPiece;
               const retailValuation = baseStockQty * piecePrice;
-              const stockRatio = Math.min(100, Math.max(5, (baseStockQty / (minStockPacks * 2 || 20)) * 100));
+
+              const addedInfo = totalStockAddedMap.get(p.id) || { baseInflow: baseStockQty, packInflow: purchasePackQty };
+              const totalAddedBase = Math.max(baseStockQty, addedInfo.baseInflow);
+              const stockRatio = totalAddedBase > 0 ? Math.min(100, Math.max(2, (baseStockQty / totalAddedBase) * 100)) : 100;
+
+              const formattedCurrentPack = (piecesPerPack > 1 && baseStockQty % piecesPerPack !== 0)
+                ? (baseStockQty / piecesPerPack).toFixed(2).replace(/\.00$/, '')
+                : (piecesPerPack > 0 ? Math.floor(baseStockQty / piecesPerPack).toString() : baseStockQty.toString());
+
+              const formattedTotalPack = addedInfo.packInflow.toString();
+              const formattedTotalBase = totalAddedBase.toString();
 
               const godownVal = p.godown || (p.warehouse_location?.includes('|') ? p.warehouse_location.split('|')[0].replace(/^Godown:\s*/i, '').trim() : '');
               const rackVal = p.rack_number || (p.warehouse_location?.match(/Rack:\s*([^|]+)/i)?.[1]?.trim() || '');
@@ -1524,12 +1494,12 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                         {minStockPacks} {pUnit}
                       </td>
                       <td className="py-3.5 px-4 text-center">
-                        <div className="flex flex-col gap-1 max-w-[200px] mx-auto">
+                        <div className="flex flex-col gap-1 max-w-[220px] mx-auto">
                           <div className="flex items-center justify-between gap-2">
                             <span className={`font-mono font-black text-xs ${isLowStock ? 'text-rose-600 dark:text-rose-400' : 'text-slate-900 dark:text-slate-100'}`}>
                               {isDualUnit 
-                                ? `${purchasePackQty.toFixed(2).replace(/\.00$/, '')} ${pUnit.toUpperCase()}`
-                                : `${baseStockQty.toFixed(2).replace(/\.00$/, '')} ${sUnit.toUpperCase()}`}
+                                ? `${formattedCurrentPack} / ${formattedTotalPack} ${pUnit.toUpperCase()}`
+                                : `${baseStockQty.toFixed(2).replace(/\.00$/, '')} / ${formattedTotalBase} ${sUnit.toUpperCase()}`}
                             </span>
                             {isLowStock ? (
                               <span className="text-[9px] px-1.5 py-0.2 bg-rose-500 text-white rounded font-black uppercase tracking-wider animate-pulse">
@@ -1543,13 +1513,13 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                           </div>
                           {isDualUnit && piecesPerPack > 1 && (
                             <div className="text-[10px] text-blue-600 dark:text-blue-400 font-bold font-mono text-left">
-                              ({baseStockQty.toFixed(2).replace(/\.00$/, '')} {sUnit.toUpperCase()})
+                              ({baseStockQty.toFixed(2).replace(/\.00$/, '')} / {formattedTotalBase} {sUnit.toUpperCase()})
                             </div>
                           )}
                           {/* Stock Level Progress Meter */}
-                          <div className="w-full bg-slate-200 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                          <div className="w-full bg-slate-200 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden" title={`Available: ${baseStockQty} | Total Added: ${totalAddedBase} (${stockRatio.toFixed(1)}% remaining)`}>
                             <div 
-                              className={`h-full transition-all duration-500 ${isLowStock ? 'bg-rose-500' : stockRatio < 50 ? 'bg-amber-500' : 'bg-emerald-500'}`} 
+                              className={`h-full transition-all duration-500 ${isLowStock ? 'bg-rose-500' : stockRatio < 30 ? 'bg-amber-500' : 'bg-emerald-500'}`} 
                               style={{ width: `${stockRatio}%` }}
                             ></div>
                           </div>
@@ -1593,11 +1563,8 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                           <div className="flex items-center justify-center gap-1.5">
                             <span className={`font-mono font-bold text-xs ${isLowStock ? 'text-rose-600 dark:text-rose-400' : 'text-slate-900 dark:text-slate-100'}`}>
                               {isDualUnit 
-                                ? purchasePackQty.toFixed(2).replace(/\.00$/, '') 
-                                : baseStockQty.toFixed(2).replace(/\.00$/, '')}
-                            </span>
-                            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase">
-                              {isDualUnit ? pUnit.toUpperCase() : sUnit.toUpperCase()}
+                                ? `${formattedCurrentPack} / ${formattedTotalPack} ${pUnit.toUpperCase()}`
+                                : `${baseStockQty.toFixed(2).replace(/\.00$/, '')} / ${formattedTotalBase} ${sUnit.toUpperCase()}`}
                             </span>
                             {isLowStock && (
                               <span className="text-[9px] px-1.5 py-0.5 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 rounded-md font-bold" title="Low stock warning!">
@@ -1607,7 +1574,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                           </div>
                           {isDualUnit && piecesPerPack > 1 && (
                             <div className="text-[10px] text-blue-600 dark:text-blue-400 font-bold font-mono">
-                              ({baseStockQty.toFixed(2).replace(/\.00$/, '')} {sUnit.toUpperCase()})
+                              ({baseStockQty.toFixed(2).replace(/\.00$/, '')} / ${formattedTotalBase} ${sUnit.toUpperCase()})
                             </div>
                           )}
                         </div>
@@ -1696,7 +1663,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                 <h3 className="text-base font-black text-slate-900 dark:text-slate-100 uppercase tracking-wide flex items-center gap-2">
                   <i className="fa-solid fa-file-invoice text-blue-600"></i> Vendor Purchase Invoice Receipt
                 </h3>
-                <p className="text-xs text-slate-500 font-mono mt-0.5">Bill No: {viewingPurchaseBill.bill_number || viewingPurchaseBill.id}</p>
+                <p className="text-xs text-slate-500 font-mono mt-0.5">Bill No: {(viewingPurchaseBill.bill_number && viewingPurchaseBill.bill_number !== 'N/A' && !viewingPurchaseBill.bill_number.toLowerCase().startsWith('pb-')) ? viewingPurchaseBill.bill_number : '-'}</p>
               </div>
               <button
                 type="button"
@@ -1710,7 +1677,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
             <div className="grid grid-cols-2 gap-4 text-xs font-mono bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
               <div>
                 <span className="text-slate-400 block font-sans">Vendor / Supplier:</span>
-                <strong className="text-blue-600 dark:text-blue-400 text-sm font-bold">{resolveBillVendorName(viewingPurchaseBill)}</strong>
+                <strong className="text-blue-600 dark:text-blue-400 text-sm font-bold">{viewingPurchaseBill.supplier_name || 'Vendor Supplier'}</strong>
               </div>
               <div>
                 <span className="text-slate-400 block font-sans">Purchase Date:</span>
@@ -1799,7 +1766,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                   <i className="fa-solid fa-boxes-stacked text-blue-600"></i> Procured Material Items Breakdown
                 </h3>
                 <p className="text-xs text-slate-500 font-mono mt-0.5">
-                  Vendor: <strong className="text-blue-600">{viewingProcuredItems.supplier_name || 'Generic Vendor'}</strong> | Bill No: <strong className="text-slate-700 dark:text-slate-300">{viewingProcuredItems.bill_number || viewingProcuredItems.id}</strong>
+                  Vendor: <strong className="text-blue-600">{viewingProcuredItems.supplier_name || 'Generic Vendor'}</strong> | Bill No: <strong className="text-slate-700 dark:text-slate-300">{(viewingProcuredItems.bill_number && viewingProcuredItems.bill_number !== 'N/A' && !viewingProcuredItems.bill_number.toLowerCase().startsWith('pb-')) ? viewingProcuredItems.bill_number : '-'}</strong>
                 </p>
               </div>
               <button
@@ -1829,12 +1796,13 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                     </tr>
                   ) : (
                     (viewingProcuredItems.items || viewingProcuredItems.purchase_items || []).map((it: any, idx: number) => {
+                      const resolvedName = it.product_name || products.find(p => p.id === it.product_id)?.product_name || 'Procured Material Item';
                       const qty = Number(it.qty || 1);
                       const rate = Number(it.rate || 0);
                       return (
                         <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                           <td className="p-2.5 text-slate-400">{idx + 1}</td>
-                          <td className="p-2.5 font-bold text-slate-900 dark:text-slate-100">{it.product_name || 'Procured Material'}</td>
+                          <td className="p-2.5 font-bold text-slate-900 dark:text-slate-100">{resolvedName}</td>
                           <td className="p-2.5 text-center font-bold text-blue-600 dark:text-blue-400">{qty}</td>
                           <td className="p-2.5 text-right">₹{rate.toFixed(2)}</td>
                           <td className="p-2.5 text-right font-bold text-emerald-600 dark:text-emerald-400">₹{(qty * rate).toFixed(2)}</td>
@@ -2777,11 +2745,28 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">GST Tax Rate (%)</label>
                             <button
                               type="button"
-                              onClick={() => setIsEditingTax(!isEditingTax)}
-                              className="text-[10px] font-extrabold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer"
+                              onClick={() => {
+                                if (!isEditingTax) {
+                                  const confirmEnable = window.confirm("Are you sure you want to enable GST tax calculation for this product?");
+                                  if (confirmEnable) {
+                                    setIsEditingTax(true);
+                                    if (!item.gst || item.gst === 0) {
+                                      updateProductItem(index, { gst: 18 });
+                                    }
+                                  }
+                                } else {
+                                  setIsEditingTax(false);
+                                  updateProductItem(index, { gst: 0 });
+                                }
+                              }}
+                              className={`text-[10px] font-extrabold px-2 py-0.5 rounded-lg border transition flex items-center gap-1 cursor-pointer active:scale-95 ${
+                                isEditingTax
+                                  ? 'bg-rose-500/10 text-rose-500 border-rose-500/30 hover:bg-rose-500 hover:text-white'
+                                  : 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30 hover:bg-blue-600 hover:text-white'
+                              }`}
                             >
-                              <i className={`fa-solid ${isEditingTax ? 'fa-lock' : 'fa-pen-to-square'}`}></i>
-                              {isEditingTax ? 'Lock Tax' : '✏️ Edit Tax Rate'}
+                              <i className={`fa-solid ${isEditingTax ? 'fa-lock' : 'fa-lock-open'}`}></i>
+                              {isEditingTax ? 'Freeze / Turn Off GST' : '✏️ Enable GST Tax'}
                             </button>
                           </div>
                           <select 
@@ -2789,12 +2774,12 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                             className={`w-full border rounded-xl p-2.5 text-xs font-semibold transition ${
                               isEditingTax 
                                 ? 'bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none' 
-                                : 'bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-500 cursor-not-allowed opacity-75'
+                                : 'bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-400 cursor-not-allowed opacity-75'
                             }`}
                             value={item.gst || 0} 
                             onChange={(e) => updateProductItem(index, { gst: Number(e.target.value) })}
                           >
-                            <option value={0}>0% (GST Disabled)</option>
+                            <option value={0}>0% (GST Disabled / Frozen)</option>
                             <option value={5}>5% GST</option>
                             <option value={12}>12% GST</option>
                             <option value={18}>18% GST</option>
@@ -2905,104 +2890,220 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
       {/* History Modal */}
       {historyModalOpen && selectedHistoryProduct && createPortal(
         <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 z-[9999] overflow-y-auto animate-backdrop-fade">
-          <div className="bg-secondary border border-border p-6 rounded-2xl w-full max-w-5xl shadow-2xl overflow-y-auto max-h-[90vh] flex flex-col gap-4">
-            
+          <div className="bg-secondary border border-border p-6 rounded-2xl w-full max-w-6xl shadow-2xl overflow-y-auto max-h-[92vh] flex flex-col gap-4">
+
+            {/* Header */}
             <div className="flex justify-between items-start border-b border-border pb-3">
               <div>
-                <span className="text-[10px] font-bold text-primary uppercase tracking-widest">Product Card Report</span>
-                <h3 className="text-lg font-black text-foreground uppercase mt-1">
-                  {selectedHistoryProduct.product_name}
+                <span className="text-[10px] font-bold text-primary uppercase tracking-widest">Supplier Rate & Movement Ledger</span>
+                <h3 className="text-lg font-black text-foreground uppercase mt-1 flex items-center gap-2">
+                  <i className="fa-solid fa-boxes-stacked text-primary"></i> {selectedHistoryProduct.product_name}
                 </h3>
-                <p className="text-xs text-textSecondary mt-1 flex items-center gap-3 flex-wrap">
-                  <span>HSN: <strong>{selectedHistoryProduct.hsn || 'N/A'}</strong></span>
-                  <span>Current Stock: <strong className="text-emerald-600 dark:text-emerald-400 font-mono text-sm font-black">{selectedHistoryProduct.current_stock} {selectedHistoryProduct.s_unit || selectedHistoryProduct.unit || 'Pcs'}</strong></span>
-                  <span className="text-[11px] text-slate-500 font-mono">(Inflows Logged: {prodPurchaseHistory.reduce((sum, pb) => sum + Number(pb.qty || 0), 0)} Pcs)</span>
-                  <span>Cost: <span className="font-mono font-bold">₹{Number(selectedHistoryProduct.purchase_price || 0).toFixed(2)}</span></span>
-                  <span>Sell: <span className="font-mono font-bold text-primary">₹{Number(selectedHistoryProduct.selling_price || 0).toFixed(2)}</span></span>
+                <p className="text-xs text-textSecondary mt-1 flex items-center gap-3 flex-wrap font-mono">
+                  <span>HSN: <strong className="text-foreground">{selectedHistoryProduct.hsn || 'N/A'}</strong></span>
+                  <span>Live Stock: <strong className="text-emerald-600 dark:text-emerald-400 font-mono text-sm font-black">{selectedHistoryProduct.current_stock} {selectedHistoryProduct.s_unit || selectedHistoryProduct.unit || 'Pcs'}</strong></span>
+                  <span>Catalog Cost: <span className="font-bold">₹{Number(selectedHistoryProduct.purchase_price || 0).toFixed(2)}</span></span>
+                  <span>Retail Sell: <span className="font-bold text-primary">₹{Number(selectedHistoryProduct.selling_price || 0).toFixed(2)}</span></span>
                 </p>
               </div>
-              <button className="text-textSecondary hover:text-foreground text-xs font-bold bg-background/50 hover:bg-background border border-border px-3 py-1.5 rounded-lg transition cursor-pointer"
+              <button className="text-textSecondary hover:text-foreground text-xs font-bold bg-background/50 hover:bg-background border border-border px-3.5 py-2 rounded-xl transition cursor-pointer"
                 onClick={() => setHistoryModalOpen(false)}>
-                &times; Close Report
+                ✕ Close Report
               </button>
             </div>
 
+            {/* SUPPLIER RATE COMPARISON KPI SUMMARY CARDS */}
+            {historyTab === 'purchases' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="bg-emerald-500/10 border border-emerald-500/30 p-3 rounded-xl">
+                  <div className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider flex items-center justify-between">
+                    <span>🏆 Lowest Rate Paid</span>
+                    <i className="fa-solid fa-arrow-down-long"></i>
+                  </div>
+                  <div className="text-base font-black text-emerald-600 dark:text-emerald-400 font-mono mt-1">
+                    {purchaseStats.lowest ? `₹${purchaseStats.lowest.piece_rate.toFixed(2)} / ${purchaseStats.lowest.s_unit}` : '-'}
+                  </div>
+                  <div className="text-[10.5px] text-emerald-700 dark:text-emerald-300 font-semibold truncate mt-0.5">
+                    {purchaseStats.lowest ? `Vendor: ${purchaseStats.lowest.supplier_name}` : 'No purchases logged'}
+                  </div>
+                </div>
+
+                <div className="bg-rose-500/10 border border-rose-500/30 p-3 rounded-xl">
+                  <div className="text-[10px] font-bold text-rose-600 dark:text-rose-400 uppercase tracking-wider flex items-center justify-between">
+                    <span>📈 Highest Rate Paid</span>
+                    <i className="fa-solid fa-arrow-up-long"></i>
+                  </div>
+                  <div className="text-base font-black text-rose-600 dark:text-rose-400 font-mono mt-1">
+                    {purchaseStats.highest ? `₹${purchaseStats.highest.piece_rate.toFixed(2)} / ${purchaseStats.highest.s_unit}` : '-'}
+                  </div>
+                  <div className="text-[10.5px] text-rose-700 dark:text-rose-300 font-semibold truncate mt-0.5">
+                    {purchaseStats.highest ? `Vendor: ${purchaseStats.highest.supplier_name}` : 'No purchases logged'}
+                  </div>
+                </div>
+
+                <div className="bg-blue-500/10 border border-blue-500/30 p-3 rounded-xl">
+                  <div className="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider flex items-center justify-between">
+                    <span>⏱️ Latest Purchase Rate</span>
+                    <i className="fa-solid fa-clock"></i>
+                  </div>
+                  <div className="text-base font-black text-blue-600 dark:text-blue-400 font-mono mt-1">
+                    {purchaseStats.latest ? `₹${purchaseStats.latest.piece_rate.toFixed(2)} / ${purchaseStats.latest.s_unit}` : '-'}
+                  </div>
+                  <div className="text-[10.5px] text-blue-700 dark:text-blue-300 font-semibold truncate mt-0.5">
+                    {purchaseStats.latest ? `Vendor: ${purchaseStats.latest.supplier_name}` : 'No purchases logged'}
+                  </div>
+                </div>
+
+                <div className="bg-purple-500/10 border border-purple-500/30 p-3 rounded-xl">
+                  <div className="text-[10px] font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider flex items-center justify-between">
+                    <span>📊 Average Cost Rate</span>
+                    <i className="fa-solid fa-calculator"></i>
+                  </div>
+                  <div className="text-base font-black text-purple-600 dark:text-purple-400 font-mono mt-1">
+                    {purchaseStats.avgPieceRate > 0 ? `₹${purchaseStats.avgPieceRate.toFixed(2)} / ${selectedHistoryProduct.s_unit || 'Pcs'}` : '-'}
+                  </div>
+                  <div className="text-[10.5px] text-purple-700 dark:text-purple-300 font-semibold mt-0.5 font-mono">
+                    Total Inflows: {prodPurchaseHistory.length} Batches
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* History Tab Selector */}
-            <div className="flex items-center gap-2 border-b border-border pb-2">
-              <button
-                type="button"
-                onClick={() => setHistoryTab('purchases')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition cursor-pointer ${
-                  historyTab === 'purchases'
-                    ? 'bg-primary text-white shadow-xs'
-                    : 'bg-background text-textSecondary hover:text-foreground border border-border'
-                }`}
-              >
-                📦 Purchase Inflows ({prodPurchaseHistory.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setHistoryTab('sales')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition cursor-pointer ${
-                  historyTab === 'sales'
-                    ? 'bg-primary text-white shadow-xs'
-                    : 'bg-background text-textSecondary hover:text-foreground border border-border'
-                }`}
-              >
-                🛒 Sales Outflows ({prodSalesHistory.length})
-              </button>
+            <div className="flex items-center justify-between border-b border-border pb-2 flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setHistoryTab('purchases')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition cursor-pointer flex items-center gap-1.5 ${
+                    historyTab === 'purchases'
+                      ? 'bg-primary text-white shadow-xs'
+                      : 'bg-background text-textSecondary hover:text-foreground border border-border'
+                  }`}
+                >
+                  <i className="fa-solid fa-truck-ramp-box text-xs"></i>
+                  <span>Supplier Purchase Inflows ({prodPurchaseHistory.length})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHistoryTab('sales')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition cursor-pointer flex items-center gap-1.5 ${
+                    historyTab === 'sales'
+                      ? 'bg-primary text-white shadow-xs'
+                      : 'bg-background text-textSecondary hover:text-foreground border border-border'
+                  }`}
+                >
+                  <i className="fa-solid fa-cart-shopping text-xs"></i>
+                  <span>Sales Outflows ({prodSalesHistory.length})</span>
+                </button>
+              </div>
+
+              <div className="text-[11px] font-mono text-textMuted font-semibold">
+                {historyTab === 'purchases' ? '📊 Compare Supplier Rates & Price Variance' : '🛒 Sales History'}
+              </div>
             </div>
 
             {/* Stock Inflows & Sales History Table */}
             <div className="overflow-x-auto border border-border rounded-xl bg-background/25">
-              <table className="w-full text-left text-xs text-textSecondary">
+              <table className="w-full text-left text-xs text-textSecondary border-collapse">
                 <thead>
-                  <tr className="border-b border-border bg-background/50 text-textPrimary uppercase font-extrabold">
-                    <th className="p-3">Sr. No.</th>
-                    <th className="p-3">{historyTab === 'purchases' ? 'Inflow Date' : 'Sale Date'}</th>
+                  <tr className="border-b border-border bg-background/50 text-textPrimary uppercase font-extrabold tracking-wider text-[11px] whitespace-nowrap">
+                    <th className="p-3 text-center">#</th>
+                    <th className="p-3">{historyTab === 'purchases' ? 'Inflow Date & Time' : 'Sale Date & Time'}</th>
+                    <th className="p-3">{historyTab === 'purchases' ? 'Supplier / Vendor' : 'Customer Name'}</th>
                     <th className="p-3">Ref / Invoice No.</th>
-                    <th className="p-3">{historyTab === 'purchases' ? 'Qty Added' : 'Qty Sold'}</th>
-                    <th className="p-3">Rate (₹)</th>
-                    <th className="p-3">Total Amount</th>
-                    <th className="p-3">{historyTab === 'purchases' ? 'Vendor / Source' : 'Customer / Mode'}</th>
+                    <th className="p-3 text-center">{historyTab === 'purchases' ? 'Qty Added' : 'Qty Sold'}</th>
+                    {historyTab === 'purchases' && (
+                      <th className="p-3 text-right">Rate / Package</th>
+                    )}
+                    <th className="p-3 text-right">{historyTab === 'purchases' ? 'Cost Rate / Unit' : 'Selling Rate'}</th>
+                    {historyTab === 'purchases' && (
+                      <th className="p-3 text-center">Supplier Rate Variance</th>
+                    )}
+                    <th className="p-3 text-right">Total Amount</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-border">
                   {historyTab === 'purchases' ? (
                     prodPurchaseHistory.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="p-6 text-center text-textMuted font-medium">No purchase inflow history logged for this product.</td>
+                        <td colSpan={9} className="p-8 text-center text-textMuted font-medium">No purchase inflow history logged for this product.</td>
                       </tr>
                     ) : (
-                      prodPurchaseHistory.map((h, i) => (
-                        <tr key={i} className="border-b border-border hover:bg-slate-100/5 transition font-medium">
-                          <td className="p-3 font-mono font-bold text-foreground">{i + 1}</td>
-                          <td className="p-3">{new Date(h.date).toLocaleString()}</td>
-                          <td className="p-3 font-mono text-[11px] text-textMuted">{h.bill_number}</td>
-                          <td className="p-3 font-mono font-extrabold text-primary">+{h.qty} {selectedHistoryProduct.s_unit || 'Pcs'}</td>
-                          <td className="p-3 font-mono font-bold text-foreground">₹{Number(h.rate || 0).toFixed(2)}</td>
-                          <td className="p-3 font-mono font-bold text-primary">₹{Number(h.amount || (h.qty * h.rate)).toFixed(2)}</td>
-                          <td className="p-3 font-semibold uppercase text-foreground">{h.supplier_name}</td>
-                        </tr>
-                      ))
+                      prodPurchaseHistory.map((h, i) => {
+                        const rawD = new Date(h.date);
+                        const isDateOnly = typeof h.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(h.date.trim());
+                        const formattedDateStr = isNaN(rawD.getTime()) ? String(h.date || '-') : (
+                          isDateOnly
+                            ? rawD.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+                            : `${rawD.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}, ${rawD.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}`
+                        );
+                        return (
+                          <tr key={i} className="hover:bg-slate-100/5 transition font-medium">
+                            <td className="p-3 font-mono font-bold text-foreground text-center">{i + 1}</td>
+                            <td className="p-3 font-mono text-xs font-semibold whitespace-nowrap text-foreground">{formattedDateStr}</td>
+                            <td className="p-3 font-extrabold uppercase text-blue-600 dark:text-blue-400">{h.supplier_name}</td>
+                            <td className="p-3 font-mono text-[11px] text-textMuted">{h.bill_number}</td>
+                            <td className="p-3 font-mono font-extrabold text-primary text-center whitespace-nowrap">
+                              +{h.base_qty} {h.s_unit}
+                              {h.isDualUnit && h.pack_qty > 0 && (
+                                <span className="block text-[10px] text-textMuted font-normal font-sans">
+                                  ({h.pack_qty.toFixed(1).replace(/\.0$/, '')} {h.p_unit})
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-3 font-mono text-right font-bold text-foreground whitespace-nowrap">
+                              {h.isDualUnit && h.pack_rate > 0 ? `₹${h.pack_rate.toFixed(2)} / ${h.p_unit}` : '-'}
+                            </td>
+                            <td className="p-3 font-mono font-bold text-foreground text-right whitespace-nowrap">
+                              ₹{Number(h.piece_rate || 0).toFixed(2)} <span className="text-[10px] text-textMuted font-sans">/ {h.s_unit}</span>
+                            </td>
+                            <td className="p-3 text-center whitespace-nowrap">
+                              {h.variance === 0 || h.variance === null ? (
+                                <span className="text-[10px] font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 px-2 py-0.5 rounded font-mono">
+                                  ➖ Baseline
+                                </span>
+                              ) : h.variance < 0 ? (
+                                <span className="text-[10px] font-extrabold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800 px-2 py-0.5 rounded font-mono" title="Cheaper purchase rate than previous batch!">
+                                  🟢 -₹{Math.abs(h.variance).toFixed(2)} Cheaper
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-extrabold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/60 border border-rose-300 dark:border-rose-800 px-2 py-0.5 rounded font-mono" title="Rate increased compared to previous purchase!">
+                                  🔴 +₹{h.variance.toFixed(2)} Price Rise
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-3 font-mono font-black text-primary text-right whitespace-nowrap">₹{Number(h.amount || (h.base_qty * h.piece_rate)).toFixed(2)}</td>
+                          </tr>
+                        );
+                      })
                     )
                   ) : (
                     prodSalesHistory.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="p-6 text-center text-textMuted font-medium">No sales invoice history logged for this product.</td>
+                        <td colSpan={7} className="p-8 text-center text-textMuted font-medium">No sales invoice history logged for this product.</td>
                       </tr>
                     ) : (
-                      prodSalesHistory.map((s, i) => (
-                        <tr key={i} className="border-b border-border hover:bg-slate-100/5 transition font-medium">
-                          <td className="p-3 font-mono font-bold text-foreground">{i + 1}</td>
-                          <td className="p-3">{new Date(s.date).toLocaleString()}</td>
-                          <td className="p-3 font-mono text-[11px] text-textMuted">{s.id}</td>
-                          <td className="p-3 font-mono font-extrabold text-rose-500">-{s.qty} {selectedHistoryProduct.s_unit || 'Pcs'}</td>
-                          <td className="p-3 font-mono font-bold text-foreground">₹{Number(s.rate || 0).toFixed(2)}</td>
-                          <td className="p-3 font-mono font-bold text-emerald-600 dark:text-emerald-400">₹{Number(s.amount || (s.qty * s.rate)).toFixed(2)}</td>
-                          <td className="p-3 font-semibold uppercase text-foreground">{s.customer_name} ({s.payment_mode})</td>
-                        </tr>
-                      ))
+                      prodSalesHistory.map((s, i) => {
+                        const rawD = new Date(s.date);
+                        const isDateOnly = typeof s.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s.date.trim());
+                        const formattedDateStr = isNaN(rawD.getTime()) ? String(s.date || '-') : (
+                          isDateOnly
+                            ? rawD.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+                            : `${rawD.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}, ${rawD.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}`
+                        );
+                        return (
+                          <tr key={i} className="hover:bg-slate-100/5 transition font-medium">
+                            <td className="p-3 font-mono font-bold text-foreground text-center">{i + 1}</td>
+                            <td className="p-3 font-mono text-xs font-semibold whitespace-nowrap text-foreground">{formattedDateStr}</td>
+                            <td className="p-3 font-extrabold uppercase text-foreground">{s.customer_name} ({s.payment_mode})</td>
+                            <td className="p-3 font-mono text-[11px] text-textMuted">{s.id}</td>
+                            <td className="p-3 font-mono font-extrabold text-rose-500 text-center">-{s.qty} {selectedHistoryProduct.s_unit || 'Pcs'}</td>
+                            <td className="p-3 font-mono font-bold text-foreground text-right">₹{Number(s.rate || 0).toFixed(2)}</td>
+                            <td className="p-3 font-mono font-black text-emerald-600 dark:text-emerald-400 text-right">₹{Number(s.amount || (s.qty * s.rate)).toFixed(2)}</td>
+                          </tr>
+                        );
+                      })
                     )
                   )}
                 </tbody>

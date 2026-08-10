@@ -213,6 +213,9 @@ CREATE TABLE purchase_items (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     bill_id UUID REFERENCES purchase_bills(id) ON DELETE CASCADE,
     product_id UUID REFERENCES products(id) ON DELETE RESTRICT,
+    product_name TEXT,
+    hsn TEXT,
+    gst_percent NUMERIC(5, 2) DEFAULT 0.00,
     qty NUMERIC(12, 2) DEFAULT 1.00,
     rate NUMERIC(12, 2) DEFAULT 0.00,
     amount NUMERIC(12, 2) DEFAULT 0.00

@@ -53,7 +53,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
   }, [autoOpenModal]);
   const [printInvoice, setPrintInvoice] = useState<any | null>(null);
   const [posSearch, setPosSearch] = useState('');
-  const { customers: registeredCustomers, refreshAllData } = useErpContext();
+  const { customers: registeredCustomers, customerPayments: payments, refreshAllData } = useErpContext();
   const [showHistoryModal, setShowHistoryModal] = useState(false);
 
   useEffect(() => {
@@ -111,12 +111,29 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
     // 1. Registered Customers
     registeredCustomers.forEach(c => {
       const nameUpper = (c.customer_name || '').toUpperCase().trim();
-      if (!nameUpper) return;
+      if (!nameUpper || seenNames.has(nameUpper)) return;
       seenNames.add(nameUpper);
 
-      const invs = (sales as any[]).filter(s => s.customer_name && s.customer_name.toUpperCase().trim() === nameUpper);
-      const pastDuesSum = invs.reduce((sum, inv) => sum + Number(inv.due_amount || 0), 0);
-      const effectiveOutstanding = Number(c.outstanding || 0) > 0 ? Number(c.outstanding) : pastDuesSum;
+      const custInvoices = (sales as any[]).filter(s => s.customer_name && s.customer_name.toUpperCase().trim() === nameUpper);
+      const custPayments = (payments || []).filter((p: any) =>
+        p.customer_id === c.id || (p.customer_name && p.customer_name.toUpperCase().trim() === nameUpper)
+      );
+
+      const totalInvoiceDues = custInvoices.reduce((acc: number, inv: any) => {
+        const invoiceDue = inv.due_amount !== undefined
+          ? Number(inv.due_amount)
+          : Math.max(0, Number(inv.total_amount || 0) - Number(inv.paid_amount || 0));
+        return acc + Math.max(0, invoiceDue);
+      }, 0);
+
+      const totalPaymentsReceived = custPayments.reduce((acc: number, p: any) => acc + Number(p.amount || 0), 0);
+
+      let effectiveOutstanding = 0;
+      if (custInvoices.length > 0) {
+        effectiveOutstanding = Math.max(0, totalInvoiceDues - totalPaymentsReceived);
+      } else {
+        effectiveOutstanding = Math.max(0, Number(c.outstanding || 0) - totalPaymentsReceived);
+      }
 
       list.push({
         id: c.id,
@@ -124,7 +141,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
         phone: c.phone || '',
         outstanding: effectiveOutstanding,
         isRegistered: true,
-        invCount: invs.length
+        invCount: custInvoices.length
       });
     });
 
@@ -134,42 +151,38 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
       if (!nameUpper || nameUpper === 'CASH CUSTOMER' || seenNames.has(nameUpper)) return;
 
       seenNames.add(nameUpper);
-      const invs = (sales as any[]).filter(inv => inv.customer_name && inv.customer_name.toUpperCase().trim() === nameUpper);
-      const pastDuesSum = invs.reduce((sum, inv) => sum + Number(inv.due_amount || 0), 0);
+      const custInvoices = (sales as any[]).filter(inv => inv.customer_name && inv.customer_name.toUpperCase().trim() === nameUpper);
+      const custPayments = (payments || []).filter((p: any) =>
+        p.customer_name && p.customer_name.toUpperCase().trim() === nameUpper
+      );
+
+      const totalInvoiceDues = custInvoices.reduce((acc: number, inv: any) => {
+        const invoiceDue = inv.due_amount !== undefined
+          ? Number(inv.due_amount)
+          : Math.max(0, Number(inv.total_amount || 0) - Number(inv.paid_amount || 0));
+        return acc + Math.max(0, invoiceDue);
+      }, 0);
+
+      const totalPaymentsReceived = custPayments.reduce((acc: number, p: any) => acc + Number(p.amount || 0), 0);
+      const effectiveOutstanding = Math.max(0, totalInvoiceDues - totalPaymentsReceived);
 
       list.push({
         customer_name: s.customer_name,
         phone: s.customer_phone || '',
-        outstanding: pastDuesSum,
+        outstanding: effectiveOutstanding,
         isRegistered: false,
-        invCount: invs.length
+        invCount: custInvoices.length
       });
     });
 
     return list;
-  }, [registeredCustomers, sales]);
+  }, [registeredCustomers, sales, payments]);
 
   const matchedCustomer = useMemo(() => {
     if (!customerName || customerName.trim().toUpperCase() === 'CASH CUSTOMER') return null;
     const nameUpper = customerName.trim().toUpperCase();
     const phoneVal = customerPhone.trim();
 
-    // 1. Search registered customers first
-    const foundReg = registeredCustomers.find(
-      c => (c.customer_name && c.customer_name.trim().toUpperCase() === nameUpper) ||
-           (phoneVal && c.phone && c.phone.trim() === phoneVal)
-    );
-    if (foundReg) {
-      const invs = (sales as any[]).filter(s => s.customer_name && s.customer_name.trim().toUpperCase() === nameUpper);
-      const pastDuesSum = invs.reduce((sum, inv) => sum + Number(inv.due_amount || 0), 0);
-      const effectiveOutstanding = Number(foundReg.outstanding || 0) > 0 ? Number(foundReg.outstanding) : pastDuesSum;
-      return {
-        ...foundReg,
-        outstanding: effectiveOutstanding
-      };
-    }
-
-    // 2. Search all searchable customers (which includes past sales invoice customers!)
     const foundSearchable = allSearchableCustomers.find(
       c => (c.customer_name && c.customer_name.trim().toUpperCase() === nameUpper) ||
            (phoneVal && c.phone && c.phone.trim() === phoneVal)
@@ -188,7 +201,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
     }
 
     return null;
-  }, [registeredCustomers, allSearchableCustomers, sales, customerName, customerPhone]);
+  }, [allSearchableCustomers, customerName, customerPhone]);
 
   const filteredSearchableCustomers = useMemo(() => {
     const q = custSearchQuery.trim().toLowerCase();

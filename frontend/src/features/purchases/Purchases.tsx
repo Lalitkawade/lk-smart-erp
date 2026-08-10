@@ -301,31 +301,26 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
   const handleSubmitBill = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Resolve vendor/supplier (fallback to typed name or General Vendor if unselected)
-    let selectedSup: any = suppliers.find(s => s.id === supplierId);
+    // Strictly resolve selected supplier from suppliers list
+    const selectedSup: any = suppliers.find(s => s.id === supplierId);
     if (!selectedSup) {
-      const fallbackName = vendorSearchQuery.trim().toUpperCase() || 'GENERAL VENDOR';
-      selectedSup = suppliers.find(s => s.supplier_name.toUpperCase() === fallbackName) || {
-        id: 'sup-gen-' + Date.now(),
-        tenant_id: tenantId,
-        supplier_name: fallbackName,
-        phone: '',
-        email: '',
-        address: '',
-        outstanding: 0,
-        created_at: new Date().toISOString()
-      };
+      alert('⚠️ Please select a valid registered Supplier/Vendor for this Purchase Bill.');
+      return;
+    }
+
+    if (!billNumber || !billNumber.trim()) {
+      alert('⚠️ Please enter the Supplier Bill Number.');
+      return;
     }
 
     const rawDate = purchaseDate ? new Date(purchaseDate) : new Date();
     const safeIsoDate = isNaN(rawDate.getTime()) ? new Date().toISOString() : rawDate.toISOString();
 
     const billPayload = {
-      bill_number: billNumber.trim() || 'PB-' + Date.now().toString().slice(-5),
+      bill_number: billNumber.trim(),
       supplier_name: selectedSup.supplier_name,
       payment_mode: paymentMode,
       ref_number: transactionId.trim() || null,
-      transaction_id: transactionId.trim() || null,
       total_amount: totalAmount,
       paid_amount: effectivePaid,
       due_amount: dueAmount,
@@ -338,6 +333,9 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
       const isValidUUID = (id: any) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
       return {
         product_id: p && isValidUUID(p.id) ? p.id : null,
+        product_name: p?.product_name || typedName || 'Procured Material Item',
+        hsn: p?.hsn || null,
+        gst_percent: Number(p?.gst || 18),
         qty: Number(item.qty || 1),
         rate: Number(item.rate || 0),
         amount: Number(item.qty || 1) * Number(item.rate || 0)
@@ -356,8 +354,9 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
       }
 
       await refreshAllData();
-    } catch (err) {
-      console.warn('Purchase bill save exception:', err);
+    } catch (err: any) {
+      alert('⚠️ Purchase bill save failed: ' + (err.message || err));
+      return;
     }
 
     setModalOpen(false);
@@ -373,51 +372,33 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
     alert('Procurement Bill successfully saved! Stock levels incremented and vendor ledgers adjusted.');
   };
 
-  // Material receipts are computed dynamically below
-  const purchaseLines = useMemo(() => {
-    const lines: any[] = [];
-    const confirmedBills = bills.filter(b => !(b.bill_number && String(b.bill_number).toUpperCase().startsWith('STOCK-IN')));
-    confirmedBills.forEach(b => {
-      const items = (b as any).items || (b as any).purchase_items || [];
-      if (items.length === 0) {
-        lines.push({
-          id: b.id || b.bill_number,
-          hsn: (b as any).hsn || '-',
-          product_name: (b as any).product_name || 'Procurement Bill',
-          vendor_name: b.supplier_name || 'Vendor Supplier',
-          date: b.purchase_date || (b as any).created_at || new Date().toISOString(),
-          qty: 1,
-          rate: Number(b.total_amount || 0),
-          amount: Number(b.total_amount || 0),
-          rawBill: b
-        });
-      } else {
-        items.forEach((item: any) => {
-          const matchProd = products.find(p => p.id === (item.product_id || item.product?.id));
-          lines.push({
-            id: `${b.id}-${item.product_id || Math.random()}`,
-            hsn: item.product?.hsn || matchProd?.hsn || item.hsn || '-',
-            product_name: item.product?.product_name || matchProd?.product_name || item.product_name || 'Custom Item',
-            vendor_name: b.supplier_name || 'Vendor Supplier',
-            date: b.purchase_date || (b as any).created_at || new Date().toISOString(),
-            qty: Number(item.qty || 1),
-            rate: Number(item.rate || 0),
-            amount: Number(item.amount || (item.qty * item.rate) || 0),
-            rawBill: b
-          });
-        });
-      }
-    });
-    return lines.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [bills, products]);
+  const [vendorFilter, setVendorFilter] = useState<string>('ALL');
 
-  const filteredLines = purchaseLines.filter((line: any) => {
-    return (
-      line.product_name.toLowerCase().includes(search.toLowerCase()) ||
-      line.vendor_name.toLowerCase().includes(search.toLowerCase()) ||
-      line.hsn.includes(search)
-    );
-  });
+  // Filter Purchase Bills directly from purchase_bills table
+  const filteredBills = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const vFilter = vendorFilter.toUpperCase().trim();
+
+    return (bills || []).filter((b: any) => {
+      const supName = (b.supplier_name || '').toUpperCase().trim();
+      const matchedVendor = suppliers.find(s => s.id === b.supplier_id);
+      const matchedVendorName = matchedVendor ? (matchedVendor.supplier_name || '').toUpperCase().trim() : '';
+
+      const passesVendor = (vFilter === 'ALL') || (supName === vFilter) || (matchedVendorName === vFilter);
+      if (!passesVendor) return false;
+
+      if (!q) return true;
+
+      const bNum = (b.bill_number || b.id || '').toLowerCase();
+      const items = b.items || b.purchase_items || [];
+      const itemNamesMatch = items.some((it: any) => 
+        (it.product_name && String(it.product_name).toLowerCase().includes(q)) ||
+        (it.product?.product_name && String(it.product.product_name).toLowerCase().includes(q))
+      );
+
+      return bNum.includes(q) || supName.toLowerCase().includes(q) || itemNamesMatch;
+    });
+  }, [bills, search, vendorFilter, suppliers]);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -470,89 +451,122 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
         </div>
       )}
 
-      <div className="mb-4">
-        <input type="text" className="w-full bg-secondary border border-border text-foreground rounded-lg p-3 text-sm focus:outline-none focus:border-primary font-semibold"
-          placeholder="Search by product name, vendor name or HSN..."
-          value={search} onChange={(e) => setSearch(e.target.value)} />
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-3 mb-4 bg-background border border-border p-3 rounded-xl">
+        <div className="w-full sm:w-1/2">
+          <input type="text" className="w-full bg-secondary border border-border text-foreground rounded-lg p-2.5 text-xs focus:outline-none focus:border-primary font-semibold"
+            placeholder="Search by Bill No., Vendor Supplier name, or item name..."
+            value={search} onChange={(e) => setSearch(e.target.value)} />
+        </div>
+        <div className="w-full sm:w-auto flex items-center gap-2">
+          <span className="text-xs font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap">Filter Vendor:</span>
+          <select
+            className="bg-secondary border border-border rounded-lg p-2 text-xs font-bold text-foreground focus:outline-none cursor-pointer"
+            value={vendorFilter}
+            onChange={(e) => setVendorFilter(e.target.value)}
+          >
+            <option value="ALL">All Vendors ({suppliers.length})</option>
+            {suppliers.map(s => (
+              <option key={s.id} value={s.supplier_name}>{s.supplier_name}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <div className="bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-x-auto">
         <table className="w-full text-left text-sm text-slate-700 dark:text-slate-200 border-collapse">
           <thead>
             <tr className="border-b-2 border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/90 text-slate-700 dark:text-slate-200 font-extrabold uppercase tracking-wider text-[11px] divide-x divide-slate-200 dark:divide-slate-700 whitespace-nowrap">
-              <th className="py-2.5 px-3 text-center whitespace-nowrap">HSN Code</th>
-              <th className="py-2.5 px-3 text-center whitespace-nowrap">Product Name</th>
+              <th className="py-2.5 px-3 text-center whitespace-nowrap">Bill No. & Date</th>
               <th className="py-2.5 px-3 text-center whitespace-nowrap">Vendor Supplier</th>
-              <th className="py-2.5 px-3 text-center whitespace-nowrap">Purchase Date</th>
-              <th className="py-2.5 px-3 text-center whitespace-nowrap">Units</th>
-              <th className="py-2.5 px-3 text-center whitespace-nowrap">Unit Rate (₹)</th>
+              <th className="py-2.5 px-3 text-center whitespace-nowrap">Items Count</th>
               <th className="py-2.5 px-3 text-center whitespace-nowrap">Total Amount (₹)</th>
+              <th className="py-2.5 px-3 text-center whitespace-nowrap">Paid Amount (₹)</th>
+              <th className="py-2.5 px-3 text-center whitespace-nowrap">Outstanding Dues (₹)</th>
+              <th className="py-2.5 px-3 text-center whitespace-nowrap">Status & Mode</th>
               <th className="py-2.5 px-3 text-center whitespace-nowrap">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-            {filteredLines.length === 0 ? (
+            {filteredBills.length === 0 ? (
               <tr>
                 <td colSpan={8} className="py-8 text-center text-slate-400 text-xs font-medium">
                   <i className="fa-solid fa-cart-flatbed text-2xl text-slate-400 mb-2 block"></i>
-                  No matching purchase records found.
+                  No matching purchase bills found.
                 </td>
               </tr>
-            ) : filteredLines.map((line: any, idx: number) => (
-              <tr 
-                key={idx} 
-                onClick={() => setViewingBill(line.rawBill)}
-                className="odd:bg-white dark:odd:bg-slate-900 even:bg-slate-50/70 dark:even:bg-slate-800/30 hover:bg-blue-50/60 dark:hover:bg-slate-800/70 transition-colors divide-x divide-slate-200 dark:divide-slate-800 cursor-pointer"
-                title="Click to view complete purchase receipt details"
-              >
-                <td className="py-2.5 px-3 text-center font-mono text-xs">
-                  <span className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded font-bold">
-                    {line.hsn}
-                  </span>
-                </td>
-                <td className="py-2.5 px-3 text-center text-xs font-bold text-slate-900 dark:text-slate-100 uppercase">{line.product_name}</td>
-                <td className="py-2.5 px-3 text-center text-xs font-bold text-blue-600 dark:text-blue-400 uppercase">
-                  {line.vendor_name}
-                </td>
-                <td className="py-2.5 px-3 text-center text-xs font-mono text-slate-900 dark:text-slate-100 font-semibold">
-                  {new Date(line.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
-                </td>
-                <td className="py-2.5 px-3 text-center text-xs font-mono font-bold text-slate-900 dark:text-slate-100">{line.qty}</td>
-                <td className="py-2.5 px-3 text-center text-xs font-mono text-slate-900 dark:text-slate-100">₹{line.rate.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                <td className="py-2.5 px-3 text-center text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                  ₹{line.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                </td>
-                <td className="py-2.5 px-3 text-center text-xs flex items-center justify-center gap-1.5">
-                  <button 
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setViewingBill(line.rawBill);
-                    }}
-                    className="px-2 py-1 bg-primary/10 hover:bg-primary text-primary hover:text-white font-extrabold text-xs rounded-lg border border-primary/30 transition cursor-pointer flex items-center gap-1"
-                  >
-                    <i className="fa-solid fa-eye text-[10px]"></i> View
-                  </button>
-                  <button 
-                    type="button"
-                    onClick={async (e) => {
-                      e.stopPropagation();
-                      const bNum = line.rawBill?.bill_number || line.rawBill?.id;
-                      if (!window.confirm(`Are you sure you want to delete Procurement Bill ${bNum}? This action cannot be undone.`)) return;
-                      try {
-                        await deletePurchase(line.rawBill.id);
-                        alert('✓ Procurement Bill successfully deleted.');
-                      } catch (err: any) {
-                        alert('Failed to delete procurement bill: ' + (err.message || err));
-                      }
-                    }}
-                    className="px-2 py-1 bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white font-extrabold text-xs rounded-lg border border-rose-500/30 transition cursor-pointer flex items-center gap-1"
-                  >
-                    <i className="fa-solid fa-trash-can text-[10px]"></i> Delete
-                  </button>
-                </td>
-              </tr>
-            ))}
+            ) : filteredBills.map((b: any) => {
+              const rawDate = new Date(b.purchase_date || b.created_at || Date.now());
+              const formattedDate = isNaN(rawDate.getTime()) ? 'N/A' : rawDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+              const items = b.items || b.purchase_items || [];
+              const totalAmt = Number(b.total_amount || 0);
+              const paidAmt = Number(b.paid_amount || 0);
+              const dueAmt = Number(b.due_amount || 0);
+              const isPaid = dueAmt <= 0;
+
+              return (
+                <tr 
+                  key={b.id || b.bill_number} 
+                  onClick={() => setViewingBill(b)}
+                  className="odd:bg-white dark:odd:bg-slate-900 even:bg-slate-50/70 dark:even:bg-slate-800/30 hover:bg-blue-50/60 dark:hover:bg-slate-800/70 transition-colors divide-x divide-slate-200 dark:divide-slate-800 cursor-pointer"
+                  title="Click to view complete purchase receipt details"
+                >
+                  <td className="py-2.5 px-3 text-center font-mono text-xs">
+                    <div className="font-extrabold text-slate-900 dark:text-slate-100 text-xs">{b.bill_number || b.id}</div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-0.5">{formattedDate}</div>
+                  </td>
+                  <td className="py-2.5 px-3 text-center text-xs font-bold text-blue-600 dark:text-blue-400 uppercase">
+                    {b.supplier_name || 'Vendor Supplier'}
+                  </td>
+                  <td className="py-2.5 px-3 text-center">
+                    <span className="inline-flex items-center gap-1.5 bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 font-extrabold px-2.5 py-1 rounded-xl text-xs">
+                      <i className="fa-solid fa-boxes-stacked text-[11px]"></i>
+                      <span>{items.length || 1} {items.length === 1 ? 'Item' : 'Items'}</span>
+                    </span>
+                  </td>
+                  <td className="py-2.5 px-3 text-center text-xs font-mono font-black text-slate-900 dark:text-slate-100">₹{totalAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                  <td className="py-2.5 px-3 text-center text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">₹{paidAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                  <td className="py-2.5 px-3 text-center text-xs font-mono font-bold text-rose-600 dark:text-rose-400">₹{dueAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                  <td className="py-2.5 px-3 text-center text-xs">
+                    <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md uppercase border ${
+                      isPaid
+                        ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 border-emerald-300'
+                        : 'bg-rose-50 dark:bg-rose-950/60 text-rose-600 border-rose-300'
+                    }`}>
+                      {isPaid ? `Paid (${b.payment_mode || 'Cash'})` : `Dues ₹${dueAmt.toFixed(0)}`}
+                    </span>
+                  </td>
+                  <td className="py-2.5 px-3 text-center text-xs flex items-center justify-center gap-1.5">
+                    <button 
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setViewingBill(b);
+                      }}
+                      className="px-2 py-1 bg-primary/10 hover:bg-primary text-primary hover:text-white font-extrabold text-xs rounded-lg border border-primary/30 transition cursor-pointer flex items-center gap-1"
+                    >
+                      <i className="fa-solid fa-eye text-[10px]"></i> View
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        const bNum = b.bill_number || b.id;
+                        if (!window.confirm(`Are you sure you want to delete Procurement Bill ${bNum}? This action cannot be undone.`)) return;
+                        try {
+                          await deletePurchase(b.id);
+                          alert('✓ Procurement Bill successfully deleted.');
+                        } catch (err: any) {
+                          alert('Failed to delete procurement bill: ' + (err.message || err));
+                        }
+                      }}
+                      className="px-2 py-1 bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white font-extrabold text-xs rounded-lg border border-rose-500/30 transition cursor-pointer flex items-center gap-1"
+                    >
+                      <i className="fa-solid fa-trash-can text-[10px]"></i> Delete
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -1085,21 +1099,32 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
                 <table className="w-full text-left text-xs">
                   <thead className="bg-background/80 text-textSecondary font-black uppercase text-[10px] border-b border-border">
                     <tr>
+                      <th className="p-2.5">HSN Code</th>
                       <th className="p-2.5">Item Description</th>
                       <th className="p-2.5 text-center">Qty</th>
                       <th className="p-2.5 text-right">Rate (₹)</th>
+                      <th className="p-2.5 text-center">GST %</th>
                       <th className="p-2.5 text-right">Amount (₹)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/40">
-                    {(viewingBill.items || viewingBill.purchase_items || []).map((it: any, i: number) => (
-                      <tr key={i} className="hover:bg-background/30">
-                        <td className="p-2.5 font-bold uppercase">{it.product?.product_name || it.product_name || 'Procured Material Item'}</td>
-                        <td className="p-2.5 text-center font-mono font-bold">{it.qty || 1}</td>
-                        <td className="p-2.5 text-right font-mono">₹{Number(it.rate || 0).toFixed(2)}</td>
-                        <td className="p-2.5 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">₹{(Number(it.qty || 1) * Number(it.rate || 0)).toFixed(2)}</td>
-                      </tr>
-                    ))}
+                    {(viewingBill.items || viewingBill.purchase_items || []).map((it: any, i: number) => {
+                      const itemName = it.product_name || it.product?.product_name || 'Procured Material Item';
+                      const hsnCode = it.hsn || it.product?.hsn || '-';
+                      const gstRate = Number(it.gst_percent ?? it.product?.gst ?? 18);
+                      const lineAmt = Number(it.amount || (Number(it.qty || 1) * Number(it.rate || 0)));
+
+                      return (
+                        <tr key={i} className="hover:bg-background/30">
+                          <td className="p-2.5 font-mono text-[11px] font-semibold text-textMuted">{hsnCode}</td>
+                          <td className="p-2.5 font-bold uppercase">{itemName}</td>
+                          <td className="p-2.5 text-center font-mono font-bold">{it.qty || 1}</td>
+                          <td className="p-2.5 text-right font-mono">₹{Number(it.rate || 0).toFixed(2)}</td>
+                          <td className="p-2.5 text-center font-mono text-xs">{gstRate}%</td>
+                          <td className="p-2.5 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">₹{lineAmt.toFixed(2)}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

@@ -1,8 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useInventory } from '../../hooks/useInventory';
 import { useErpContext } from '../../context/ErpContext';
 import type { SalesInvoice, PurchaseBill, Expense } from '../../types/erp.types';
 import { t } from '../../utils/i18n';
+import { perfTracker } from '../../utils/perfTracker';
 
 interface DashboardProps {
   tenantId: string;
@@ -15,6 +16,20 @@ interface DashboardProps {
 type TimeRange = '10days' | 'month' | 'year' | 'all' | 'custom';
 
 export default function Dashboard({ tenantId, sales, purchases, expenses, onNavigate }: DashboardProps) {
+  perfTracker.incrementCall('Dashboard Render');
+  if (perfTracker.dashboardRenderTime === null) {
+    perfTracker.dashboardRenderTime = performance.now();
+    console.log(`🚀 [PERF UI] Dashboard Rendered at T=${perfTracker.dashboardRenderTime.toFixed(2)} ms`);
+  }
+
+  useEffect(() => {
+    // Print the full structured startup report after initial render settles
+    const timer = setTimeout(() => {
+      perfTracker.printStartupSummaryTable();
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, []);
+
   const { products } = useInventory(tenantId);
   const [timeRange, setTimeRange] = useState<TimeRange>('all');
   const [startDate, setStartDate] = useState<string>(() => {
@@ -410,50 +425,68 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
 
       {/* 2. Primary 4-Stat Bento Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        
+
         {/* Total Sales */}
-        <div className="bento-card relative overflow-hidden group">
+        <div
+          onClick={() => onNavigate('sales')}
+          className="bento-card relative overflow-hidden group cursor-pointer hover:border-primary/60 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-200"
+          title="Click to view Sales & Billing"
+        >
           <div className="flex justify-between items-start">
             <div>
-              <span className="text-[10.5px] font-bold text-textMuted uppercase tracking-wider">{t('totalSales')}</span>
+              <span className="text-[10.5px] font-bold text-textMuted uppercase tracking-wider flex items-center gap-1 group-hover:text-primary transition">
+                {t('totalSales')} <i className="fa-solid fa-arrow-up-right text-[9px] opacity-0 group-hover:opacity-100 transition"></i>
+              </span>
               <div className="text-xl font-black text-foreground font-mono mt-1">₹{stats.sales.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
               <span className="text-[10px] text-primary font-bold mt-1 inline-flex items-center gap-1">
                 <i className="fa-solid fa-arrow-up-right"></i> {filteredData.sales.length} Invoices
               </span>
             </div>
-            <div className="p-3 bg-primary/10 text-primary rounded-xl border border-primary/20 group-hover:scale-110 transition duration-300">
+            <div className="p-3 bg-primary/10 text-primary rounded-xl border border-primary/20 group-hover:scale-110 group-hover:bg-primary group-hover:text-white transition duration-300">
               <i className="fa-solid fa-file-invoice-dollar text-lg"></i>
             </div>
           </div>
         </div>
 
         {/* Total Purchases */}
-        <div className="bento-card relative overflow-hidden group">
+        <div
+          onClick={() => onNavigate('inventory-stock')}
+          className="bento-card relative overflow-hidden group cursor-pointer hover:border-purple-500/60 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-200"
+          title="Click to view Procurement & Inventory Stock"
+        >
           <div className="flex justify-between items-start">
             <div>
-              <span className="text-[10.5px] font-bold text-textMuted uppercase tracking-wider">{t('totalPurchases')}</span>
+              <span className="text-[10.5px] font-bold text-textMuted uppercase tracking-wider flex items-center gap-1 group-hover:text-purple-400 transition">
+                {t('totalPurchases')} <i className="fa-solid fa-arrow-up-right text-[9px] opacity-0 group-hover:opacity-100 transition"></i>
+              </span>
               <div className="text-xl font-black text-foreground font-mono mt-1">₹{stats.purchases.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
               <span className="text-[10px] text-purple-400 font-bold mt-1 inline-flex items-center gap-1">
                 <i className="fa-solid fa-boxes-stacked"></i> {filteredData.purchases.length} Procurement Bills
               </span>
             </div>
-            <div className="p-3 bg-purple-500/10 text-purple-400 rounded-xl border border-purple-500/20 group-hover:scale-110 transition duration-300">
+            <div className="p-3 bg-purple-500/10 text-purple-400 rounded-xl border border-purple-500/20 group-hover:scale-110 group-hover:bg-purple-500 group-hover:text-white transition duration-300">
               <i className="fa-solid fa-cart-shopping text-lg"></i>
             </div>
           </div>
         </div>
 
         {/* Shop Expenses */}
-        <div className="bento-card relative overflow-hidden group">
+        <div
+          onClick={() => onNavigate('expenses')}
+          className="bento-card relative overflow-hidden group cursor-pointer hover:border-rose-500/60 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-200"
+          title="Click to view Shop Expenses"
+        >
           <div className="flex justify-between items-start">
             <div>
-              <span className="text-[10.5px] font-bold text-textMuted uppercase tracking-wider">{t('shopExpenses')}</span>
+              <span className="text-[10.5px] font-bold text-textMuted uppercase tracking-wider flex items-center gap-1 group-hover:text-rose-400 transition">
+                {t('shopExpenses')} <i className="fa-solid fa-arrow-up-right text-[9px] opacity-0 group-hover:opacity-100 transition"></i>
+              </span>
               <div className="text-xl font-black text-foreground font-mono mt-1">₹{stats.expenses.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
               <span className="text-[10px] text-rose-400 font-bold mt-1 inline-flex items-center gap-1">
                 <i className="fa-solid fa-receipt"></i> {filteredData.expenses.length} Logged Entries
               </span>
             </div>
-            <div className="p-3 bg-rose-500/10 text-rose-400 rounded-xl border border-rose-500/20 group-hover:scale-110 transition duration-300">
+            <div className="p-3 bg-rose-500/10 text-rose-400 rounded-xl border border-rose-500/20 group-hover:scale-110 group-hover:bg-rose-500 group-hover:text-white transition duration-300">
               <i className="fa-solid fa-hand-holding-dollar text-lg"></i>
             </div>
           </div>
@@ -479,35 +512,51 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
 
       {/* 3. Secondary 2-Stat Row (Stock Value + Supplier Pending Dues) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        
+
         {/* Total Stock Value */}
-        <div className="bento-card p-4 flex items-center justify-between">
+        <div
+          onClick={() => onNavigate('inventory-stock')}
+          className="bento-card p-4 flex items-center justify-between cursor-pointer group hover:border-amber-500/60 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-200"
+          title="Click to view Inventory Stock"
+        >
           <div className="flex items-center gap-3">
-            <div className="p-3 bg-amber-500/10 text-amber-500 rounded-xl border border-amber-500/20">
+            <div className="p-3 bg-amber-500/10 text-amber-500 rounded-xl border border-amber-500/20 group-hover:scale-110 group-hover:bg-amber-500 group-hover:text-white transition duration-300">
               <i className="fa-solid fa-warehouse text-lg"></i>
             </div>
             <div>
-              <span className="text-[10px] font-bold text-textMuted uppercase">Total Catalog Stock Valuation</span>
+              <span className="text-[10px] font-bold text-textMuted uppercase group-hover:text-amber-500 transition">Total Catalog Stock Valuation</span>
               <div className="text-lg font-black text-foreground font-mono">₹{stats.stockValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
             </div>
           </div>
-          <button onClick={() => onNavigate('inventory-stock')} className="text-xs text-primary font-bold hover:underline">
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onNavigate('inventory-stock'); }}
+            className="text-xs text-primary font-extrabold hover:underline group-hover:translate-x-1 transition cursor-pointer"
+          >
             View Inventory &rarr;
           </button>
         </div>
 
         {/* Vendor Pending Dues */}
-        <div className="bento-card p-4 flex items-center justify-between">
+        <div
+          onClick={() => onNavigate('suppliers')}
+          className="bento-card p-4 flex items-center justify-between cursor-pointer group hover:border-orange-500/60 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-200"
+          title="Click to view Suppliers & Vendors"
+        >
           <div className="flex items-center gap-3">
-            <div className="p-3 bg-orange-500/10 text-orange-400 rounded-xl border border-orange-500/20">
+            <div className="p-3 bg-orange-500/10 text-orange-400 rounded-xl border border-orange-500/20 group-hover:scale-110 group-hover:bg-orange-500 group-hover:text-white transition duration-300">
               <i className="fa-solid fa-truck-ramp-box text-lg"></i>
             </div>
             <div>
-              <span className="text-[10px] font-bold text-textMuted uppercase">Supplier Payables (Outstanding Dues)</span>
+              <span className="text-[10px] font-bold text-textMuted uppercase group-hover:text-orange-400 transition">Supplier Payables (Outstanding Dues)</span>
               <div className="text-lg font-black text-orange-400 font-mono">₹{stats.vendorPending.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
             </div>
           </div>
-          <button onClick={() => onNavigate('suppliers')} className="text-xs text-primary font-bold hover:underline">
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onNavigate('suppliers'); }}
+            className="text-xs text-primary font-extrabold hover:underline group-hover:translate-x-1 transition cursor-pointer"
+          >
             View Vendors &rarr;
           </button>
         </div>

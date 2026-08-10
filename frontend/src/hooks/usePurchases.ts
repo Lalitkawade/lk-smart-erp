@@ -21,22 +21,23 @@ export function usePurchases(tenantId: string) {
       ? billPayload.id
       : generateUuid();
 
-    const activeTenantId = (tenantId && isUuid(tenantId)) ? tenantId : '00000000-0000-0000-0000-000000000000';
+    const activeTenantId = (tenantId && isUuid(tenantId)) ? tenantId : null;
 
     const cleanBillPayload: any = {
       id: purchaseId,
       tenant_id: activeTenantId,
-      bill_number: billPayload.bill_number || ('PB-' + Date.now().toString().slice(-5)),
-      supplier_name: billPayload.supplier_name || 'General Vendor',
+      bill_number: (billPayload.bill_number && billPayload.bill_number.trim()) ? billPayload.bill_number.trim() : 'N/A',
+      supplier_name: (billPayload.supplier_name && billPayload.supplier_name.trim()) ? billPayload.supplier_name.trim() : 'GENERAL VENDOR',
       payment_mode: billPayload.payment_mode || 'Cash',
-      ref_number: billPayload.ref_number || billPayload.transaction_id || null,
-      transaction_id: billPayload.transaction_id || billPayload.ref_number || null,
+      ref_number: billPayload.ref_number || (billPayload as any).transaction_id || null,
       total_amount: Number(billPayload.total_amount || 0),
       paid_amount: Number(billPayload.paid_amount || 0),
       due_amount: Number(billPayload.due_amount || 0),
       purchase_date: billPayload.purchase_date || new Date().toISOString(),
       created_at: (billPayload as any).created_at || new Date().toISOString()
     };
+
+    console.log('📦 [usePurchases] savePurchase executing:', { purchaseId, activeTenantId, cleanBillPayload, itemsCount: itemsPayload.length });
 
     try {
       const isExisting = contextPurchases.some(p => p.id === purchaseId);
@@ -46,13 +47,16 @@ export function usePurchases(tenantId: string) {
       } else {
         res = await PurchaseService.createPurchase(cleanBillPayload, itemsPayload);
       }
+
+      console.log('📦 [usePurchases] PurchaseService operation result:', res);
+
       if (res.error) {
         throw new Error(res.error);
       }
       await refreshAllData();
       return res.data || cleanBillPayload;
     } catch (err: any) {
-      console.error('Purchase save error:', err.message || err);
+      console.error('❌ [usePurchases] Purchase save error:', err.message || err);
       throw err;
     } finally {
       setIsSaving(false);

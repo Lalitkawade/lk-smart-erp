@@ -28,6 +28,8 @@ export function useSuppliers(tenantId: string) {
       phone: supplierPayload.phone || '',
       email: supplierPayload.email || '',
       address: supplierPayload.address || '',
+      dob: supplierPayload.dob || null,
+      establishment_date: supplierPayload.establishment_date || null,
       gstin: (supplierPayload as any).gstin || '',
       outstanding: Number(supplierPayload.outstanding || 0),
       created_at: (supplierPayload as any).created_at || new Date().toISOString(),

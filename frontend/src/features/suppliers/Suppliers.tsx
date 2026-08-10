@@ -81,6 +81,18 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
 
 
 
+  const formatDateForInput = (dateVal?: string | null) => {
+    if (!dateVal) return '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateVal)) return dateVal;
+    if (dateVal.includes('T')) return dateVal.split('T')[0];
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return '';
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
   const handleOpenAdd = () => {
     setEditingSupplier(null);
     setFormData({
@@ -102,8 +114,8 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
       phone: s.phone || '',
       email: s.email || '',
       address: s.address || '',
-      dob: s.dob || '',
-      establishment_date: s.establishment_date || '',
+      dob: formatDateForInput(s.dob),
+      establishment_date: formatDateForInput(s.establishment_date),
       outstanding: s.outstanding || 0
     });
     setModalOpen(true);
@@ -203,51 +215,142 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
     }
   };
 
-  // Compile supplier ledger entries (Purchases vs payments)
+  // Date & Time Formatter for Ledger Entries
+  const formatLedgerDateTime = (dateStr: string) => {
+    if (!dateStr) return '-';
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+
+    const hasTime = dateStr.includes('T') || dateStr.includes(':');
+    const datePart = d.toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric'
+    });
+
+    if (!hasTime) return datePart;
+
+    const timePart = d.toLocaleTimeString('en-IN', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+
+    return `${datePart}, ${timePart}`;
+  };
+
+  // Compile supplier ledger entries (Purchases vs payments) with Line-by-Line Running Balance
   const statementLedger = useMemo(() => {
-    if (!statementSupplier) return [];
+    if (!statementSupplier) return { items: [], summary: { totalBilled: 0, totalPaid: 0, netBalance: 0 } };
 
-    // Get all purchases for this supplier
+    const nameKey = (statementSupplier.supplier_name || '').trim().toUpperCase();
     const allPurchs: any[] = contextPurchases || [];
-    const supplierPurchs = allPurchs.filter(p => 
-      p.supplier_name && statementSupplier.supplier_name &&
-      p.supplier_name.toUpperCase() === statementSupplier.supplier_name.toUpperCase()
-    );
 
-    // Get payments
-    const supplierPayments = payments.filter(p => p && p.supplier_id === statementSupplier.id);
+    // 1. Get all purchase bills for this supplier
+    const supplierPurchs = allPurchs.filter(p => {
+      const suppName = (p.supplier_name || '').trim().toUpperCase();
+      return (p.supplier_id && p.supplier_id === statementSupplier.id) || (suppName && suppName === nameKey);
+    });
 
-    // Merge & sort
-    const ledger: Array<{ date: string; type: string; ref: string; amount: number; isCredit: boolean }> = [];
-    
+    // 2. Get all payout records for this supplier
+    const supplierPayments = (payments || []).filter(p => {
+      const pSuppName = ((p as any).supplier_name || '').trim().toUpperCase();
+      return (p.supplier_id && p.supplier_id === statementSupplier.id) || (pSuppName && pSuppName === nameKey);
+    });
+
+    const events: Array<{
+      date: string;
+      type: string;
+      ref: string;
+      debit: number; // Bill Add (Increases Accounts Payable)
+      credit: number; // Payment / Settlement (Decreases Accounts Payable)
+      mode: string;
+      notes: string;
+    }> = [];
+
+    // A. Add Procurement Bills and Upfront Checkout Payments
     supplierPurchs.forEach(pb => {
-      ledger.push({
-        date: pb.purchase_date,
+      const billDate = pb.purchase_date || pb.created_at || new Date().toISOString();
+      const totalAmt = Number(pb.total_amount || 0);
+      const paidAmt = Number(pb.paid_amount || 0);
+      const billNo = (pb.bill_number && pb.bill_number !== 'N/A' && !pb.bill_number.toLowerCase().startsWith('pb-'))
+        ? pb.bill_number
+        : `PB-${(pb.id || '').slice(0, 6)}`;
+
+      // Entry 1: Procurement Bill (Increases Payable / Debit)
+      events.push({
+        date: billDate,
         type: 'Procurement Bill',
-        ref: pb.bill_number || '-',
-        amount: Number(pb.total_amount || 0),
-        isCredit: false // bill increases our accounts payable
+        ref: billNo,
+        debit: totalAmt,
+        credit: 0,
+        mode: pb.payment_mode || 'Credit',
+        notes: `Procurement Purchase Bill #${billNo}`
       });
+
+      // Entry 2: Upfront Payment at Checkout (Decreases Payable / Credit)
+      if (paidAmt > 0) {
+        const checkoutPaymentDate = new Date(new Date(billDate).getTime() + 1000).toISOString();
+        events.push({
+          date: checkoutPaymentDate,
+          type: `Bill Payment (${pb.payment_mode || 'Cash'})`,
+          ref: billNo,
+          debit: 0,
+          credit: paidAmt,
+          mode: pb.payment_mode || 'Cash',
+          notes: `Upfront payment for Bill #${billNo}`
+        });
+      }
     });
 
+    // B. Add Vendor Settlement Payout Vouchers
     supplierPayments.forEach(p => {
-      ledger.push({
-        date: p.payment_date,
-        type: 'Settlement Payout',
+      const pDate = p.payment_date || (p as any).created_at || new Date().toISOString();
+      events.push({
+        date: pDate,
+        type: `Vendor Settlement Voucher (${p.payment_mode || 'Cash'})`,
         ref: p.ref_number || 'Cash Voucher',
-        amount: Number(p.amount || 0),
-        isCredit: true // payout reduces outstanding
+        debit: 0,
+        credit: Number(p.amount || 0),
+        mode: p.payment_mode || 'Cash',
+        notes: `Payout Settlement Ref: ${p.ref_number || 'Cash'}`
       });
     });
 
-    // Sort chronologically
-    return ledger.sort((a, b) => new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime());
-  }, [statementSupplier, payments]);
+    // C. Sort events chronologically by date/time
+    events.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-  // Pre-calculate per-supplier stats (total purchases, last purchase date, last payment date)
+    // D. Calculate Line-by-Line Running Balance
+    let currentBalance = Number(statementSupplier.initial_outstanding || 0);
+    let totalBilled = 0;
+    let totalPaid = 0;
+
+    const items = events.map(ev => {
+      totalBilled += ev.debit;
+      totalPaid += ev.credit;
+      currentBalance = currentBalance + ev.debit - ev.credit;
+
+      return {
+        ...ev,
+        runningBalance: Math.max(0, currentBalance)
+      };
+    });
+
+    return {
+      items,
+      summary: {
+        totalBilled,
+        totalPaid,
+        netBalance: Math.max(0, currentBalance)
+      }
+    };
+  }, [statementSupplier, contextPurchases, payments]);
+
+  // Pre-calculate per-supplier stats (total purchases, total paid, realtime outstanding, last purchase date, last payment date)
   const supplierStatsMap = useMemo(() => {
     const map = new Map<string, { 
       totalPurchases: number; 
+      totalPaid: number;
       realtimeOutstanding: number;
       lastPurchaseDate: string | null; 
       lastPaymentDate: string | null;
@@ -257,33 +360,45 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
 
     suppliers.forEach(s => {
       const nameKey = (s.supplier_name || '').toUpperCase().trim();
-      const suppBills = allPurchs.filter(b => b.supplier_name && b.supplier_name.toUpperCase().trim() === nameKey);
-      const suppPays = payments.filter(p => p.supplier_id === s.id || ((p as any).supplier_name && (p as any).supplier_name.toUpperCase().trim() === nameKey));
+      const suppBills = allPurchs.filter(b => 
+        (b.supplier_id && b.supplier_id === s.id) ||
+        (b.supplier_name && b.supplier_name.toUpperCase().trim() === nameKey)
+      );
+      const suppPays = payments.filter(p => 
+        p.supplier_id === s.id ||
+        ((p as any).supplier_name && (p as any).supplier_name.toUpperCase().trim() === nameKey)
+      );
 
       const totalPurch = suppBills.reduce((acc, b) => acc + Number(b.total_amount || 0), 0);
-      
+      const totalBillPaid = suppBills.reduce((acc, b) => acc + Number(b.paid_amount || 0), 0);
+      const totalVoucherPaid = suppPays.reduce((acc, p) => acc + Number(p.amount || 0), 0);
+      const totalPaid = totalBillPaid + totalVoucherPaid;
+
+      const realtimeOutstanding = Math.max(0, totalPurch - totalPaid);
+
       let lastPurchDate: string | null = null;
       if (suppBills.length > 0) {
-        const sorted = [...suppBills].sort((a, b) => new Date(b.purchase_date || 0).getTime() - new Date(a.purchase_date || 0).getTime());
-        lastPurchDate = sorted[0].purchase_date || null;
+        const sorted = [...suppBills].sort((a, b) => new Date(b.purchase_date || b.created_at || 0).getTime() - new Date(a.purchase_date || a.created_at || 0).getTime());
+        lastPurchDate = sorted[0].purchase_date || sorted[0].created_at || null;
       }
 
       let lastPayDate: string | null = null;
       if (suppPays.length > 0) {
-        const sortedP = [...suppPays].sort((a, b) => new Date(b.payment_date || 0).getTime() - new Date(a.payment_date || 0).getTime());
-        lastPayDate = sortedP[0].payment_date || null;
+        const sortedP = [...suppPays].sort((a, b) => new Date(b.payment_date || (b as any).created_at || 0).getTime() - new Date(a.payment_date || (a as any).created_at || 0).getTime());
+        lastPayDate = sortedP[0].payment_date || (sortedP[0] as any).created_at || null;
       }
 
       map.set(s.id, {
         totalPurchases: totalPurch,
-        realtimeOutstanding: Number(s.outstanding || 0),
+        totalPaid,
+        realtimeOutstanding,
         lastPurchaseDate: lastPurchDate,
         lastPaymentDate: lastPayDate
       });
     });
 
     return map;
-  }, [suppliers, payments]);
+  }, [suppliers, contextPurchases, payments]);
 
   const getVendorCode = (s: Supplier, idx?: number) => {
     if ((s as any).supplier_code) return (s as any).supplier_code;
@@ -609,7 +724,7 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
 
       {/* Printable Statement Modal */}
       {statementSupplier && createPortal(
-        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 z-[9999] print:p-0 print:bg-white animate-backdrop-fade">
+        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 z-[9999] print:p-0 print:bg-white animate-backdrop-fade">
           
           <style>{`
             @media print {
@@ -626,71 +741,134 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
                 width: 100%;
                 background: white !important;
                 color: black !important;
-                padding: 15px !important;
+                padding: 20px !important;
               }
             }
           `}</style>
 
-          <div className="bg-secondary border border-border p-6 rounded-xl w-full max-w-2xl shadow-2xl print:bg-white print:border-none print:shadow-none print:p-0 flex flex-col justify-between max-h-[85vh]" id="supplier-print-area">
-            <div className="space-y-6 overflow-y-auto pr-1">
+          <div className="bg-secondary border border-border rounded-2xl w-full max-w-4xl shadow-2xl print:bg-white print:border-none print:shadow-none print:p-0 flex flex-col justify-between max-h-[92vh] overflow-hidden" id="supplier-print-area">
+            
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 border-b border-border flex justify-between items-center bg-background/50 shrink-0 print:bg-white print:border-slate-300">
+              <div>
+                <span className="text-[10px] font-mono font-bold text-primary uppercase tracking-widest block">Accounts Payable Ledger</span>
+                <h3 className="text-lg font-black text-foreground print:text-black uppercase tracking-tight">
+                  Supplier Account Statement & Financial Ledger
+                </h3>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setStatementSupplier(null)}
+                className="text-textSecondary hover:text-foreground text-xs font-bold bg-background hover:bg-slate-200 dark:hover:bg-slate-800 border border-border px-3 py-1.5 rounded-lg transition print:hidden cursor-pointer"
+              >
+                &times; Close
+              </button>
+            </div>
+
+            {/* Scrollable Modal Content */}
+            <div className="p-4 sm:p-6 space-y-5 overflow-y-auto flex-1 scrollbar-thin print:overflow-visible print:p-0">
               
-              {/* Header */}
-              <div className="text-center pb-4 border-b border-border print:border-slate-300">
-                <h3 className="text-lg font-bold text-foreground print:text-black">SUPPLIER ACCOUNT STATEMENT</h3>
-                <p className="text-xs text-textMuted mt-1">Accounts Payable Records</p>
+              {/* Top Financial Summary Bento Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 print:grid-cols-3">
+                <div className="bg-blue-50/80 dark:bg-blue-950/40 p-3.5 rounded-xl border border-blue-200 dark:border-blue-800 text-center">
+                  <span className="text-[10px] font-extrabold text-blue-700 dark:text-blue-300 uppercase tracking-wider block">Total Billed (Procurements)</span>
+                  <div className="text-lg font-black font-mono text-blue-900 dark:text-blue-100 mt-1">
+                    ₹{statementLedger.summary.totalBilled.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  </div>
+                </div>
+
+                <div className="bg-emerald-50/80 dark:bg-emerald-950/40 p-3.5 rounded-xl border border-emerald-200 dark:border-emerald-800 text-center">
+                  <span className="text-[10px] font-extrabold text-emerald-700 dark:text-emerald-300 uppercase tracking-wider block">Total Settled (Payments)</span>
+                  <div className="text-lg font-black font-mono text-emerald-900 dark:text-emerald-100 mt-1">
+                    ₹{statementLedger.summary.totalPaid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  </div>
+                </div>
+
+                <div className="bg-amber-50/80 dark:bg-amber-950/40 p-3.5 rounded-xl border border-amber-200 dark:border-amber-800 text-center">
+                  <span className="text-[10px] font-extrabold text-amber-700 dark:text-amber-300 uppercase tracking-wider block">Net Pending Payable</span>
+                  <div className={`text-lg font-black font-mono mt-1 ${statementLedger.summary.netBalance > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                    ₹{statementLedger.summary.netBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  </div>
+                </div>
               </div>
 
-              {/* Supplier Metadata Card */}
-              <div className="bg-background p-4 border border-border rounded-lg grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs print:bg-white print:border-slate-300 print:text-black">
+              {/* Vendor Information Box */}
+              <div className="bg-background p-4 border border-border rounded-xl grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs print:bg-white print:border-slate-300 print:text-black">
                 <div>
-                  <div className="text-textMuted text-[10px] uppercase font-bold">Supplier Name</div>
-                  <div className="text-foreground print:text-black font-bold uppercase">{statementSupplier.supplier_name}</div>
-                  <div className="text-textMuted">{statementSupplier.address}</div>
+                  <div className="text-textMuted text-[10px] uppercase font-bold">Supplier Profile</div>
+                  <div className="text-foreground print:text-black font-extrabold uppercase text-sm mt-0.5">{statementSupplier.supplier_name}</div>
+                  <div className="text-textMuted mt-1">{statementSupplier.address || 'No location address recorded'}</div>
                   {statementSupplier.establishment_date && (
-                    <div className="text-[11px] text-blue-400 font-mono mt-0.5">🏛️ Est: {new Date(statementSupplier.establishment_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
+                    <div className="text-[11px] text-blue-600 dark:text-blue-400 font-mono mt-1">🏛️ Est: {new Date(statementSupplier.establishment_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
                   )}
                 </div>
                 <div>
-                  <div className="text-textMuted text-[10px] uppercase font-bold">Accounts Payable Balance</div>
-                  <div className="text-primary font-bold font-mono text-sm print:text-black">₹{statementSupplier.outstanding.toLocaleString()}</div>
-                  <div className="text-textMuted">Contact: {statementSupplier.phone}</div>
+                  <div className="text-textMuted text-[10px] uppercase font-bold">Contact Details</div>
+                  <div className="text-foreground print:text-black font-bold font-mono text-xs mt-0.5 flex items-center gap-2">
+                    <span>📱 Phone: {statementSupplier.phone || 'N/A'}</span>
+                    {statementSupplier.phone && (
+                      <a href={`tel:${statementSupplier.phone}`} className="text-[10px] text-blue-600 dark:text-blue-400 hover:underline print:hidden">Call Now</a>
+                    )}
+                  </div>
+                  {statementSupplier.email && <div className="text-textMuted mt-1">📧 Email: {statementSupplier.email}</div>}
                   {statementSupplier.dob && (
-                    <div className="text-[11px] text-pink-400 font-mono mt-0.5">🎂 Birthday: {new Date(statementSupplier.dob).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
+                    <div className="text-[11px] text-pink-600 dark:text-pink-400 font-mono mt-1">🎂 Birthday: {new Date(statementSupplier.dob).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
                   )}
                 </div>
               </div>
 
-              {/* Ledger Entries List */}
+              {/* Timeline Ledger Table */}
               <div className="space-y-2">
-                <h4 className="text-xs font-bold text-textSecondary uppercase tracking-wide">Procurements & Settlements timeline</h4>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs text-textSecondary print:text-black">
+                <div className="flex justify-between items-center">
+                  <h4 className="text-xs font-black text-textSecondary uppercase tracking-wide">Procurements & Settlements Timeline Ledger</h4>
+                  <span className="text-[10px] font-mono text-textMuted font-bold">{statementLedger.items.length} Ledger Entries</span>
+                </div>
+
+                <div className="overflow-x-auto border border-border rounded-xl">
+                  <table className="w-full text-left text-xs text-textSecondary print:text-black border-collapse">
                     <thead>
-                      <tr className="border-b border-border print:border-slate-350 text-textPrimary text-[10px] font-extrabold uppercase">
-                        <th className="pb-2">Tx Date</th>
-                        <th className="pb-2">Voucher details</th>
-                        <th className="pb-2">Ref/Bill No.</th>
-                        <th className="pb-2 text-right">Bill Add (Debit)</th>
-                        <th className="pb-2 text-right">Settlement (Credit)</th>
+                      <tr className="border-b border-border bg-slate-100 dark:bg-slate-800/80 text-textPrimary text-[10.5px] font-extrabold uppercase divide-x divide-border">
+                        <th className="py-2.5 px-3 text-center whitespace-nowrap">Tx Date & Time</th>
+                        <th className="py-2.5 px-3 whitespace-nowrap">Voucher Details</th>
+                        <th className="py-2.5 px-3 text-center whitespace-nowrap">Ref / Bill No.</th>
+                        <th className="py-2.5 px-3 text-right whitespace-nowrap text-blue-600 dark:text-blue-400">Bill Add (Debit +)</th>
+                        <th className="py-2.5 px-3 text-right whitespace-nowrap text-emerald-600 dark:text-emerald-400">Settlement (Credit -)</th>
+                        <th className="py-2.5 px-3 text-right whitespace-nowrap text-amber-600 dark:text-amber-400">Running Balance</th>
                       </tr>
                     </thead>
-                    <tbody>
-                      {statementLedger.length === 0 ? (
+                    <tbody className="divide-y divide-border">
+                      {statementLedger.items.length === 0 ? (
                         <tr>
-                          <td colSpan={5} className="py-6 text-center text-textMuted">No procurement transactions logged.</td>
+                          <td colSpan={6} className="py-8 text-center text-textMuted">No procurement or payout transactions logged for this vendor.</td>
                         </tr>
                       ) : (
-                        statementLedger.map((row, idx) => {
+                        statementLedger.items.map((row, idx) => {
+                          const formattedDateTime = formatLedgerDateTime(row.date);
+
                           return (
-                            <tr key={idx} className="border-b border-border print:border-slate-200">
-                              <td className="py-3 font-mono">{new Date(row.date).toLocaleDateString()}</td>
-                              <td className="py-3 font-semibold text-foreground print:text-black">{row.type}</td>
-                              <td className="py-3 font-mono">{row.ref}</td>
-                              <td className="py-3 text-right font-mono font-semibold text-primary print:text-black">
-                                {!row.isCredit ? `₹${row.amount.toLocaleString()}` : '-'}
+                            <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors divide-x divide-border">
+                              <td className="py-2.5 px-3 text-center font-mono text-[11px] font-semibold whitespace-nowrap">
+                                {formattedDateTime}
                               </td>
-                              <td className="py-3 text-right font-mono font-semibold text-primary print:text-black">
-                                {row.isCredit ? `₹${row.amount.toLocaleString()}` : '-'}
+                              <td className="py-2.5 px-3 font-bold text-foreground print:text-black whitespace-nowrap">
+                                <div className="flex items-center gap-1.5">
+                                  <i className={`fa-solid ${row.debit > 0 ? 'fa-file-invoice text-blue-500' : 'fa-circle-check text-emerald-500'} text-xs`}></i>
+                                  <span>{row.type}</span>
+                                </div>
+                              </td>
+                              <td className="py-2.5 px-3 text-center font-mono font-bold text-xs">
+                                <span className="bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
+                                  {row.ref}
+                                </span>
+                              </td>
+                              <td className="py-2.5 px-3 text-right font-mono font-bold text-blue-600 dark:text-blue-400 whitespace-nowrap">
+                                {row.debit > 0 ? `₹${row.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}
+                              </td>
+                              <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+                                {row.credit > 0 ? `₹${row.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}
+                              </td>
+                              <td className="py-2.5 px-3 text-right font-mono font-black text-amber-600 dark:text-amber-400 whitespace-nowrap">
+                                ₹{row.runningBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                               </td>
                             </tr>
                           );
@@ -700,17 +878,24 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
                   </table>
                 </div>
               </div>
+
             </div>
 
-            {/* Print Controls */}
-            <div className="flex gap-3 mt-8 print:hidden">
-              <button className="flex-1 px-4 py-2 bg-background hover:bg-slate-100 dark:hover:bg-slate-800 border border-border text-textSecondary hover:text-foreground rounded-lg text-xs font-semibold transition"
-                onClick={() => setStatementSupplier(null)}>
+            {/* Sticky Modal Action Footer */}
+            <div className="p-4 border-t border-border flex gap-3 shrink-0 print:hidden bg-background/50">
+              <button 
+                type="button"
+                className="flex-1 px-4 py-2.5 bg-background hover:bg-slate-100 dark:hover:bg-slate-800 border border-border text-textSecondary hover:text-foreground rounded-xl text-xs font-extrabold transition cursor-pointer"
+                onClick={() => setStatementSupplier(null)}
+              >
                 Close Statement
               </button>
-              <button className="flex-1 px-4 py-2 bg-primary hover:bg-primary/90 text-white font-bold rounded-lg text-xs transition shadow-md cursor-pointer"
-                onClick={() => window.print()}>
-                🖨️ Print Statement
+              <button 
+                type="button"
+                className="flex-1 px-4 py-2.5 bg-primary hover:bg-primary/90 text-white font-extrabold rounded-xl text-xs transition shadow-md cursor-pointer flex items-center justify-center gap-2"
+                onClick={() => window.print()}
+              >
+                <i className="fa-solid fa-print"></i> Print Statement
               </button>
             </div>
 
