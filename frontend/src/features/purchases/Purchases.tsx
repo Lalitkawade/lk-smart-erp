@@ -55,6 +55,7 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
   
   // Modals
   const [modalOpen, setModalOpen] = useState(false);
+  const [showInflowBanner, setShowInflowBanner] = useState(true);
   const [autoFilledNotice, setAutoFilledNotice] = useState<string | null>(null);
   const [viewingBill, setViewingBill] = useState<any | null>(null);
 
@@ -317,6 +318,7 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
     const safeIsoDate = isNaN(rawDate.getTime()) ? new Date().toISOString() : rawDate.toISOString();
 
     const billPayload = {
+      supplier_id: selectedSup.id,
       bill_number: billNumber.trim(),
       supplier_name: selectedSup.supplier_name,
       payment_mode: paymentMode,
@@ -343,10 +345,16 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
     });
 
     try {
+      const isStockInflowConversion = autoFilledNotice !== null;
       await savePurchase(billPayload as any, preparedItems);
 
-      // Update product stock via central InventoryService
-      await InventoryService.addStockForPurchase(preparedItems);
+      if (isStockInflowConversion) {
+        // Clean up temporary stock-in placeholder entries
+        await supabase.from('purchase_bills').delete().ilike('bill_number', 'STOCK-IN%');
+      } else {
+        // Update product stock via central InventoryService for new purchase bills
+        await InventoryService.addStockForPurchase(preparedItems);
+      }
 
       // Update supplier outstanding via SupplierService
       if (dueAmount > 0 && selectedSup?.id) {
@@ -412,7 +420,7 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
         </button>
       </div>
 
-      {todayUnbilledInflows.length > 0 && (
+      {showInflowBanner && todayUnbilledInflows.length > 0 && (
         <div className="bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-primary/10 border border-blue-500/30 p-4 rounded-xl shadow-xs flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4 animate-fade-in">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-lg bg-blue-500/20 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold text-base shrink-0">
@@ -437,12 +445,7 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
             <button
               type="button"
               title="Dismiss stock inflow banner"
-              onClick={async () => {
-                try {
-                  await supabase.from('purchase_bills').delete().ilike('bill_number', 'STOCK-IN%');
-                  await refreshAllData();
-                } catch (e) {}
-              }}
+              onClick={() => setShowInflowBanner(false)}
               className="px-2.5 py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs rounded-lg transition cursor-pointer"
             >
               &times;

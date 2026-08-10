@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../api/supabase';
-import { perfTracker } from '../utils/perfTracker';
 
 export interface UnstockedDemand {
   id: string;
@@ -29,32 +28,26 @@ export function useDemandTracker(tenantId?: string) {
   const activeTenantId = tenantId || 'default-hardware-erp';
 
   const fetchDemands = async () => {
-    return perfTracker.trackFunction('fetchDemandTracker()', false, async () => {
-      if (!activeTenantId) return;
-      setIsLoading(true);
+    if (!activeTenantId) return;
+    setIsLoading(true);
 
-      try {
-        if (tenantId) {
-          const { data, error } = await perfTracker.logQuery(
-            'unstocked_item_demands',
-            'fetchDemandTracker()',
-            supabase
-              .from('unstocked_item_demands')
-              .select('*')
-              .eq('tenant_id', activeTenantId)
-              .order('request_count', { ascending: false }) as any
-          );
+    try {
+      if (tenantId) {
+        const { data, error } = await supabase
+          .from('unstocked_item_demands')
+          .select('*')
+          .eq('tenant_id', activeTenantId)
+          .order('request_count', { ascending: false });
 
-          if (!error && Array.isArray(data)) {
-            setDemands(data as UnstockedDemand[]);
-          }
+        if (!error && Array.isArray(data)) {
+          setDemands(data as UnstockedDemand[]);
         }
-      } catch (e) {
-        console.warn('Supabase fetch notice for unstocked_item_demands:', e);
-      } finally {
-        setIsLoading(false);
       }
-    });
+    } catch (e) {
+      console.warn('Supabase fetch notice for unstocked_item_demands:', e);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {

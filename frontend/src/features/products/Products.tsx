@@ -564,71 +564,32 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
       const updatedPaid = Number(editBillData.paid_amount || 0);
       const updatedDue = Math.max(0, updatedTotal - updatedPaid);
 
-      const oldDue = Number(editingBill.due_amount || 0);
-      const oldSupName = (editingBill.supplier_name || '').trim().toUpperCase();
       const newSupName = (editBillData.supplier_name || '').trim().toUpperCase();
+      const matchedSup = suppliers.find(s => s.supplier_name && s.supplier_name.trim().toUpperCase() === newSupName);
 
-      if (oldSupName !== newSupName) {
-        const newSupExists = suppliers.some(s => s.supplier_name && s.supplier_name.trim().toUpperCase() === newSupName);
-        if (!newSupExists) {
-          triggerToast('⚠️ Supplier not found. Please select an existing supplier.');
+      if (editingBill.id) {
+        const updateRes = await PurchaseService.updatePurchase(editingBill.id, {
+          bill_number: editBillData.bill_number,
+          supplier_name: editBillData.supplier_name,
+          supplier_id: matchedSup?.id || editingBill.supplier_id || null,
+          purchase_date: editBillData.purchase_date,
+          total_amount: updatedTotal,
+          paid_amount: updatedPaid,
+          due_amount: updatedDue,
+          payment_mode: editBillData.payment_mode
+        });
+
+        if (updateRes && updateRes.error) {
+          triggerToast('⚠️ ' + updateRes.error);
           return;
         }
       }
 
-      try {
-        if (editingBill.id) {
-          await PurchaseService.updatePurchase(editingBill.id, {
-            bill_number: editBillData.bill_number,
-            supplier_name: editBillData.supplier_name,
-            purchase_date: editBillData.purchase_date,
-            total_amount: updatedTotal,
-            paid_amount: updatedPaid,
-            due_amount: updatedDue,
-            payment_mode: editBillData.payment_mode
-          });
-
-          if (oldSupName === newSupName) {
-            const dueDifference = updatedDue - oldDue;
-            if (dueDifference !== 0) {
-              const targetSup = suppliers.find(s => 
-                (editingBill.supplier_id && s.id === editingBill.supplier_id) || 
-                (s.supplier_name && s.supplier_name.toUpperCase() === oldSupName)
-              );
-              if (targetSup?.id) {
-                const currentSupOutstanding = Number(targetSup.outstanding || 0);
-                const newSupOutstanding = Math.max(0, currentSupOutstanding + dueDifference);
-                await SupplierService.updateSupplier(targetSup.id, { outstanding: newSupOutstanding });
-              }
-            }
-          } else {
-            // Supplier was changed during bill edit: deduct old due from old supplier, add new due to new supplier
-            if (oldDue > 0) {
-              const oldSup = suppliers.find(s => 
-                (editingBill.supplier_id && s.id === editingBill.supplier_id) || 
-                (s.supplier_name && s.supplier_name.toUpperCase() === oldSupName)
-              );
-              if (oldSup?.id) {
-                const oldSupOutstanding = Math.max(0, Number(oldSup.outstanding || 0) - oldDue);
-                await SupplierService.updateSupplier(oldSup.id, { outstanding: oldSupOutstanding });
-              }
-            }
-            if (updatedDue > 0) {
-              const newSup = suppliers.find(s => s.supplier_name && s.supplier_name.toUpperCase() === newSupName);
-              if (newSup?.id) {
-                const newSupOutstanding = Number(newSup.outstanding || 0) + updatedDue;
-                await SupplierService.updateSupplier(newSup.id, { outstanding: newSupOutstanding });
-              }
-            }
-          }
-        }
-        await refreshAllData();
-      } catch (e) {}
-
+      await refreshAllData();
       triggerToast('⚡ Purchase bill updated successfully!');
       setEditingBill(null);
     } catch (err: any) {
-      triggerToast('⚠️ Error updating bill: ' + err.message);
+      triggerToast('⚠️ Error updating bill: ' + (err.message || err));
     }
   };
 
@@ -885,12 +846,14 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
         }
         const safeIsoDate = isNaN(rawDate.getTime()) ? now.toISOString() : rawDate.toISOString();
 
-        const effectivePaid = totalBillCost;
+        const effectivePaid = (paymentMode && String(paymentMode).trim().toLowerCase() === 'credit') ? 0 : totalBillCost;
         const dueAmount = Math.max(0, totalBillCost - effectivePaid);
 
         const isValidUUID = (id: any) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+        const targetSupId = activeSup?.id || supplierId;
         const billPayload = {
           tenant_id: (tenantId && isValidUUID(tenantId)) ? tenantId : null,
+          supplier_id: (targetSupId && isValidUUID(targetSupId)) ? targetSupId : null,
           bill_number: finalBillNumber,
           supplier_name: finalSupName,
           supplier_phone: activeSup?.phone || null,
@@ -915,12 +878,8 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
           };
         });
 
-        console.log('⚡ [handleSaveProduct] Preparing purchase bill insertion payload:', billPayload);
-        console.log('⚡ [handleSaveProduct] Preparing line items rows:', rows);
-
         try {
           const pRes = await PurchaseService.createPurchase(billPayload as any, rows);
-          console.log('⚡ [handleSaveProduct] PurchaseService.createPurchase response:', pRes);
 
           if (pRes.error) {
             triggerToast('⚠️ Purchase Bill Note: ' + pRes.error);
@@ -1020,9 +979,6 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
     const q = search.trim().toLowerCase();
     const vFilter = vendorFilter.toUpperCase().trim();
 
-    console.log('🔍 [ProcurementDesk Debug] Raw purchasesList count from context:', list.length, list);
-    console.log('🔍 [ProcurementDesk Debug] Active filters:', { search: q, vendorFilter: vFilter });
-
     const result = list.filter((b: any) => {
       const supName = (b.supplier_name || '').toUpperCase().trim();
       const matchedVendor = suppliers.find(s => s.id === b.supplier_id);
@@ -1046,7 +1002,6 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
       return matchesSearch;
     }).sort((a: any, b: any) => new Date(b.purchase_date || b.created_at || 0).getTime() - new Date(a.purchase_date || a.created_at || 0).getTime());
 
-    console.log('🔍 [ProcurementDesk Debug] Filtered purchase bills count:', result.length, result);
     return result;
   }, [purchasesList, search, vendorFilter, suppliers]);
 

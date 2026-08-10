@@ -139,67 +139,271 @@ export class PurchaseService {
   /**
    * Update an existing purchase bill and line items
    */
+  /**
+   * Update an existing purchase bill, reconcile product stock deltas, and reconcile supplier outstanding balance
+   */
   static async updatePurchase(
     id: string,
     billUpdates: Partial<PurchaseBillRow>,
     itemsPayload?: Partial<PurchaseItemRow>[]
   ): Promise<ServiceResponse<PurchaseWithItems>> {
-    const billRes = await handleServiceCall<PurchaseBillRow>(
-      supabase.from('purchase_bills').update(billUpdates as any).eq('id', id).select().single()
-    );
-
-    if (billRes.error || !billRes.data) {
-      return billRes as ServiceResponse<any>;
-    }
-
-    const updatedBill = billRes.data;
-
-    if (itemsPayload) {
-      // Replace existing line items
-      await supabase.from('purchase_items').delete().eq('bill_id', id);
-
-      if (itemsPayload.length > 0) {
-        const cleanItems = itemsPayload.map(item => ({
-          bill_id: id,
-          product_id: item.product_id || null,
-          product_name: item.product_name || null,
-          hsn: item.hsn || null,
-          gst_percent: Number(item.gst_percent || 0),
-          qty: Number(item.qty || 1),
-          rate: Number(item.rate || 0),
-          amount: Number(item.amount || (Number(item.qty || 1) * Number(item.rate || 0)))
-        }));
-        const itemsRes = await handleServiceCall<PurchaseItemRow[]>(
-          supabase.from('purchase_items').insert(cleanItems as any).select()
-        );
-
-        return {
-          data: {
-            ...updatedBill,
-            items: itemsRes.data || []
-          },
-          error: null
-        };
+    try {
+      // 1. Fetch existing bill and items
+      const oldBillRes = await this.getPurchaseById(id);
+      if (oldBillRes.error || !oldBillRes.data) {
+        return { data: null as any, error: oldBillRes.error || 'Purchase bill not found.' };
       }
-    }
 
-    return {
-      data: {
-        ...updatedBill,
-        items: []
-      },
-      error: null
-    };
+      const oldBill = oldBillRes.data;
+      const oldItems = oldBill.items || [];
+
+      // 2. Stock Delta Reconciliation if itemsPayload is provided
+      if (itemsPayload) {
+        const productMap = new Map<string, { oldBaseQty: number; newBaseQty: number }>();
+
+        // Process old items
+        for (const item of oldItems) {
+          if (!item.product_id) continue;
+          const { data: prod } = await supabase
+            .from('products')
+            .select('pieces_per_pack')
+            .eq('id', item.product_id)
+            .single();
+          const piecesPerPack = Math.max(1, Number(prod?.pieces_per_pack || 1));
+          const baseQty = Number(item.qty || 0) * piecesPerPack;
+
+          const current = productMap.get(item.product_id) || { oldBaseQty: 0, newBaseQty: 0 };
+          productMap.set(item.product_id, { ...current, oldBaseQty: current.oldBaseQty + baseQty });
+        }
+
+        // Process new items
+        for (const item of itemsPayload) {
+          if (!item.product_id) continue;
+          const { data: prod } = await supabase
+            .from('products')
+            .select('pieces_per_pack')
+            .eq('id', item.product_id)
+            .single();
+          const piecesPerPack = Math.max(1, Number(prod?.pieces_per_pack || 1));
+          const baseQty = Number(item.qty || 0) * piecesPerPack;
+
+          const current = productMap.get(item.product_id) || { oldBaseQty: 0, newBaseQty: 0 };
+          productMap.set(item.product_id, { ...current, newBaseQty: current.newBaseQty + baseQty });
+        }
+
+        // Pre-validate stock availability for negative deltas
+        for (const [prodId, qtyData] of productMap.entries()) {
+          const delta = qtyData.newBaseQty - qtyData.oldBaseQty;
+          if (delta < 0) {
+            const { data: prod } = await supabase
+              .from('products')
+              .select('current_stock, product_name')
+              .eq('id', prodId)
+              .single();
+
+            const currentStock = Number(prod?.current_stock || 0);
+            const requiredReduction = Math.abs(delta);
+
+            if (currentStock < requiredReduction) {
+              const pName = prod?.product_name || 'Product';
+              return {
+                data: null as any,
+                error: `Cannot update purchase bill: Product "${pName}" does not have enough available stock (${currentStock} available) for the requested reduction of ${requiredReduction} base units.`
+              };
+            }
+          }
+        }
+
+        // Apply stock updates for all products
+        for (const [prodId, qtyData] of productMap.entries()) {
+          const delta = qtyData.newBaseQty - qtyData.oldBaseQty;
+          if (delta !== 0) {
+            const { data: prod } = await supabase
+              .from('products')
+              .select('current_stock')
+              .eq('id', prodId)
+              .single();
+
+            const currentStock = Number(prod?.current_stock || 0);
+            const newStock = Math.max(0, currentStock + delta);
+            await supabase.from('products').update({ current_stock: newStock }).eq('id', prodId);
+          }
+        }
+      }
+
+      // 3. Supplier Balance Reconciliation
+      const oldDue = Number(oldBill.due_amount || 0);
+      const newDue = Number(billUpdates.due_amount !== undefined ? billUpdates.due_amount : oldBill.due_amount || 0);
+      const oldSupId = oldBill.supplier_id;
+      const newSupId = billUpdates.supplier_id !== undefined ? billUpdates.supplier_id : oldBill.supplier_id;
+
+      const isValidUUID = (id: any) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
+      if (oldSupId && newSupId && oldSupId === newSupId) {
+        const dueDelta = newDue - oldDue;
+        if (dueDelta !== 0 && isValidUUID(oldSupId)) {
+          const { data: sup } = await supabase.from('suppliers').select('outstanding').eq('id', oldSupId).single();
+          if (sup) {
+            const newOutstanding = Math.max(0, Number(sup.outstanding || 0) + dueDelta);
+            await supabase.from('suppliers').update({ outstanding: newOutstanding }).eq('id', oldSupId);
+          }
+        }
+      } else {
+        // Supplier changed
+        if (oldDue > 0 && oldSupId && isValidUUID(oldSupId)) {
+          const { data: oldSup } = await supabase.from('suppliers').select('outstanding').eq('id', oldSupId).single();
+          if (oldSup) {
+            const newOldOutstanding = Math.max(0, Number(oldSup.outstanding || 0) - oldDue);
+            await supabase.from('suppliers').update({ outstanding: newOldOutstanding }).eq('id', oldSupId);
+          }
+        }
+        if (newDue > 0 && newSupId && isValidUUID(newSupId)) {
+          const { data: newSup } = await supabase.from('suppliers').select('outstanding').eq('id', newSupId).single();
+          if (newSup) {
+            const newNewOutstanding = Number(newSup.outstanding || 0) + newDue;
+            await supabase.from('suppliers').update({ outstanding: newNewOutstanding }).eq('id', newSupId);
+          }
+        }
+      }
+
+      // 4. Update Header Row
+      const billRes = await handleServiceCall<PurchaseBillRow>(
+        supabase.from('purchase_bills').update(billUpdates as any).eq('id', id).select().single()
+      );
+
+      if (billRes.error || !billRes.data) {
+        return billRes as ServiceResponse<any>;
+      }
+
+      const updatedBill = billRes.data;
+
+      // 5. Replace Line Items if payload provided
+      if (itemsPayload) {
+        await supabase.from('purchase_items').delete().eq('bill_id', id);
+
+        if (itemsPayload.length > 0) {
+          const cleanItems = itemsPayload.map(item => ({
+            bill_id: id,
+            product_id: item.product_id || null,
+            product_name: item.product_name || null,
+            hsn: item.hsn || null,
+            gst_percent: Number(item.gst_percent || 0),
+            qty: Number(item.qty || 1),
+            rate: Number(item.rate || 0),
+            amount: Number(item.amount || (Number(item.qty || 1) * Number(item.rate || 0)))
+          }));
+          const itemsRes = await handleServiceCall<PurchaseItemRow[]>(
+            supabase.from('purchase_items').insert(cleanItems as any).select()
+          );
+
+          return {
+            data: {
+              ...updatedBill,
+              items: itemsRes.data || []
+            },
+            error: null
+          };
+        }
+      }
+
+      return {
+        data: {
+          ...updatedBill,
+          items: oldItems
+        },
+        error: null
+      };
+    } catch (e: any) {
+      return { data: null as any, error: e.message || 'Error updating purchase bill.' };
+    }
   }
 
   /**
-   * Delete a purchase bill and its associated line items
+   * Delete a purchase bill and its associated line items with stock and supplier balance reversal
    */
   static async deletePurchase(id: string): Promise<ServiceResponse<null>> {
-    await supabase.from('purchase_items').delete().eq('bill_id', id);
-    return handleServiceCall(
-      supabase.from('purchase_bills').delete().eq('id', id)
-    );
+    try {
+      // 1. Idempotency Check & Fetch existing bill with items
+      const billRes = await this.getPurchaseById(id);
+      if (billRes.error || !billRes.data) {
+        // Bill no longer exists; return idempotent success
+        return { data: null, error: null };
+      }
+
+      const bill = billRes.data;
+      const items = bill.items || [];
+
+      // 2. Pre-validate stock availability for all items before any database mutations
+      const isValidUUID = (idVal: any) => typeof idVal === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idVal);
+
+      for (const item of items) {
+        if (!item.product_id || !isValidUUID(item.product_id)) continue;
+
+        const { data: prod } = await supabase
+          .from('products')
+          .select('current_stock, product_name, pieces_per_pack')
+          .eq('id', item.product_id)
+          .single();
+
+        if (prod) {
+          const currentStock = Number(prod.current_stock || 0);
+          const piecesPerPack = Math.max(1, Number(prod.pieces_per_pack || 1));
+          const reversalBaseUnits = Number(item.qty || 0) * piecesPerPack;
+
+          if (currentStock < reversalBaseUnits) {
+            const prodName = prod.product_name || item.product_name || 'Product';
+            return {
+              data: null,
+              error: `Cannot delete purchase bill "${bill.bill_number || id}": Product "${prodName}" has ${currentStock} base units in stock, but reversing this bill requires ${reversalBaseUnits} base units. Some stock may have already been sold or moved.`
+            };
+          }
+        }
+      }
+
+      // 3. Validation passed: Execute Stock Reversal for all products
+      for (const item of items) {
+        if (!item.product_id || !isValidUUID(item.product_id)) continue;
+
+        const { data: prod } = await supabase
+          .from('products')
+          .select('current_stock, pieces_per_pack')
+          .eq('id', item.product_id)
+          .single();
+
+        if (prod) {
+          const currentStock = Number(prod.current_stock || 0);
+          const piecesPerPack = Math.max(1, Number(prod.pieces_per_pack || 1));
+          const reversalBaseUnits = Number(item.qty || 0) * piecesPerPack;
+          const newStock = Math.max(0, currentStock - reversalBaseUnits);
+
+          await supabase.from('products').update({ current_stock: newStock }).eq('id', item.product_id);
+        }
+      }
+
+      // 4. Reverse Supplier Outstanding Balance
+      const dueAmount = Number(bill.due_amount || 0);
+      if (dueAmount > 0 && bill.supplier_id && isValidUUID(bill.supplier_id)) {
+        const { data: sup } = await supabase
+          .from('suppliers')
+          .select('outstanding')
+          .eq('id', bill.supplier_id)
+          .single();
+
+        if (sup) {
+          const currentOutstanding = Number(sup.outstanding || 0);
+          const newOutstanding = Math.max(0, currentOutstanding - dueAmount);
+          await supabase.from('suppliers').update({ outstanding: newOutstanding }).eq('id', bill.supplier_id);
+        }
+      }
+
+      // 5. Delete Database Rows
+      await supabase.from('purchase_items').delete().eq('bill_id', id);
+      return handleServiceCall(
+        supabase.from('purchase_bills').delete().eq('id', id)
+      );
+    } catch (e: any) {
+      return { data: null, error: e.message || 'Error deleting purchase bill.' };
+    }
   }
 
   /**

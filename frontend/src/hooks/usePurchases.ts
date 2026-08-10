@@ -26,6 +26,7 @@ export function usePurchases(tenantId: string) {
     const cleanBillPayload: any = {
       id: purchaseId,
       tenant_id: activeTenantId,
+      supplier_id: (billPayload.supplier_id && isUuid(billPayload.supplier_id)) ? billPayload.supplier_id : null,
       bill_number: (billPayload.bill_number && billPayload.bill_number.trim()) ? billPayload.bill_number.trim() : 'N/A',
       supplier_name: (billPayload.supplier_name && billPayload.supplier_name.trim()) ? billPayload.supplier_name.trim() : 'GENERAL VENDOR',
       payment_mode: billPayload.payment_mode || 'Cash',

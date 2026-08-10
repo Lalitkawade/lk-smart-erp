@@ -2,7 +2,6 @@ import React, { createContext, useContext, useState, useEffect, useRef, ReactNod
 import { supabase } from '../api/supabase';
 import type { SalesInvoice, PurchaseBill, Expense, Product, Customer, Supplier } from '../types/erp.types';
 import { useAuth } from '../hooks/useAuth';
-import { perfTracker } from '../utils/perfTracker';
 
 interface ErpContextType {
   products: Product[];
@@ -46,21 +45,21 @@ export const ErpDataProvider: React.FC<{ children: ReactNode }> = ({ children })
       return inFlightRefreshPromiseRef.current;
     }
 
-    const promise = perfTracker.trackFunction('refreshAllData()', false, async () => {
+    const promise = (async () => {
       if (products.length === 0 && salesInvoices.length === 0) {
         setIsLoading(true);
       }
       try {
         const [salesRes, purchRes, expRes, prodRes, custRes, supRes, custPayRes, supPayRes, settingsRes] = await Promise.allSettled([
-          perfTracker.logQuery('sales_invoices', 'refreshAllData()', supabase.from('sales_invoices').select('*, sales_items(*)').order('sale_date', { ascending: false })),
-          perfTracker.logQuery('purchase_bills', 'refreshAllData()', supabase.from('purchase_bills').select('*, purchase_items(*)').order('purchase_date', { ascending: false })),
-          perfTracker.logQuery('expenses', 'refreshAllData()', supabase.from('expenses').select('*').order('expense_date', { ascending: false })),
-          perfTracker.logQuery('products', 'refreshAllData()', supabase.from('products').select('*').order('product_name', { ascending: true })),
-          perfTracker.logQuery('customers', 'refreshAllData()', supabase.from('customers').select('*').order('customer_name', { ascending: true })),
-          perfTracker.logQuery('suppliers', 'refreshAllData()', supabase.from('suppliers').select('*').order('supplier_name', { ascending: true })),
-          perfTracker.logQuery('customer_payments', 'refreshAllData()', supabase.from('customer_payments').select('*').order('payment_date', { ascending: false })),
-          perfTracker.logQuery('supplier_payments', 'refreshAllData()', supabase.from('supplier_payments').select('*').order('payment_date', { ascending: false })),
-          perfTracker.logQuery('settings', 'refreshAllData()', supabase.from('settings').select('*').limit(1).maybeSingle())
+          supabase.from('sales_invoices').select('*, sales_items(*)').order('sale_date', { ascending: false }),
+          supabase.from('purchase_bills').select('*, purchase_items(*)').order('purchase_date', { ascending: false }),
+          supabase.from('expenses').select('*').order('expense_date', { ascending: false }),
+          supabase.from('products').select('*').order('product_name', { ascending: true }),
+          supabase.from('customers').select('*').order('customer_name', { ascending: true }),
+          supabase.from('suppliers').select('*').order('supplier_name', { ascending: true }),
+          supabase.from('customer_payments').select('*').order('payment_date', { ascending: false }),
+          supabase.from('supplier_payments').select('*').order('payment_date', { ascending: false }),
+          supabase.from('settings').select('*').limit(1).maybeSingle()
         ]);
 
         if (salesRes.status === 'fulfilled' && !salesRes.value.error && salesRes.value.data) {
@@ -75,7 +74,6 @@ export const ErpDataProvider: React.FC<{ children: ReactNode }> = ({ children })
             ...p,
             items: p.items || p.purchase_items || []
           }));
-          console.log('⚡ [ErpContext Hydration] Fetched purchase_bills from Supabase:', cleanPurchases.length, cleanPurchases);
           setPurchaseBills(cleanPurchases as PurchaseBill[]);
         } else if (purchRes.status === 'fulfilled' && purchRes.value.error) {
           console.error('❌ [ErpContext Hydration] Error fetching purchase_bills:', purchRes.value.error);
@@ -107,7 +105,7 @@ export const ErpDataProvider: React.FC<{ children: ReactNode }> = ({ children })
         setIsLoading(false);
         inFlightRefreshPromiseRef.current = null;
       }
-    });
+    })();
 
     inFlightRefreshPromiseRef.current = promise;
     return promise;

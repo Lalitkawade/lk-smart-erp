@@ -1,9 +1,8 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { useInventory } from '../../hooks/useInventory';
 import { useErpContext } from '../../context/ErpContext';
 import type { SalesInvoice, PurchaseBill, Expense } from '../../types/erp.types';
 import { t } from '../../utils/i18n';
-import { perfTracker } from '../../utils/perfTracker';
 
 interface DashboardProps {
   tenantId: string;
@@ -16,19 +15,6 @@ interface DashboardProps {
 type TimeRange = '10days' | 'month' | 'year' | 'all' | 'custom';
 
 export default function Dashboard({ tenantId, sales, purchases, expenses, onNavigate }: DashboardProps) {
-  perfTracker.incrementCall('Dashboard Render');
-  if (perfTracker.dashboardRenderTime === null) {
-    perfTracker.dashboardRenderTime = performance.now();
-    console.log(`🚀 [PERF UI] Dashboard Rendered at T=${perfTracker.dashboardRenderTime.toFixed(2)} ms`);
-  }
-
-  useEffect(() => {
-    // Print the full structured startup report after initial render settles
-    const timer = setTimeout(() => {
-      perfTracker.printStartupSummaryTable();
-    }, 2000);
-    return () => clearTimeout(timer);
-  }, []);
 
   const { products } = useInventory(tenantId);
   const [timeRange, setTimeRange] = useState<TimeRange>('all');

@@ -80,12 +80,14 @@ export class InventoryService {
 
         const { data: prod } = await supabase
           .from('products')
-          .select('current_stock')
+          .select('current_stock, pieces_per_pack')
           .eq('id', item.product_id)
           .single();
 
         const currentStock = Number(prod?.current_stock || 0);
-        const newStock = currentStock + Number(item.qty || 0);
+        const piecesPerPack = Math.max(1, Number(prod?.pieces_per_pack || 1));
+        const addedBaseUnits = Number(item.qty || 0) * piecesPerPack;
+        const newStock = currentStock + addedBaseUnits;
 
         await supabase.from('products').update({ current_stock: newStock }).eq('id', item.product_id);
       }
