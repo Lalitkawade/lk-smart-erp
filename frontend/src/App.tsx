@@ -37,7 +37,24 @@ const SectionSkeleton = () => (
 function App() {
   const { user, profile, tenant, loading, signIn, signOut } = useAuth();
   const { highDemandAlerts } = useDemandTracker(tenant?.id);
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTabState, setActiveTabState] = useState(() => {
+    if (typeof window !== 'undefined' && window.location.hash) {
+      const hash = window.location.hash.replace('#/', '').replace('#', '');
+      const validTabs = ['dashboard', 'customers', 'suppliers', 'products', 'new-entry', 'purchases', 'sales', 'expenses', 'inventory-stock', 'reports', 'excel-export'];
+      if (validTabs.includes(hash)) return hash;
+    }
+    return 'dashboard';
+  });
+
+  const setActiveTab = (tabOrFn: string | ((prev: string) => string)) => {
+    const nextTab = typeof tabOrFn === 'function' ? tabOrFn(activeTabState) : tabOrFn;
+    if (nextTab !== activeTabState) {
+      window.location.hash = `#/${nextTab}`;
+    }
+  };
+
+  const activeTab = activeTabState;
+
   const [theme, setTheme] = useState(localStorage.getItem('lk_theme') || 'light');
   const [lang, setLang] = useState<Language>((localStorage.getItem('lk_lang') as Language) || 'en');
   const [businessType] = useState('Hardware Shop');
@@ -49,6 +66,46 @@ function App() {
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [currentTime, setCurrentTime] = useState(new Date());
+
+  // Single-Entry Hash & PopState Listener (1 Back Press = 1 Tab Back)
+  useEffect(() => {
+    const validTabs = ['dashboard', 'customers', 'suppliers', 'products', 'new-entry', 'purchases', 'sales', 'expenses', 'inventory-stock', 'reports', 'excel-export'];
+
+    const handleHashOrPop = () => {
+      if (mobileMenuOpen) {
+        setMobileMenuOpen(false);
+        return;
+      }
+      if (showSearchModal) {
+        setShowSearchModal(false);
+        return;
+      }
+      if (showDemandModal) {
+        setShowDemandModal(false);
+        return;
+      }
+
+      const hash = window.location.hash.replace('#/', '').replace('#', '');
+      if (hash && validTabs.includes(hash)) {
+        setActiveTabState(hash);
+      } else {
+        setActiveTabState('dashboard');
+      }
+    };
+
+    if (!window.location.hash) {
+      window.location.hash = `#/dashboard`;
+    } else {
+      handleHashOrPop();
+    }
+
+    window.addEventListener('hashchange', handleHashOrPop);
+    window.addEventListener('popstate', handleHashOrPop);
+    return () => {
+      window.removeEventListener('hashchange', handleHashOrPop);
+      window.removeEventListener('popstate', handleHashOrPop);
+    };
+  }, [mobileMenuOpen, showSearchModal, showDemandModal]);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
