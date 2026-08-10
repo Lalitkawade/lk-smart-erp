@@ -271,7 +271,7 @@ export class PurchaseService {
         cleanUpdates.supplier_id = null;
       }
 
-      const billRes = await handleServiceCall<PurchaseBillRow>(
+      let billRes = await handleServiceCall<PurchaseBillRow>(
         supabase.from('purchase_bills').update(cleanUpdates).eq('id', id).select().single()
       );
 
