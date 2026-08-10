@@ -449,64 +449,59 @@ function App() {
       {/* Sidebar Navigation */}
       <aside className={`bg-sidebar border-r border-border flex flex-col justify-between h-screen fixed md:sticky top-0 left-0 z-50 transition-all duration-300 md:translate-x-0 ${
         mobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
-      } ${sidebarCollapsed ? 'w-[84px]' : 'w-64'}`}>
+      } ${sidebarCollapsed ? 'w-72 md:w-[84px]' : 'w-72 md:w-64'}`}>
         <div className="overflow-y-auto flex-1 select-none scrollbar-none">
-          {/* Sidebar Top branding */}
-          {!sidebarCollapsed ? (
-            <div className="p-4 border-b border-border/40 flex justify-between items-center h-16">
-              <div className="truncate pr-2">
-                <h2 className="text-xs font-black text-sidebar-active truncate uppercase tracking-widest flex items-center gap-2">
-                  <img 
-                    src={(tenant as any)?.logo_url || '/logo.png'} 
-                    onError={(e) => { (e.target as HTMLImageElement).onerror = null; (e.target as HTMLImageElement).src = '/logo.png'; }} 
-                    alt="LK Logo" 
-                    className="w-5 h-5 rounded-full object-cover shrink-0 border border-amber-500/40" 
-                  />
-                  <span className="truncate">{companyName}</span>
-                </h2>
-                <span className="text-[9px] text-sidebar-text font-bold tracking-widest uppercase block mt-0.5">{businessType}</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <button 
-                  onClick={() => setSidebarCollapsed(true)} 
-                  className="hidden md:flex p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sidebar-text hover:text-white transition active:scale-95 cursor-pointer" 
-                  title="Collapse sidebar menu"
-                >
-                  <i className="fa-solid fa-indent text-sm"></i>
-                </button>
-                <button 
-                  onClick={() => setMobileMenuOpen(false)} 
-                  className="md:hidden p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-extrabold transition" 
-                  title="Close menu drawer"
-                >
-                  <i className="fa-solid fa-xmark text-sm"></i>
-                </button>
-              </div>
+          
+          {/* Sidebar Top branding & Controls */}
+          <div className="p-4 border-b border-border/40 flex justify-between items-center h-16 shrink-0">
+            <div className="truncate pr-2">
+              <h2 className="text-xs font-black text-sidebar-active truncate uppercase tracking-widest flex items-center gap-2">
+                <img 
+                  src={(tenant as any)?.logo_url || '/logo.png'} 
+                  onError={(e) => { (e.target as HTMLImageElement).onerror = null; (e.target as HTMLImageElement).src = '/logo.png'; }} 
+                  alt="LK Logo" 
+                  className="w-5 h-5 rounded-full object-cover shrink-0 border border-amber-500/40" 
+                />
+                <span className="truncate">{companyName}</span>
+              </h2>
+              <span className="text-[9px] text-sidebar-text font-bold tracking-widest uppercase block mt-0.5">{businessType}</span>
             </div>
-          ) : (
-            <div className="p-3 border-b border-border/40 flex justify-center items-center h-16">
+
+            <div className="flex items-center gap-1.5 shrink-0">
+              {/* Desktop Collapse / Expand Toggle */}
               <button 
-                onClick={() => setSidebarCollapsed(false)} 
-                className="w-11 h-11 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-amber-400 font-extrabold text-base border border-slate-700/80 shadow-md transition-all duration-200 active:scale-95 cursor-pointer flex items-center justify-center hover:scale-105" 
-                title="Expand sidebar menu"
+                type="button"
+                onClick={() => setSidebarCollapsed(!sidebarCollapsed)} 
+                className="hidden md:flex p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-400 hover:text-white transition active:scale-95 cursor-pointer items-center justify-center border border-slate-700/60 shadow-2xs" 
+                title={sidebarCollapsed ? "Expand sidebar menu" : "Collapse sidebar menu"}
               >
-                <i className="fa-solid fa-outdent"></i>
+                <i className={`fa-solid ${sidebarCollapsed ? 'fa-outdent' : 'fa-indent'} text-sm`}></i>
+              </button>
+
+              {/* Mobile Drawer Close */}
+              <button 
+                type="button"
+                onClick={() => setMobileMenuOpen(false)} 
+                className="md:hidden p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-rose-400 hover:text-white transition active:scale-95 cursor-pointer flex items-center justify-center border border-slate-700/60" 
+                title="Close menu drawer"
+              >
+                <i className="fa-solid fa-xmark text-sm font-bold"></i>
               </button>
             </div>
-          )}
+          </div>
 
           {/* User Profile Block */}
           {!sidebarCollapsed ? (
-            <div className="p-5 flex flex-col items-center text-center border-b border-border/40 my-2">
-              <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center text-primary font-black text-xl uppercase border-2 border-primary/30 shadow-sm mb-2.5">
+            <div className="p-4 flex flex-col items-center text-center border-b border-border/40 my-2">
+              <div className="w-14 h-14 rounded-full bg-primary/20 flex items-center justify-center text-primary font-black text-lg uppercase border-2 border-primary/30 shadow-sm mb-2">
                 {profile?.username?.slice(0, 2) || 'OP'}
               </div>
-              <div className="font-heading font-extrabold text-sm text-sidebar-active uppercase tracking-tight leading-tight truncate max-w-full px-1 w-full" title={profile?.username}>{profile?.username || 'Robert Grant'}</div>
-              <div className="text-[10px] text-sidebar-text font-semibold uppercase tracking-wider mt-1">{profile?.role || 'Store Manager'}</div>
+              <div className="font-heading font-extrabold text-xs text-sidebar-active uppercase tracking-tight leading-tight truncate max-w-full px-1 w-full" title={profile?.username}>{profile?.username || 'Robert Grant'}</div>
+              <div className="text-[10px] text-sidebar-text font-semibold uppercase tracking-wider mt-0.5">{profile?.role || 'Store Manager'}</div>
             </div>
           ) : (
             <div className="p-3 border-b border-border/40 flex justify-center my-2">
-              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary to-blue-700 flex items-center justify-center text-white font-black text-sm uppercase border-2 border-white/20 shadow-md hover:scale-105 transition-all cursor-pointer" title={`${profile?.username || 'Owner'} (${profile?.role || 'Staff'})`}>
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-blue-700 flex items-center justify-center text-white font-black text-xs uppercase border-2 border-white/20 shadow-md hover:scale-105 transition-all cursor-pointer" title={`${profile?.username || 'Owner'} (${profile?.role || 'Staff'})`}>
                 {profile?.username?.slice(0, 2) || 'OP'}
               </div>
             </div>
@@ -622,10 +617,10 @@ function App() {
               <button 
                 type="button"
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)} 
-                className="md:hidden p-2 text-textSecondary hover:text-textPrimary bg-background border border-border rounded-xl transition shrink-0 flex items-center justify-center cursor-pointer active:scale-95 shadow-2xs"
+                className="md:hidden p-2.5 text-amber-400 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700/80 rounded-xl transition shrink-0 flex items-center justify-center cursor-pointer active:scale-95 shadow-xs"
                 title="Open Navigation Menu"
               >
-                <i className="fa-solid fa-bars text-sm"></i>
+                <i className="fa-solid fa-bars text-base"></i>
               </button>
 
               <div className="min-w-0 flex-1">
