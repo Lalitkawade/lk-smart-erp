@@ -329,11 +329,37 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
       purchase_date: safeIsoDate
     };
 
-    const preparedItems = billItems.map((item, idx) => {
+    const isValidUUID = (id: any) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    const preparedItems: any[] = [];
+
+    for (let idx = 0; idx < billItems.length; idx++) {
+      const item = billItems[idx];
       const typedName = (productRowSearch[idx] || '').trim();
-      const p = products.find(prod => prod.id === item.product_id || (prod.product_name && typedName && prod.product_name.trim().toLowerCase() === typedName.toLowerCase()));
-      const isValidUUID = (id: any) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-      return {
+      let p = products.find(prod => prod.id === item.product_id || (prod.product_name && typedName && prod.product_name.trim().toLowerCase() === typedName.toLowerCase()));
+
+      // Auto-register new product if user typed a new product name that doesn't exist in catalog yet
+      if (!p && typedName) {
+        try {
+          const newProdPayload = {
+            tenant_id: tenantId,
+            product_name: typedName.toUpperCase(),
+            unit: 'Nos',
+            p_unit: 'Box',
+            s_unit: 'Nos',
+            pieces_per_pack: 1,
+            purchase_price: Number(item.rate || 0),
+            selling_price: Number(item.rate || 0) * 1.2,
+            current_stock: 0,
+            status: 'Active'
+          };
+          const { data: createdProd } = await supabase.from('products').insert([newProdPayload as any]).select().single();
+          if (createdProd?.id) {
+            p = createdProd as any;
+          }
+        } catch (err) {}
+      }
+
+      preparedItems.push({
         product_id: p && isValidUUID(p.id) ? p.id : null,
         product_name: p?.product_name || typedName || 'Procured Material Item',
         hsn: p?.hsn || null,
@@ -341,8 +367,8 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
         qty: Number(item.qty || 1),
         rate: Number(item.rate || 0),
         amount: Number(item.qty || 1) * Number(item.rate || 0)
-      };
-    });
+      });
+    }
 
     try {
       const isStockInflowConversion = autoFilledNotice !== null;
@@ -831,8 +857,40 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
                           {openProductRowDropdown === idx && (
                             <div className="absolute left-0 right-0 top-full mt-1 bg-secondary border border-border rounded-xl shadow-2xl z-50 max-h-56 overflow-y-auto divide-y divide-border/40 scrollbar-thin animate-fade-in">
                               {filteredProdsForRow.length === 0 ? (
-                                <div className="p-3 text-center text-xs text-textMuted font-medium">
-                                  No matching products found in catalog for "{productRowSearch[idx]}".
+                                <div className="p-3 text-center text-xs space-y-2">
+                                  <p className="text-textMuted font-medium">No matching products found in catalog for "{productRowSearch[idx]}".</p>
+                                  {productRowSearch[idx] && productRowSearch[idx].trim() && (
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        const rawName = productRowSearch[idx].trim().toUpperCase();
+                                        try {
+                                          const newProdPayload = {
+                                            tenant_id: tenantId,
+                                            product_name: rawName,
+                                            unit: 'Nos',
+                                            p_unit: 'Box',
+                                            s_unit: 'Nos',
+                                            pieces_per_pack: 1,
+                                            purchase_price: Number(billItems[idx]?.rate || 0),
+                                            selling_price: Number(billItems[idx]?.rate || 0) * 1.2,
+                                            current_stock: 0,
+                                            status: 'Active'
+                                          };
+                                          const { data: createdProd } = await supabase.from('products').insert([newProdPayload as any]).select().single();
+                                          if (createdProd) {
+                                            handleSelectProduct(idx, createdProd as any);
+                                            await refreshAllData();
+                                          }
+                                        } catch (e: any) {
+                                          alert('Error creating product: ' + e.message);
+                                        }
+                                      }}
+                                      className="px-3 py-1.5 bg-primary/20 text-primary font-extrabold text-xs rounded-lg border border-primary/30 transition hover:bg-primary/30 cursor-pointer"
+                                    >
+                                      ➕ Register "{productRowSearch[idx].trim().toUpperCase()}" in Product Catalog
+                                    </button>
+                                  )}
                                 </div>
                               ) : (
                                 filteredProdsForRow.map((p) => (

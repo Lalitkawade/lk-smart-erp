@@ -17,14 +17,11 @@ export function usePurchases(tenantId: string) {
     itemsPayload: any[] = []
   ) => {
     setIsSaving(true);
-    const purchaseId = (billPayload.id && isUuid(billPayload.id))
-      ? billPayload.id
-      : generateUuid();
-
+    const existingId = (billPayload.id && isUuid(billPayload.id)) ? billPayload.id : undefined;
     const activeTenantId = (tenantId && isUuid(tenantId)) ? tenantId : null;
 
     const cleanBillPayload: any = {
-      id: purchaseId,
+      ...(existingId && { id: existingId }),
       tenant_id: activeTenantId,
       supplier_id: (billPayload.supplier_id && isUuid(billPayload.supplier_id)) ? billPayload.supplier_id : null,
       bill_number: (billPayload.bill_number && billPayload.bill_number.trim()) ? billPayload.bill_number.trim() : 'N/A',
@@ -38,18 +35,14 @@ export function usePurchases(tenantId: string) {
       created_at: (billPayload as any).created_at || new Date().toISOString()
     };
 
-    console.log('📦 [usePurchases] savePurchase executing:', { purchaseId, activeTenantId, cleanBillPayload, itemsCount: itemsPayload.length });
-
     try {
-      const isExisting = contextPurchases.some(p => p.id === purchaseId);
+      const isExisting = existingId ? contextPurchases.some(p => p.id === existingId) : false;
       let res;
-      if (isExisting) {
-        res = await PurchaseService.updatePurchase(purchaseId, cleanBillPayload, itemsPayload);
+      if (isExisting && existingId) {
+        res = await PurchaseService.updatePurchase(existingId, cleanBillPayload, itemsPayload);
       } else {
         res = await PurchaseService.createPurchase(cleanBillPayload, itemsPayload);
       }
-
-      console.log('📦 [usePurchases] PurchaseService operation result:', res);
 
       if (res.error) {
         throw new Error(res.error);

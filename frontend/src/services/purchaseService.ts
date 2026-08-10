@@ -68,14 +68,26 @@ export class PurchaseService {
     billPayload: Partial<PurchaseBillRow>,
     itemsPayload: Partial<PurchaseItemRow>[] = []
   ): Promise<ServiceResponse<PurchaseWithItems>> {
+    const isValidUUID = (id: any) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
     const cleanBillNumber = (billPayload.bill_number && billPayload.bill_number.trim()) ? billPayload.bill_number.trim() : 'N/A';
     const cleanSupplierName = (billPayload.supplier_name && billPayload.supplier_name.trim()) ? billPayload.supplier_name.trim() : 'GENERAL VENDOR';
 
-    const billPayloadToSave = {
-      ...billPayload,
+    const billPayloadToSave: any = {
       bill_number: cleanBillNumber,
-      supplier_name: cleanSupplierName
+      supplier_name: cleanSupplierName,
+      supplier_phone: billPayload.supplier_phone || null,
+      payment_mode: billPayload.payment_mode || 'Cash',
+      ref_number: billPayload.ref_number || null,
+      total_amount: Number(billPayload.total_amount || 0),
+      paid_amount: Number(billPayload.paid_amount || 0),
+      due_amount: Number(billPayload.due_amount || 0),
+      purchase_date: billPayload.purchase_date || new Date().toISOString(),
+      tenant_id: (billPayload.tenant_id && isValidUUID(billPayload.tenant_id)) ? billPayload.tenant_id : null
     };
+
+    if (billPayload.id && isValidUUID(billPayload.id)) {
+      billPayloadToSave.id = billPayload.id;
+    }
 
     const billRes = await handleServiceCall<PurchaseBillRow>(
       supabase.from('purchase_bills').insert([billPayloadToSave as any]).select().single()
@@ -88,42 +100,25 @@ export class PurchaseService {
     const createdBill = billRes.data;
 
     if (itemsPayload.length > 0) {
-      const cleanItemsFull = itemsPayload.map(item => ({
+      const cleanItems = itemsPayload.map(item => ({
         bill_id: createdBill.id,
-        product_id: item.product_id || null,
-        product_name: item.product_name || null,
-        hsn: item.hsn || null,
-        gst_percent: Number(item.gst_percent || 0),
+        product_id: (item.product_id && isValidUUID(item.product_id)) ? item.product_id : null,
+        product_name: item.product_name || 'Procured Item',
         qty: Number(item.qty || 1),
         rate: Number(item.rate || 0),
         amount: Number(item.amount || (Number(item.qty || 1) * Number(item.rate || 0)))
       }));
 
-      let itemsRes = await handleServiceCall<PurchaseItemRow[]>(
-        supabase.from('purchase_items').insert(cleanItemsFull as any).select()
+      const itemsRes = await handleServiceCall<PurchaseItemRow[]>(
+        supabase.from('purchase_items').insert(cleanItems as any).select()
       );
-
-      if (itemsRes.error) {
-        console.warn('⚠️ purchase_items full schema insert notice, retrying with core columns:', itemsRes.error);
-        const cleanItemsCore = itemsPayload.map(item => ({
-          bill_id: createdBill.id,
-          product_id: item.product_id || null,
-          qty: Number(item.qty || 1),
-          rate: Number(item.rate || 0),
-          amount: Number(item.amount || (Number(item.qty || 1) * Number(item.rate || 0)))
-        }));
-
-        itemsRes = await handleServiceCall<PurchaseItemRow[]>(
-          supabase.from('purchase_items').insert(cleanItemsCore as any).select()
-        );
-      }
 
       return {
         data: {
           ...createdBill,
           items: itemsRes.data || []
         },
-        error: null
+        error: itemsRes.error || null
       };
     }
 
@@ -267,11 +262,31 @@ export class PurchaseService {
       }
 
       // 4. Update Header Row
+      const cleanUpdates: any = { ...billUpdates };
+      delete cleanUpdates.id;
+      if ('tenant_id' in cleanUpdates && (!cleanUpdates.tenant_id || !isValidUUID(cleanUpdates.tenant_id))) {
+        cleanUpdates.tenant_id = null;
+      }
+      if ('supplier_id' in cleanUpdates && (!cleanUpdates.supplier_id || !isValidUUID(cleanUpdates.supplier_id))) {
+        cleanUpdates.supplier_id = null;
+      }
+
       const billRes = await handleServiceCall<PurchaseBillRow>(
-        supabase.from('purchase_bills').update(billUpdates as any).eq('id', id).select().single()
+        supabase.from('purchase_bills').update(cleanUpdates).eq('id', id).select().single()
       );
 
+      if (billRes.error && (billRes.error.includes('supplier_id') || billRes.error.includes('schema cache'))) {
+        console.warn("⚠️ purchase_bills table does not have 'supplier_id' column in schema cache, retrying update without supplier_id...");
+        const updatesWithoutSupId = { ...cleanUpdates };
+        delete updatesWithoutSupId.supplier_id;
+
+        billRes = await handleServiceCall<PurchaseBillRow>(
+          supabase.from('purchase_bills').update(updatesWithoutSupId).eq('id', id).select().single()
+        );
+      }
+
       if (billRes.error || !billRes.data) {
+        console.error('❌ [PurchaseService.updatePurchase] Header update error:', billRes.error);
         return billRes as ServiceResponse<any>;
       }
 
@@ -284,14 +299,13 @@ export class PurchaseService {
         if (itemsPayload.length > 0) {
           const cleanItems = itemsPayload.map(item => ({
             bill_id: id,
-            product_id: item.product_id || null,
-            product_name: item.product_name || null,
-            hsn: item.hsn || null,
-            gst_percent: Number(item.gst_percent || 0),
+            product_id: (item.product_id && isValidUUID(item.product_id)) ? item.product_id : null,
+            product_name: item.product_name || 'Procured Item',
             qty: Number(item.qty || 1),
             rate: Number(item.rate || 0),
             amount: Number(item.amount || (Number(item.qty || 1) * Number(item.rate || 0)))
           }));
+
           const itemsRes = await handleServiceCall<PurchaseItemRow[]>(
             supabase.from('purchase_items').insert(cleanItems as any).select()
           );

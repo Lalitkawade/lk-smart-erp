@@ -560,18 +560,20 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
   const handleSaveEditBill = async () => {
     if (!editingBill) return;
     try {
+      const isValidUUID = (id: any) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
       const updatedTotal = Number(editBillData.total_amount || 0);
       const updatedPaid = Number(editBillData.paid_amount || 0);
       const updatedDue = Math.max(0, updatedTotal - updatedPaid);
 
       const newSupName = (editBillData.supplier_name || '').trim().toUpperCase();
       const matchedSup = suppliers.find(s => s.supplier_name && s.supplier_name.trim().toUpperCase() === newSupName);
+      const targetSupId = matchedSup?.id || (isValidUUID(editingBill.supplier_id) ? editingBill.supplier_id : null);
 
-      if (editingBill.id) {
+      if (editingBill.id && isValidUUID(editingBill.id)) {
         const updateRes = await PurchaseService.updatePurchase(editingBill.id, {
           bill_number: editBillData.bill_number,
           supplier_name: editBillData.supplier_name,
-          supplier_id: matchedSup?.id || editingBill.supplier_id || null,
+          supplier_id: targetSupId,
           purchase_date: editBillData.purchase_date,
           total_amount: updatedTotal,
           paid_amount: updatedPaid,
@@ -589,6 +591,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
       triggerToast('⚡ Purchase bill updated successfully!');
       setEditingBill(null);
     } catch (err: any) {
+      console.error('❌ [Products.tsx] Error updating bill:', err);
       triggerToast('⚠️ Error updating bill: ' + (err.message || err));
     }
   };
@@ -893,13 +896,11 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
         }
       }
 
-      if (savedCount > 0) {
-        await refreshAllData();
-        setEditingProduct(null);
-        setModalOpen(false);
-        triggerToast(`⚡ ${savedCount} Product catalog item(s) & Purchase Bill logged successfully!`);
-        window.dispatchEvent(new Event('storage'));
-      }
+      await refreshAllData();
+      setEditingProduct(null);
+      setModalOpen(false);
+      triggerToast(`⚡ Purchase Bill & Product catalog updated successfully!`);
+      window.dispatchEvent(new Event('storage'));
     } catch (err: any) {
       triggerToast('⚠️ Save failed: ' + err.message);
     }

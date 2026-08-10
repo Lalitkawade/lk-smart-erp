@@ -288,6 +288,7 @@ export type PurchaseBillRow = {
   tenant_id: string;
   bill_number: string;
   supplier_name: string;
+  supplier_id?: string | null;
   supplier_phone?: string | null;
   payment_mode?: string;
   ref_number?: string | null;
@@ -303,6 +304,7 @@ export type PurchaseBillInsert = {
   tenant_id: string;
   bill_number: string;
   supplier_name: string;
+  supplier_id?: string | null;
   supplier_phone?: string | null;
   payment_mode?: string;
   ref_number?: string | null;
@@ -316,6 +318,7 @@ export type PurchaseBillInsert = {
 export type PurchaseBillUpdate = {
   bill_number?: string;
   supplier_name?: string;
+  supplier_id?: string | null;
   supplier_phone?: string | null;
   payment_mode?: string;
   ref_number?: string | null;
