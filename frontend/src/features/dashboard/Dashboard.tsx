@@ -24,9 +24,18 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
     return d.toISOString().split('T')[0];
   });
   const [endDate, setEndDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
-  const { customers: contextCustomers, suppliers: contextSuppliers, purchases: contextPurchases, sales: contextSales } = useErpContext();
+  const { 
+    customers: contextCustomers, 
+    suppliers: contextSuppliers, 
+    purchases: contextPurchases, 
+    sales: contextSales,
+    supplierPayments: contextSupplierPayments,
+    customerPayments: contextCustomerPayments
+  } = useErpContext();
   const customers = contextCustomers || [];
   const suppliers = contextSuppliers || [];
+  const supplierPayments = contextSupplierPayments || [];
+  const customerPayments = contextCustomerPayments || [];
   const activePurchases = (purchases && purchases.length > 0) ? purchases : (contextPurchases || []);
   const [selectedTxDetail, setSelectedTxDetail] = useState<any | null>(null);
 
@@ -71,7 +80,21 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
       return true; // All Time ('all')
     };
 
-    const effectiveSales = (sales && sales.length > 0) ? sales : (contextSales || []);
+    const localCachedSales = (() => {
+      try {
+        const cached = localStorage.getItem('lk_sales_invoices') || localStorage.getItem('lk_sales');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch (e) {}
+      return [];
+    })();
+
+    const effectiveSales = (sales && sales.length > 0) 
+      ? sales 
+      : (contextSales && contextSales.length > 0 ? contextSales : localCachedSales);
+
     const effectivePurchases = activePurchases;
     const effectiveExpenses = expenses || [];
 
@@ -80,7 +103,7 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
       purchases: effectivePurchases.filter(p => filterByDate(p)),
       expenses: effectiveExpenses.filter(e => filterByDate(e))
     };
-  }, [sales, purchases, expenses, timeRange, startDate, endDate]);
+  }, [sales, contextSales, activePurchases, expenses, timeRange, startDate, endDate]);
 
   // 2. Calculate Financial stats based on filtered data
   const stats = useMemo(() => {
@@ -135,15 +158,71 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
 
     const syncedPurchases = Math.max(rawPurchases, stockValuation);
     const cogs = itemizedCOGS;
-    const netProfit = Math.max(0, totalSales - cogs - totalExpenses);
+    
+    // Net Profit calculation: Gross Profit (Revenue - COGS) minus Expenses
+    const grossProfit = totalSales - cogs;
+    const netProfit = totalSales > 0 ? (grossProfit - totalExpenses) : (0 - totalExpenses);
 
     const supplierDues = suppliers.reduce((acc, s) => acc + Number(s.outstanding || (s as any).due_amount || (s as any).balance || 0), 0);
     const purchaseDues = filteredData.purchases.reduce((acc, p) => acc + Number(p.due_amount || (p as any).pending_amount || 0), 0);
-    const vendorPending = supplierDues > 0 ? supplierDues : purchaseDues;
+    
+    // Calculate total vendor pending dues matching Vendors Desk (Suppliers.tsx) logic
+    const allPurchasesList = (purchases && purchases.length > 0) ? purchases : (contextPurchases || []);
+    const allSupplierPaymentsList = supplierPayments;
 
-    const customerDues = customers.reduce((acc, c) => acc + Number(c.outstanding || (c as any).due_amount || (c as any).balance || 0), 0);
-    const salesDues = filteredData.sales.reduce((acc, s) => acc + Number((s as any).due_amount || (s as any).pending_amount || 0), 0);
-    const customerPending = customerDues > 0 ? customerDues : salesDues;
+    const vendorPending = suppliers.length > 0
+      ? suppliers.reduce((acc, s) => {
+          const nameKey = (s.supplier_name || '').toUpperCase().trim();
+          const suppBills = allPurchasesList.filter((b: any) => 
+            (b.supplier_id && b.supplier_id === s.id) ||
+            (b.supplier_name && b.supplier_name.toUpperCase().trim() === nameKey)
+          );
+          const suppPays = allSupplierPaymentsList.filter((p: any) => 
+            p.supplier_id === s.id ||
+            ((p as any).supplier_name && (p as any).supplier_name.toUpperCase().trim() === nameKey)
+          );
+
+          const totalPurch = suppBills.reduce((bAcc: number, b: any) => bAcc + Number(b.total_amount || 0), 0);
+          const totalBillPaid = suppBills.reduce((bAcc: number, b: any) => bAcc + Number(b.paid_amount || 0), 0);
+          const totalVoucherPaid = suppPays.reduce((pAcc: number, p: any) => pAcc + Number(p.amount || 0), 0);
+          const totalPaid = totalBillPaid + totalVoucherPaid;
+
+          const vendorOutstanding = Math.max(0, totalPurch - totalPaid);
+          return acc + vendorOutstanding;
+        }, 0)
+      : Math.max(0, 
+          allPurchasesList.reduce((acc: number, p: any) => acc + Number(p.total_amount || 0), 0) -
+          allPurchasesList.reduce((acc: number, p: any) => acc + Number(p.paid_amount || 0), 0) -
+          allSupplierPaymentsList.reduce((acc: number, p: any) => acc + Number(p.amount || 0), 0)
+        );
+
+    // Calculate total customer pending dues matching Customers Desk logic
+    const allSalesList = (filteredData.sales && filteredData.sales.length > 0) ? filteredData.sales : (contextSales || []);
+    const allCustomerPaymentsList = customerPayments;
+
+    const customerPending = customers.length > 0
+      ? customers.reduce((acc, c) => {
+          const nameKey = (c.customer_name || '').toUpperCase().trim();
+          const custSales = allSalesList.filter((s: any) => 
+            (s.customer_id && s.customer_id === c.id) ||
+            (s.customer_name && s.customer_name.toUpperCase().trim() === nameKey)
+          );
+          const custPays = allCustomerPaymentsList.filter((p: any) => 
+            p.customer_id === c.id ||
+            ((p as any).customer_name && (p as any).customer_name.toUpperCase().trim() === nameKey)
+          );
+
+          const totalBilled = custSales.reduce((sAcc: number, s: any) => sAcc + Number(s.total_amount || (s as any).amount || 0), 0);
+          const totalBillPaid = custSales.reduce((sAcc: number, s: any) => sAcc + Number(s.paid_amount || 0), 0);
+          const totalVoucherCollected = custPays.reduce((pAcc: number, p: any) => pAcc + Number(p.amount || 0), 0);
+          const totalCollected = totalBillPaid + totalVoucherCollected;
+
+          const custOutstanding = Math.max(0, totalBilled - totalCollected);
+          return acc + custOutstanding;
+        }, 0)
+      : Math.max(0, 
+          allSalesList.reduce((acc: number, s: any) => acc + Number((s as any).due_amount || 0), 0)
+        );
 
     return {
       sales: totalSales,
@@ -154,7 +233,7 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
       vendorPending,
       customerPending
     };
-  }, [filteredData, products, suppliers, customers]);
+  }, [filteredData, products, suppliers, customers, contextPurchases, contextSales, supplierPayments, customerPayments]);
 
   // 4. Identify Low Stock items and link them with Supplier Contact info
   const lowStockAlerts = useMemo(() => {

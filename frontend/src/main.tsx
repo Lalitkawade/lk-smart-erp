@@ -4,6 +4,27 @@ import '@fortawesome/fontawesome-free/css/all.min.css';
 import './index.css';
 import App from './App.tsx';
 
+// DOM manipulation patch to prevent React unmounting crashes caused by Google Translate or Browser Extensions
+if (typeof window !== 'undefined') {
+  const originalRemoveChild = Node.prototype.removeChild;
+  Node.prototype.removeChild = function <T extends Node>(child: T): T {
+    if (child.parentNode !== this) {
+      if (console) console.warn('DOM removeChild patch prevented crash on non-child node:', child);
+      return child;
+    }
+    return originalRemoveChild.call(this, child) as T;
+  };
+
+  const originalInsertBefore = Node.prototype.insertBefore;
+  Node.prototype.insertBefore = function <T extends Node>(newNode: T, referenceNode: Node | null): T {
+    if (referenceNode && referenceNode.parentNode !== this) {
+      if (console) console.warn('DOM insertBefore patch prevented crash on reference node mismatch:', referenceNode);
+      return newNode;
+    }
+    return originalInsertBefore.call(this, newNode, referenceNode) as T;
+  };
+}
+
 interface ErrorBoundaryProps {
   children: ReactNode;
 }
@@ -28,7 +49,6 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   }
 
   handleReload = () => {
-    localStorage.clear();
     window.location.reload();
   };
 

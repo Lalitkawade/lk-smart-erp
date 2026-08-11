@@ -302,6 +302,13 @@ export function useBilling(tenantId: string) {
       };
 
       try {
+        const prevCacheStr = localStorage.getItem('lk_sales_invoices');
+        const prevList = prevCacheStr ? JSON.parse(prevCacheStr) : [];
+        const nextList = [compiledInvoice, ...prevList.filter((inv: any) => inv.id !== compiledInvoice.id)];
+        localStorage.setItem('lk_sales_invoices', JSON.stringify(nextList));
+      } catch(e) {}
+
+      try {
         await refreshAllData();
       } catch (e) {}
 

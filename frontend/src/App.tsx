@@ -77,6 +77,17 @@ function App() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, [validTabs]);
 
+  // Global listener to prevent mouse wheel / touchpad scroll from changing numeric input values when focused
+  useEffect(() => {
+    const handleWheel = () => {
+      if (document.activeElement instanceof HTMLInputElement && document.activeElement.type === 'number') {
+        document.activeElement.blur();
+      }
+    };
+    window.addEventListener('wheel', handleWheel, { passive: true });
+    return () => window.removeEventListener('wheel', handleWheel);
+  }, []);
+
   const [theme, setTheme] = useState(localStorage.getItem('lk_theme') || 'light');
   const [lang, setLang] = useState<Language>((localStorage.getItem('lk_lang') as Language) || 'en');
   const [businessType] = useState('Hardware Shop');

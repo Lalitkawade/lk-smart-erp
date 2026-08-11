@@ -68,6 +68,11 @@ export const ErpDataProvider: React.FC<{ children: ReactNode }> = ({ children })
             items: s.items || s.sales_items || []
           }));
           setSalesInvoices(cleanSales as SalesInvoice[]);
+          try {
+            localStorage.setItem('lk_sales_invoices', JSON.stringify(cleanSales));
+          } catch(e) {}
+        } else if (salesRes.status === 'fulfilled' && salesRes.value.error) {
+          console.error('❌ [ErpContext Hydration] Error fetching sales_invoices:', salesRes.value.error);
         }
         if (purchRes.status === 'fulfilled' && !purchRes.value.error && purchRes.value.data) {
           const cleanPurchases = (purchRes.value.data as any[]).map(p => ({

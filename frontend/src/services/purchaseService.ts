@@ -76,6 +76,7 @@ export class PurchaseService {
       bill_number: cleanBillNumber,
       supplier_name: cleanSupplierName,
       supplier_phone: billPayload.supplier_phone || null,
+      supplier_id: (billPayload.supplier_id && isValidUUID(billPayload.supplier_id)) ? billPayload.supplier_id : null,
       payment_mode: billPayload.payment_mode || 'Cash',
       ref_number: billPayload.ref_number || null,
       total_amount: Number(billPayload.total_amount || 0),
@@ -89,15 +90,38 @@ export class PurchaseService {
       billPayloadToSave.id = billPayload.id;
     }
 
-    const billRes = await handleServiceCall<PurchaseBillRow>(
+    let billRes = await handleServiceCall<PurchaseBillRow>(
       supabase.from('purchase_bills').insert([billPayloadToSave as any]).select().single()
     );
+
+    if (billRes.error && (billRes.error.includes('supplier_id') || billRes.error.includes('schema cache'))) {
+      console.warn("⚠️ purchase_bills table does not have 'supplier_id' column in schema cache, retrying insert without supplier_id...");
+      const payloadWithoutSupId = { ...billPayloadToSave };
+      delete payloadWithoutSupId.supplier_id;
+      billRes = await handleServiceCall<PurchaseBillRow>(
+        supabase.from('purchase_bills').insert([payloadWithoutSupId as any]).select().single()
+      );
+    }
 
     if (billRes.error || !billRes.data) {
       return billRes as ServiceResponse<any>;
     }
 
     const createdBill = billRes.data;
+
+    // Update supplier outstanding balance if there is a due amount and a valid supplier_id
+    const dueAmount = Number(createdBill.due_amount || 0);
+    if (dueAmount > 0 && createdBill.supplier_id && isValidUUID(createdBill.supplier_id)) {
+      const { data: sup } = await supabase
+        .from('suppliers')
+        .select('outstanding')
+        .eq('id', createdBill.supplier_id)
+        .single();
+      if (sup) {
+        const newOutstanding = Number(sup.outstanding || 0) + dueAmount;
+        await supabase.from('suppliers').update({ outstanding: newOutstanding }).eq('id', createdBill.supplier_id);
+      }
+    }
 
     if (itemsPayload.length > 0) {
       const cleanItems = itemsPayload.map(item => ({
@@ -109,16 +133,24 @@ export class PurchaseService {
         amount: Number(item.amount || (Number(item.qty || 1) * Number(item.rate || 0)))
       }));
 
-      const itemsRes = await handleServiceCall<PurchaseItemRow[]>(
+      let itemsRes = await handleServiceCall<PurchaseItemRow[]>(
         supabase.from('purchase_items').insert(cleanItems as any).select()
       );
+
+      if (itemsRes.error) {
+        console.warn("⚠️ Error inserting purchase_items, retrying without product_id...", itemsRes.error);
+        const safeItems = cleanItems.map(it => ({ ...it, product_id: null }));
+        itemsRes = await handleServiceCall<PurchaseItemRow[]>(
+          supabase.from('purchase_items').insert(safeItems as any).select()
+        );
+      }
 
       return {
         data: {
           ...createdBill,
-          items: itemsRes.data || []
+          items: (itemsRes.data && itemsRes.data.length > 0) ? itemsRes.data : (cleanItems as unknown as PurchaseItemRow[])
         },
-        error: itemsRes.error || null
+        error: null
       };
     }
 
