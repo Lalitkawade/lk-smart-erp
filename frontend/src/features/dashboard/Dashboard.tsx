@@ -372,6 +372,106 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
     return { items, maxVal };
   }, [filteredData, timeRange]);
 
+  const getTransactionLineItems = (tx: any, productsList: any[]) => {
+    if (!tx) return [];
+
+    // 1. Direct items array on object
+    const rawItems = tx.items || tx.purchase_items || tx.sales_items || [];
+    if (Array.isArray(rawItems) && rawItems.length > 0) {
+      return rawItems.map((it: any) => {
+        const matchedProd = (productsList || []).find((p: any) => p.id === (it.product_id || it.product?.id));
+        const name = it.product_name || it.product?.product_name || matchedProd?.product_name || 'Procured Material Item';
+        const qty = Number(it.qty || it.quantity || 1);
+        const rate = Number(it.rate || it.price || it.unit_price || matchedProd?.purchase_price || matchedProd?.selling_price || 0);
+        const amount = Number(it.amount || (qty * rate));
+        return {
+          product_name: name,
+          qty,
+          rate,
+          amount
+        };
+      });
+    }
+
+    // 2. Check localStorage cache for saved items by bill id or bill/invoice number
+    try {
+      const keysToTry: string[] = [];
+      if (tx.type === 'Purchase') {
+        if (tx.id) keysToTry.push(`pb_items_${tx.id}`);
+        if (tx.invoice_number && tx.invoice_number !== 'N/A') keysToTry.push(`pb_items_${tx.invoice_number}`);
+      } else {
+        if (tx.id) keysToTry.push(`si_items_${tx.id}`);
+        if (tx.invoice_number && tx.invoice_number !== 'N/A') keysToTry.push(`si_items_${tx.invoice_number}`);
+      }
+
+      for (const key of keysToTry) {
+        const cachedStr = localStorage.getItem(key);
+        if (cachedStr) {
+          const parsed = JSON.parse(cachedStr);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return parsed.map((it: any) => ({
+              product_name: it.product_name || 'Procured Material Item',
+              qty: Number(it.qty || 1),
+              rate: Number(it.rate || 0),
+              amount: Number(it.amount || (Number(it.qty || 1) * Number(it.rate || 0)))
+            }));
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Error reading transaction items from storage:', e);
+    }
+
+    // 3. Catalog matching by vendor name for Purchases
+    if (tx.type === 'Purchase') {
+      const supName = (tx.party_name || '').trim().toUpperCase();
+      if (supName && supName !== 'VENDOR' && supName !== 'GENERAL VENDOR') {
+        const vendorProducts = (productsList || []).filter((p: any) => {
+          return p.supplier_name && p.supplier_name.trim().toUpperCase() === supName;
+        });
+
+        if (vendorProducts.length > 0) {
+          const mapped = vendorProducts.map((p: any) => {
+            const pPrice = Number(p.purchase_price || 0);
+            const piecesPerPack = Math.max(1, Number(p.pieces_per_pack || 1));
+            const baseStock = Number(p.current_stock || 0);
+            const purchasePackQty = piecesPerPack > 1 ? Math.max(1, Math.round(baseStock / piecesPerPack)) : Math.max(1, baseStock);
+            return {
+              product_name: p.product_name || 'Procured Product Item',
+              qty: purchasePackQty,
+              rate: pPrice,
+              amount: purchasePackQty * pPrice
+            };
+          });
+
+          const totalMappedCost = mapped.reduce((sum: number, item: any) => sum + item.amount, 0);
+          const txCost = Number(tx.amount || 0);
+
+          if (mapped.length === 1 || Math.abs(totalMappedCost - txCost) < 1.0) {
+            return mapped;
+          }
+        }
+      }
+    }
+
+    // 4. Fallback line item matching the transaction total amount
+    const txTotal = Number(tx.amount || 0);
+    if (txTotal > 0) {
+      return [
+        {
+          product_name: tx.type === 'Purchase'
+            ? (tx.party_name ? `Procured Material (${tx.party_name})` : 'Procured Material Item')
+            : (tx.party_name ? `Retail Material (${tx.party_name})` : 'Sales Product Item'),
+          qty: 1,
+          rate: txTotal,
+          amount: txTotal
+        }
+      ];
+    }
+
+    return [];
+  };
+
   const recentTransactions = useMemo(() => {
     const combined: any[] = [];
     
@@ -948,60 +1048,91 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         
         {/* Recent Transactions (2/3 width) */}
-        <div className="lg:col-span-2 bento-card p-5 space-y-3 flex flex-col">
-          <div className="flex justify-between items-center">
-            <div>
-              <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">Recent Transactions</h3>
-              <p className="text-[10px] text-textMuted mt-0.5">Combined chronological log of sales and purchases</p>
+        <div className="lg:col-span-2 bento-card p-5 space-y-4 flex flex-col border border-border/80 shadow-sm bg-secondary/80 backdrop-blur-sm rounded-2xl">
+          <div className="flex justify-between items-center pb-2 border-b border-border/40">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold shadow-xs">
+                <i className="fa-solid fa-clock-rotate-left text-sm"></i>
+              </div>
+              <div>
+                <h3 className="text-xs font-black text-foreground uppercase tracking-wider">Recent Transactions</h3>
+                <p className="text-[10px] text-textMuted font-medium">Combined chronological log of sales and purchases</p>
+              </div>
             </div>
-            <button onClick={() => onNavigate('new-entry')} className="text-xs text-primary hover:underline font-bold">
-              View All Entries
+            <button 
+              onClick={() => onNavigate('new-entry')} 
+              className="text-xs text-primary hover:text-primary-hover font-extrabold flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary/5 hover:bg-primary/15 border border-primary/20 transition-all active:scale-95 cursor-pointer shadow-2xs"
+            >
+              <span>View All Entries</span>
+              <i className="fa-solid fa-arrow-right-long text-[10px]"></i>
             </button>
           </div>
 
-          <div className="max-h-[255px] overflow-y-auto bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm scrollbar-thin">
-            <table className="w-full text-left text-xs text-slate-700 dark:text-slate-200 border-collapse relative">
-              <thead className="sticky top-0 bg-slate-100 dark:bg-slate-800 z-10 border-b-2 border-slate-200 dark:border-slate-700 shadow-xs">
-                <tr className="text-slate-700 dark:text-slate-200 uppercase font-extrabold text-[10px] divide-x divide-slate-200 dark:divide-slate-700 whitespace-nowrap">
-                  <th className="py-2.5 px-3 text-center">Transaction</th>
-                  <th className="py-2.5 px-3 text-center">Party (Customer/Vendor)</th>
-                  <th className="py-2.5 px-3 text-center">Type</th>
-                  <th className="py-2.5 px-3 text-center">Date</th>
-                  <th className="py-2.5 px-3 text-center">Amount</th>
-                  <th className="py-2.5 px-3 text-center">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                {recentTransactions.length === 0 ? (
-                  <tr><td colSpan={6} className="py-4 text-center text-slate-400">No recent logs recorded.</td></tr>
-                ) : recentTransactions.map((tx, idx) => (
-                  <tr 
-                    key={idx} 
-                    onClick={() => setSelectedTxDetail(tx)}
-                    className="odd:bg-white dark:odd:bg-slate-900 even:bg-slate-50/70 dark:even:bg-slate-800/30 hover:bg-blue-50/60 dark:hover:bg-slate-800/70 transition-colors divide-x divide-slate-200 dark:divide-slate-800 cursor-pointer group"
-                    title="Click to view full transaction breakdown"
-                  >
-                    <td className="py-2.5 px-3 text-center font-mono text-xs text-slate-900 dark:text-slate-100 font-bold group-hover:text-primary flex items-center justify-center gap-1.5">
-                      <i className="fa-solid fa-receipt text-[10px] text-slate-400 group-hover:text-primary"></i>
-                      {tx.invoice_number}
-                    </td>
-                    <td className="py-2.5 px-3 text-center font-semibold text-slate-900 dark:text-slate-100 truncate max-w-[150px] uppercase text-xs">{tx.party_name}</td>
-                    <td className="py-2.5 px-3 text-center">
-                      <span className={`px-2 py-0.5 rounded-md text-[9px] font-extrabold uppercase tracking-wider inline-block ${tx.type === 'Sale' ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800' : 'bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-800'}`}>
-                        {tx.type}
-                      </span>
-                    </td>
-                    <td className="py-2.5 px-3 text-center text-xs font-mono text-slate-600 dark:text-slate-300">{new Date(tx.date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}</td>
-                    <td className="py-2.5 px-3 text-center font-mono font-extrabold text-slate-900 dark:text-slate-100 text-xs">₹{tx.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                    <td className="py-2.5 px-3 text-center">
-                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider inline-block ${tx.status === 'Paid' ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800' : 'bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800'}`}>
-                        {tx.status}
-                      </span>
-                    </td>
+          {/* Outer container: Clips all scrolling content at rounded borders */}
+          <div className="border border-slate-200/90 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 shadow-xs overflow-hidden">
+            {/* Inner scroll container: Handles smooth vertical scrolling */}
+            <div className="max-h-[265px] overflow-y-auto scrollbar-thin">
+              <table className="w-full text-left text-xs text-slate-700 dark:text-slate-200 border-separate border-spacing-0">
+                <thead className="sticky top-0 z-20">
+                  <tr className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 uppercase font-black text-[10px] tracking-wider whitespace-nowrap">
+                    <th className="py-3 px-4 text-center bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">Transaction</th>
+                    <th className="py-3 px-4 text-left bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">Party (Customer/Vendor)</th>
+                    <th className="py-3 px-4 text-center bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">Type</th>
+                    <th className="py-3 px-4 text-center bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">Date</th>
+                    <th className="py-3 px-4 text-right bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">Amount</th>
+                    <th className="py-3 px-4 text-center bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                  {recentTransactions.length === 0 ? (
+                    <tr><td colSpan={6} className="py-8 text-center text-slate-400 text-xs font-semibold">No recent transactions recorded.</td></tr>
+                  ) : recentTransactions.map((tx, idx) => (
+                    <tr 
+                      key={idx} 
+                      onClick={() => setSelectedTxDetail(tx)}
+                      className="hover:bg-blue-50/70 dark:hover:bg-slate-800/60 transition-all duration-150 cursor-pointer group border-b border-slate-100 dark:border-slate-800/40"
+                      title="Click to view full transaction breakdown"
+                    >
+                      <td className="py-3 px-4 text-center border-b border-slate-100 dark:border-slate-800/40">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-mono text-xs font-bold group-hover:bg-blue-100 dark:group-hover:bg-blue-950/80 group-hover:text-primary transition-colors border border-slate-200/60 dark:border-slate-700/60">
+                          <i className="fa-solid fa-receipt text-[10px] text-slate-400 group-hover:text-primary"></i>
+                          {tx.invoice_number}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-left border-b border-slate-100 dark:border-slate-800/40">
+                        <div className="font-extrabold text-slate-900 dark:text-slate-100 uppercase text-xs truncate max-w-[170px]">{tx.party_name}</div>
+                      </td>
+                      <td className="py-3 px-4 text-center border-b border-slate-100 dark:border-slate-800/40">
+                        <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider inline-flex items-center gap-1 shadow-2xs ${
+                          tx.type === 'Sale' 
+                            ? 'bg-blue-50 dark:bg-blue-950/80 text-blue-600 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/60' 
+                            : 'bg-purple-50 dark:bg-purple-950/80 text-purple-600 dark:text-purple-300 border border-purple-200/80 dark:border-purple-800/60'
+                        }`}>
+                          <i className={`fa-solid ${tx.type === 'Sale' ? 'fa-arrow-up-right text-[8px]' : 'fa-arrow-down-left text-[8px]'}`}></i>
+                          {tx.type}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-center font-mono text-xs text-slate-500 dark:text-slate-400 font-medium border-b border-slate-100 dark:border-slate-800/40">
+                        {new Date(tx.date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </td>
+                      <td className="py-3 px-4 text-right font-mono font-black text-slate-900 dark:text-slate-100 text-xs tracking-tight border-b border-slate-100 dark:border-slate-800/40">
+                        ₹{tx.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="py-3 px-4 text-center border-b border-slate-100 dark:border-slate-800/40">
+                        <span className={`px-2.5 py-1 rounded-full text-[9px] font-extrabold uppercase tracking-wider inline-flex items-center gap-1.5 shadow-2xs ${
+                          tx.status === 'Paid' 
+                            ? 'bg-emerald-50 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/60' 
+                            : 'bg-rose-50 dark:bg-rose-950/80 text-rose-600 dark:text-rose-300 border border-rose-200/80 dark:border-rose-800/60'
+                        }`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${tx.status === 'Paid' ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
+                          {tx.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
 
@@ -1094,12 +1225,16 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                    {(!selectedTxDetail.items || selectedTxDetail.items.length === 0) ? (
-                      <tr>
-                        <td colSpan={5} className="py-4 text-center text-slate-400">No line items breakdown recorded for this transaction.</td>
-                      </tr>
-                    ) : (
-                      selectedTxDetail.items.map((item: any, idx: number) => {
+                    {(() => {
+                      const displayItems = getTransactionLineItems(selectedTxDetail, products);
+                      if (!displayItems || displayItems.length === 0) {
+                        return (
+                          <tr>
+                            <td colSpan={5} className="py-4 text-center text-slate-400">No line items breakdown recorded for this transaction.</td>
+                          </tr>
+                        );
+                      }
+                      return displayItems.map((item: any, idx: number) => {
                         const matchedProd = products.find(p => p.id === (item.product_id || item.product?.id));
                         const name = item.product_name || item.product?.product_name || matchedProd?.product_name || `Product Item #${idx + 1}`;
                         const qty = Number(item.qty || item.quantity || 1);
@@ -1114,8 +1249,8 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
                             <td className="py-2.5 px-3 text-center font-mono font-bold text-primary">₹{total.toFixed(2)}</td>
                           </tr>
                         );
-                      })
-                    )}
+                      });
+                    })()}
                   </tbody>
                 </table>
               </div>

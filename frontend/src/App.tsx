@@ -924,24 +924,7 @@ function App() {
                     </div>
                   </button>
 
-                  {/* 2. Purchase Entry */}
-                  <button 
-                    onClick={() => {
-                      setPurchaseAutoOpen(true);
-                      setActiveTab('purchases');
-                    }}
-                    className="bg-secondary border border-border hover:border-blue-500/60 rounded-2xl p-6 sm:p-7 flex flex-col items-center justify-center text-center gap-4 group transition-all duration-200 shadow-md hover:shadow-xl hover:-translate-y-1 cursor-pointer min-h-[200px]"
-                  >
-                    <div className="w-16 h-16 sm:w-18 sm:h-18 rounded-2xl bg-blue-500/10 text-blue-400 flex items-center justify-center border border-blue-500/30 group-hover:scale-110 group-hover:bg-blue-500 group-hover:text-white transition-all duration-200 shadow-sm">
-                      <i className="fa-solid fa-cart-shopping text-2xl sm:text-3xl"></i>
-                    </div>
-                    <div>
-                      <h3 className="text-base sm:text-lg font-black text-foreground group-hover:text-blue-400 transition-colors uppercase tracking-tight">b. Procurement Bill</h3>
-                      <p className="text-xs sm:text-sm text-textMuted mt-1 leading-relaxed">Record supplier purchase bills and update material stock</p>
-                    </div>
-                  </button>
-
-                  {/* 3. Add Product */}
+                  {/* 2. Add Product */}
                   <button 
                     onClick={() => {
                       setProductAutoOpen(true);
@@ -953,12 +936,12 @@ function App() {
                       <i className="fa-solid fa-boxes-stacked text-2xl sm:text-3xl"></i>
                     </div>
                     <div>
-                      <h3 className="text-base sm:text-lg font-black text-foreground group-hover:text-amber-400 transition-colors uppercase tracking-tight">c. Add New Product</h3>
+                      <h3 className="text-base sm:text-lg font-black text-foreground group-hover:text-amber-400 transition-colors uppercase tracking-tight">b. Add New Product</h3>
                       <p className="text-xs sm:text-sm text-textMuted mt-1 leading-relaxed">Configure new inventory product, price rates, and shelf locations</p>
                     </div>
                   </button>
 
-                  {/* 4. Log Expense */}
+                  {/* 3. Log Expense */}
                   <button 
                     onClick={() => {
                       setExpenseAutoOpen(true);
@@ -970,12 +953,12 @@ function App() {
                       <i className="fa-solid fa-hand-holding-dollar text-2xl sm:text-3xl"></i>
                     </div>
                     <div>
-                      <h3 className="text-base sm:text-lg font-black text-foreground group-hover:text-rose-400 transition-colors uppercase tracking-tight">d. Log Shop Expense</h3>
+                      <h3 className="text-base sm:text-lg font-black text-foreground group-hover:text-rose-400 transition-colors uppercase tracking-tight">c. Log Shop Expense</h3>
                       <p className="text-xs sm:text-sm text-textMuted mt-1 leading-relaxed">Audit daily shop operating costs, rent, electricity, and salaries</p>
                     </div>
                   </button>
 
-                  {/* 5. Register Customer */}
+                  {/* 4. Register Customer */}
                   <button 
                     onClick={() => {
                       setCustomerAutoOpen(true);
@@ -987,12 +970,12 @@ function App() {
                       <i className="fa-solid fa-user-plus text-2xl sm:text-3xl"></i>
                     </div>
                     <div>
-                      <h3 className="text-base sm:text-lg font-black text-foreground group-hover:text-purple-400 transition-colors uppercase tracking-tight">e. Register Customer</h3>
+                      <h3 className="text-base sm:text-lg font-black text-foreground group-hover:text-purple-400 transition-colors uppercase tracking-tight">d. Register Customer</h3>
                       <p className="text-xs sm:text-sm text-textMuted mt-1 leading-relaxed">Create new customer profile and setup credit limit ledgers</p>
                     </div>
                   </button>
 
-                  {/* 6. Register Vendor */}
+                  {/* 5. Register Vendor */}
                   <button 
                     onClick={() => {
                       setSupplierAutoOpen(true);
@@ -1004,7 +987,7 @@ function App() {
                       <i className="fa-solid fa-truck-ramp-box text-2xl sm:text-3xl"></i>
                     </div>
                     <div>
-                      <h3 className="text-base sm:text-lg font-black text-foreground group-hover:text-emerald-400 transition-colors uppercase tracking-tight">f. Register Vendor</h3>
+                      <h3 className="text-base sm:text-lg font-black text-foreground group-hover:text-emerald-400 transition-colors uppercase tracking-tight">e. Register Vendor</h3>
                       <p className="text-xs sm:text-sm text-textMuted mt-1 leading-relaxed">Add material supplier profiles and establishment details</p>
                     </div>
                   </button>

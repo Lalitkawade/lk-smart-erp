@@ -36,9 +36,16 @@ export default function Expenses({ autoOpenModal, onModalClosed }: ExpensesProps
   }, [autoOpenModal]);
 
   // Form State
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    category: string;
+    amount: number | string;
+    payment_mode: string;
+    ref_number: string;
+    description: string;
+    expense_date: string;
+  }>({
     category: 'Rent',
-    amount: 0,
+    amount: '',
     payment_mode: 'Cash',
     ref_number: '',
     description: '',
@@ -48,7 +55,7 @@ export default function Expenses({ autoOpenModal, onModalClosed }: ExpensesProps
   const handleOpenAdd = () => {
     setFormData({
       category: 'Rent',
-      amount: 0,
+      amount: '',
       payment_mode: 'Cash',
       ref_number: '',
       description: '',
@@ -59,13 +66,14 @@ export default function Expenses({ autoOpenModal, onModalClosed }: ExpensesProps
 
   const handleSaveExpense = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (formData.amount <= 0) return;
+    const numAmount = Number(formData.amount || 0);
+    if (numAmount <= 0) return;
 
     try {
       const res = await ExpenseService.createExpense({
         tenant_id: '00000000-0000-0000-0000-000000000000',
         category: formData.category,
-        amount: Number(formData.amount),
+        amount: numAmount,
         payment_mode: formData.payment_mode,
         ref_number: formData.ref_number || 'GEN-EXP',
         description: formData.description,
@@ -242,8 +250,20 @@ export default function Expenses({ autoOpenModal, onModalClosed }: ExpensesProps
               </div>
               <div>
                 <label className="block text-xs font-semibold text-textSecondary mb-1">Outflow Amount (₹) *</label>
-                <input type="number" className="w-full bg-background border border-border rounded-lg p-2.5 text-sm text-foreground font-mono font-extrabold"
-                  value={formData.amount} onChange={(e) => setFormData({ ...formData, amount: parseInt(e.target.value) || 0 })} required />
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  className="w-full bg-background border border-border rounded-lg p-2.5 text-sm text-foreground font-mono font-extrabold"
+                  value={formData.amount === 0 ? '' : formData.amount}
+                  placeholder="Enter outflow amount..."
+                  onFocus={(e) => e.target.select()}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setFormData({ ...formData, amount: val === '' ? '' : (isNaN(Number(val)) ? '' : val) });
+                  }}
+                  required
+                />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>

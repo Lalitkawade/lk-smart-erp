@@ -1197,23 +1197,53 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/40">
-                    {(viewingBill.items || viewingBill.purchase_items || []).map((it: any, i: number) => {
-                      const itemName = it.product_name || it.product?.product_name || 'Procured Material Item';
-                      const hsnCode = it.hsn || it.product?.hsn || '-';
-                      const gstRate = Number(it.gst_percent ?? it.product?.gst ?? 18);
-                      const lineAmt = Number(it.amount || (Number(it.qty || 1) * Number(it.rate || 0)));
+                    {(() => {
+                      let lineItems = viewingBill.items || viewingBill.purchase_items || [];
+                      if (!Array.isArray(lineItems) || lineItems.length === 0) {
+                        try {
+                          const cachedKey = viewingBill.id ? `pb_items_${viewingBill.id}` : (viewingBill.bill_number ? `pb_items_${viewingBill.bill_number}` : null);
+                          if (cachedKey) {
+                            const cachedStr = localStorage.getItem(cachedKey);
+                            if (cachedStr) {
+                              const parsed = JSON.parse(cachedStr);
+                              if (Array.isArray(parsed) && parsed.length > 0) lineItems = parsed;
+                            }
+                          }
+                        } catch (e) { }
+                      }
 
-                      return (
-                        <tr key={i} className="hover:bg-background/30">
-                          <td className="p-2.5 font-mono text-[11px] font-semibold text-textMuted">{hsnCode}</td>
-                          <td className="p-2.5 font-bold uppercase">{itemName}</td>
-                          <td className="p-2.5 text-center font-mono font-bold">{it.qty || 1}</td>
-                          <td className="p-2.5 text-right font-mono">₹{Number(it.rate || 0).toFixed(2)}</td>
-                          <td className="p-2.5 text-center font-mono text-xs">{gstRate}%</td>
-                          <td className="p-2.5 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">₹{lineAmt.toFixed(2)}</td>
-                        </tr>
-                      );
-                    })}
+                      if (!Array.isArray(lineItems) || lineItems.length === 0) {
+                        const totalAmt = Number(viewingBill.total_amount || 0);
+                        if (totalAmt > 0) {
+                          lineItems = [{
+                            product_name: viewingBill.supplier_name ? `Procured Material (${viewingBill.supplier_name})` : 'Procured Material Item',
+                            qty: 1,
+                            rate: totalAmt,
+                            amount: totalAmt,
+                            hsn: '-',
+                            gst_percent: 18
+                          }];
+                        }
+                      }
+
+                      return lineItems.map((it: any, i: number) => {
+                        const itemName = it.product_name || it.product?.product_name || 'Procured Material Item';
+                        const hsnCode = it.hsn || it.product?.hsn || '-';
+                        const gstRate = Number(it.gst_percent ?? it.product?.gst ?? 18);
+                        const lineAmt = Number(it.amount || (Number(it.qty || 1) * Number(it.rate || 0)));
+
+                        return (
+                          <tr key={i} className="hover:bg-background/30">
+                            <td className="p-2.5 font-mono text-[11px] font-semibold text-textMuted">{hsnCode}</td>
+                            <td className="p-2.5 font-bold uppercase">{itemName}</td>
+                            <td className="p-2.5 text-center font-mono font-bold">{it.qty || 1}</td>
+                            <td className="p-2.5 text-right font-mono">₹{Number(it.rate || 0).toFixed(2)}</td>
+                            <td className="p-2.5 text-center font-mono text-xs">{gstRate}%</td>
+                            <td className="p-2.5 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">₹{lineAmt.toFixed(2)}</td>
+                          </tr>
+                        );
+                      });
+                    })()}
                   </tbody>
                 </table>
               </div>

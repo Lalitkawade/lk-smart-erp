@@ -336,6 +336,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
   const prodPurchaseHistory = useMemo(() => {
     if (!selectedHistoryProduct) return [];
     const p = selectedHistoryProduct;
+    const prodSupplierName = p.supplier_name || (p.supplier_id ? suppliers.find((s: any) => s.id === p.supplier_id)?.supplier_name : '') || '';
     const piecesPerPack = Math.max(1, Number(p.pieces_per_pack || 1));
     const pUnit = p.p_unit || 'Box';
     const sUnit = p.s_unit || p.unit || 'Pcs';
@@ -350,7 +351,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
 
     list.forEach((bill: any) => {
       const resolvedItems = resolveBillProcuredItems(bill, products);
-      const supName = bill.supplier_name || p.supplier_name || 'Vendor Supplier';
+      const supName = bill.supplier_name || (bill.supplier_id ? suppliers.find((s: any) => s.id === bill.supplier_id)?.supplier_name : '') || prodSupplierName || 'Vendor Supplier';
 
       resolvedItems.forEach((item: any) => {
         const itemProdId = item.product_id || item.product?.id;
@@ -358,7 +359,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
 
         const isMatch = (itemProdId && String(itemProdId) === String(p.id)) ||
           (itemProdName && p.product_name && itemProdName.toLowerCase().trim() === p.product_name.toLowerCase().trim()) ||
-          (resolvedItems.length === 1 && supName && p.supplier_name && supName.trim().toUpperCase() === p.supplier_name.trim().toUpperCase());
+          (resolvedItems.length === 1 && supName && prodSupplierName && supName.trim().toUpperCase() === prodSupplierName.trim().toUpperCase());
 
         if (isMatch) {
           const rawQty = Number(item.qty || item.quantity || 1);
@@ -402,11 +403,15 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
       if (logsRaw) {
         const savedLogs: any[] = JSON.parse(logsRaw);
         savedLogs.forEach((log: any) => {
+          const logSupName = (log.supplier_name && log.supplier_name !== 'Direct Stock Addition / Manual Edit')
+            ? log.supplier_name
+            : (prodSupplierName || 'Direct Stock Addition / Manual Edit');
+
           matchedPurchases.push({
             id: log.id || ('stk-log-' + Math.random()),
             date: log.date || p.updated_at || new Date().toISOString(),
             bill_number: log.bill_number || 'STOCK-EDIT',
-            supplier_name: log.supplier_name || 'Direct Stock Addition / Manual Edit',
+            supplier_name: logSupName,
             payment_mode: log.payment_mode || 'Stock Adjustment',
             pack_qty: Number(log.pack_qty || 0),
             base_qty: Number(log.base_qty || 0),
@@ -437,12 +442,13 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
       const extraAmount = extraPackQty * extraPackRate;
 
       const isOpeningOnly = matchedPurchases.length === 0;
+      const fallbackSupName = prodSupplierName || (isOpeningOnly ? 'Catalog Opening Stock' : 'Direct Stock Addition / Manual Edit');
 
       matchedPurchases.push({
         id: (isOpeningOnly ? 'init-' : 'edit-adj-') + p.id + '-' + (p.updated_at || Date.now()),
         date: (isOpeningOnly ? p.created_at : p.updated_at) || new Date().toISOString(),
         bill_number: isOpeningOnly ? 'INIT-STOCK' : 'STOCK-EDIT',
-        supplier_name: isOpeningOnly ? (p.supplier_name || 'Catalog Opening Stock') : 'Direct Stock Addition / Manual Edit',
+        supplier_name: fallbackSupName,
         payment_mode: isOpeningOnly ? 'Opening Stock' : 'Stock Adjustment',
         pack_qty: extraPackQty,
         base_qty: unbilledStockDifference,
@@ -471,7 +477,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
     }
 
     return finalPurchases.reverse();
-  }, [selectedHistoryProduct, purchasesList, products]);
+  }, [selectedHistoryProduct, purchasesList, products, suppliers]);
 
   const purchaseStats = useMemo(() => {
     if (!prodPurchaseHistory || prodPurchaseHistory.length === 0) {
@@ -643,6 +649,56 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
       next[index] = { ...next[index], ...updates };
       return next;
     });
+  };
+
+  const autofillProductFromCatalog = (p: any) => {
+    const locationStr = p.warehouse_location || '';
+    const parsedGodown = p.godown || (locationStr.includes('|') ? locationStr.split('|')[0].replace(/^Godown:\s*/i, '').trim() : locationStr);
+    const parsedRack = p.rack_number || (locationStr.match(/Rack:\s*([^|]+)/i)?.[1]?.trim() || '');
+    const parsedShelf = p.shelf_number || (locationStr.match(/Shelf:\s*([^|]+)/i)?.[1]?.trim() || '');
+
+    if (Number(p.gst || 0) > 0) {
+      setIsEditingTax(true);
+    }
+
+    if (p.supplier_name && !vendorSearchQuery) {
+      setVendorSearchQuery(p.supplier_name);
+      if (p.supplier_id) setSupplierId(p.supplier_id);
+    }
+
+    return {
+      id: p.id,
+      product_name: p.product_name,
+      sku: p.sku || '',
+      barcode: p.barcode || '',
+      category_name: p.category_name || 'General',
+      brand_name: p.brand_name || 'Generic',
+      unit: p.unit || p.s_unit || 'Nos',
+      p_unit: p.p_unit || p.unit || 'Box',
+      s_unit: p.s_unit || p.unit || 'Nos',
+      pieces_per_pack: Number(p.pieces_per_pack || 1),
+      purchase_price: Number(p.purchase_price || 0),
+      selling_price: Number(p.selling_price || 0),
+      dealer_price: Number(p.dealer_price || 0),
+      mrp: Number(p.mrp || 0),
+      min_stock_level: Number(p.min_stock_level ?? 10),
+      hsn: p.hsn || '',
+      gst: Number(p.gst || 0),
+      size: p.size || '',
+      weight: p.weight || '',
+      description: p.description || '',
+      godown: parsedGodown,
+      rack_number: parsedRack,
+      shelf_number: parsedShelf,
+      warehouse_location: locationStr,
+      supplier_id: p.supplier_id || '',
+      supplier_name: p.supplier_name || '',
+      supplier_phone: p.supplier_phone || '',
+      piece_selling_price: Number(p.piece_selling_price || 0),
+      allow_decimal: p.allow_decimal ?? false,
+      allow_purchase_unit_selling: p.allow_purchase_unit_selling ?? true,
+      track_base_unit: p.track_base_unit ?? true
+    };
   };
 
   const shouldScrollToNewItemRef = React.useRef(false);
@@ -851,6 +907,11 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
     setIsEditingBaseStock(false);
     setIsEditingTax(Number(p.gst || 0) > 0);
 
+    const resolvedSupId = p.supplier_id || '';
+    const resolvedSupName = p.supplier_name || (resolvedSupId ? suppliers.find((s: any) => s.id === resolvedSupId)?.supplier_name || '' : '');
+    setSupplierId(resolvedSupId);
+    setVendorSearchQuery(resolvedSupName);
+
     // Parse location values
     const locationStr = p.warehouse_location || '';
     const parsedGodown = p.godown || (locationStr.includes('|') ? locationStr.split('|')[0].replace(/^Godown:\s*/i, '').trim() : locationStr);
@@ -1029,7 +1090,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
           weight: item.weight || null,
           warehouse_location: fullLocation || item.godown || item.warehouse_location || null,
           supplier_id: activeSup ? activeSup.id : (item.supplier_id || null),
-          supplier_name: activeSup ? activeSup.supplier_name : (item.supplier_name || null),
+          supplier_name: activeSup ? activeSup.supplier_name : (vendorSearchQuery.trim() ? vendorSearchQuery.trim().toUpperCase() : (item.supplier_name || null)),
           supplier_phone: activeSup ? activeSup.phone : (item.supplier_phone || null),
           status: 'Active',
           piece_selling_price: sPrice,
@@ -1049,13 +1110,14 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
             const existingLogs: any[] = existingLogsRaw ? JSON.parse(existingLogsRaw) : [];
 
             const pieceCost = calculatedBaseUnitCost || (conversionFactor > 1 ? pPrice / conversionFactor : pPrice);
+            const currentSupName = activeSup?.supplier_name || (vendorSearchQuery.trim() ? vendorSearchQuery.trim().toUpperCase() : null) || item.supplier_name || editingProduct?.supplier_name || (item.supplier_id ? suppliers.find((s: any) => s.id === item.supplier_id)?.supplier_name : null) || (editingProduct?.supplier_id ? suppliers.find((s: any) => s.id === editingProduct.supplier_id)?.supplier_name : null);
 
             existingLogs.push({
               id: 'stk-log-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4),
               product_id: effectiveProdId,
               date: new Date().toISOString(),
               bill_number: 'STOCK-EDIT',
-              supplier_name: activeSup?.supplier_name || 'Direct Stock Addition / Manual Edit',
+              supplier_name: currentSupName || 'Direct Stock Addition / Manual Edit',
               payment_mode: 'Stock Adjustment',
               pack_qty: purchasePacksAdded,
               base_qty: addedStockInflowBaseUnits,
@@ -2575,10 +2637,38 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                             required
                             value={item.product_name}
                             onFocus={() => setActiveSearchDropdownIndex(index)}
-                            onBlur={() => setTimeout(() => setActiveSearchDropdownIndex(null), 200)}
+                            onBlur={() => {
+                              setTimeout(() => {
+                                setActiveSearchDropdownIndex(null);
+                                if (item.product_name && item.product_name.trim()) {
+                                  const queryLower = item.product_name.trim().toLowerCase();
+                                  const exactMatch = products.find(p =>
+                                    (p.product_name && p.product_name.trim().toLowerCase() === queryLower) ||
+                                    (p.barcode && p.barcode.trim() === item.product_name.trim()) ||
+                                    (p.sku && p.sku.trim().toLowerCase() === queryLower)
+                                  );
+                                  if (exactMatch && (!item.id || item.id !== exactMatch.id)) {
+                                    const filled = autofillProductFromCatalog(exactMatch);
+                                    updateProductItem(index, filled);
+                                  }
+                                }
+                              }, 200);
+                            }}
                             onChange={(e) => {
-                              updateProductItem(index, { product_name: e.target.value });
+                              const val = e.target.value;
+                              updateProductItem(index, { product_name: val });
                               setActiveSearchDropdownIndex(index);
+
+                              if (val.trim().length >= 2) {
+                                const queryLower = val.trim().toLowerCase();
+                                const exactMatch = products.find(p =>
+                                  p.product_name && p.product_name.trim().toLowerCase() === queryLower
+                                );
+                                if (exactMatch) {
+                                  const filled = autofillProductFromCatalog(exactMatch);
+                                  updateProductItem(index, filled);
+                                }
+                              }
                             }}
                             placeholder="e.g. 2*6 SCREW"
                           />
@@ -2599,20 +2689,8 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                                     className="p-2.5 border-b border-slate-100 dark:border-slate-800 hover:bg-blue-50/80 dark:hover:bg-blue-950/60 cursor-pointer transition flex items-center justify-between gap-2"
                                     onMouseDown={(e) => {
                                       e.preventDefault();
-                                      updateProductItem(index, {
-                                        id: p.id,
-                                        product_name: p.product_name,
-                                        purchase_price: Number(p.purchase_price || 0),
-                                        selling_price: Number(p.selling_price || 0),
-                                        unit: p.unit || 'Nos',
-                                        p_unit: p.p_unit || p.unit || 'Box',
-                                        s_unit: p.s_unit || p.unit || 'Nos',
-                                        pieces_per_pack: Number(p.pieces_per_pack || 1),
-                                        barcode: p.barcode || '',
-                                        sku: p.sku || '',
-                                        category_name: p.category_name || '',
-                                        hsn: p.hsn || ''
-                                      });
+                                      const filled = autofillProductFromCatalog(p);
+                                      updateProductItem(index, filled);
                                       setActiveSearchDropdownIndex(null);
                                     }}
                                   >
@@ -2641,7 +2719,17 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                             type="text"
                             className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-600 shadow-xs"
                             value={item.sku}
-                            onChange={(e) => updateProductItem(index, { sku: e.target.value })}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              updateProductItem(index, { sku: val });
+                              if (val.trim()) {
+                                const match = products.find(p => p.sku && p.sku.trim().toLowerCase() === val.trim().toLowerCase());
+                                if (match) {
+                                  const filled = autofillProductFromCatalog(match);
+                                  updateProductItem(index, filled);
+                                }
+                              }
+                            }}
                           />
                         </div>
                         <div>
@@ -2650,7 +2738,17 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                             type="text"
                             className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-600 shadow-xs"
                             value={item.barcode}
-                            onChange={(e) => updateProductItem(index, { barcode: e.target.value })}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              updateProductItem(index, { barcode: val });
+                              if (val.trim()) {
+                                const match = products.find(p => p.barcode && p.barcode.trim() === val.trim());
+                                if (match) {
+                                  const filled = autofillProductFromCatalog(match);
+                                  updateProductItem(index, filled);
+                                }
+                              }
+                            }}
                           />
                         </div>
                         <div>

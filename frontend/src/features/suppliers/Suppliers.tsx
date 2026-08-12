@@ -724,8 +724,17 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
             <form onSubmit={handleRecordPayment} className="flex-1 min-h-0 overflow-y-auto pr-2 space-y-4 scrollbar-thin">
               <div>
                 <label className="block text-xs font-semibold text-textSecondary mb-1">Payout Voucher Amount (₹) *</label>
-                <input type="number" className="w-full bg-background border border-border rounded-lg p-2.5 text-sm text-foreground font-mono font-bold"
-                  value={payFormData.amount} onChange={(e) => setPayFormData({ ...payFormData, amount: parseInt(e.target.value) || 0 })} required />
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  className="w-full bg-background border border-border rounded-lg p-2.5 text-sm text-foreground font-mono font-bold"
+                  value={payFormData.amount === 0 ? '' : payFormData.amount}
+                  onFocus={(e) => e.target.select()}
+                  onChange={(e) => setPayFormData({ ...payFormData, amount: e.target.value === '' ? '' as any : (isNaN(Number(e.target.value)) ? '' as any : e.target.value as any) })}
+                  placeholder="Enter payout amount..."
+                  required
+                />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-textSecondary mb-1">Settlement Method</label>
