@@ -4,7 +4,7 @@ import { useErpContext } from '../context/ErpContext';
 import type { Customer } from '../types/erp.types';
 
 export function useCustomers(tenantId: string) {
-  const { customers: contextCustomers, isLoading: contextLoading, refreshAllData } = useErpContext();
+  const { customers: contextCustomers, isLoading: contextLoading, refreshAllData, setCustomers } = useErpContext();
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
 
@@ -57,18 +57,20 @@ export function useCustomers(tenantId: string) {
   };
 
   const deleteCustomer = async (customerId: string) => {
-    setIsDeleting(true);
+    // Optimistically remove ONLY the deleted row from state immediately (0ms UI latency, no table flicker)
+    if (setCustomers) {
+      setCustomers(prev => prev.filter(c => c.id !== customerId));
+    }
     try {
       const res = await CustomerService.deleteCustomer(customerId);
       if (res.error) {
         throw new Error(res.error);
       }
-      await refreshAllData();
     } catch (err: any) {
       console.error('Customer delete error:', err.message || err);
+      // Rollback context state on network/API failure
+      await refreshAllData();
       throw err;
-    } finally {
-      setIsDeleting(false);
     }
   };
 

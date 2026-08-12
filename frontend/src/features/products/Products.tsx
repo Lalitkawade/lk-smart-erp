@@ -208,7 +208,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
       if (res.data?.id) {
         newSupplierObj.id = res.data.id;
       }
-      await refreshAllData();
+      refreshAllData().catch(e => console.warn('Background refresh error:', e));
     } catch (e: any) {}
 
     setSupplierId(newSupplierObj.id);
@@ -336,7 +336,6 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
   const prodPurchaseHistory = useMemo(() => {
     if (!selectedHistoryProduct) return [];
     const p = selectedHistoryProduct;
-    const matchedPurchases: any[] = [];
     const piecesPerPack = Math.max(1, Number(p.pieces_per_pack || 1));
     const pUnit = p.p_unit || 'Box';
     const sUnit = p.s_unit || p.unit || 'Pcs';
@@ -345,35 +344,8 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
     const pieceCostRate = piecesPerPack > 1 ? (Number(p.purchase_price || 0) / piecesPerPack) : Number(p.purchase_price || 0);
     const pieceSellingRate = Number(p.selling_price || (p as any).piece_selling_price || 0);
 
-    // 1. Initial Opening Stock / Catalog Creation Inflow Batch
-    const initialBaseStock = Number((p as any).initial_stock || (p as any).opening_stock || p.current_stock || 0);
-    const catalogPurchasePrice = Number(p.purchase_price || 0);
-
-    if (initialBaseStock > 0 || catalogPurchasePrice > 0) {
-      const initialPackQty = piecesPerPack > 1 ? (initialBaseStock / piecesPerPack) : initialBaseStock;
-      const initialPackRate = catalogPurchasePrice;
-      const initialPieceRate = piecesPerPack > 1 ? (catalogPurchasePrice / piecesPerPack) : catalogPurchasePrice;
-      const initialAmount = initialPackQty * initialPackRate;
-
-      matchedPurchases.push({
-        id: 'init-' + p.id,
-        date: p.created_at || new Date().toISOString(),
-        bill_number: 'INIT-STOCK',
-        supplier_name: p.supplier_name || 'Catalog Opening Stock',
-        payment_mode: 'Opening Stock',
-        pack_qty: initialPackQty,
-        base_qty: initialBaseStock,
-        pack_rate: initialPackRate,
-        piece_rate: initialPieceRate,
-        selling_price: pieceSellingRate,
-        amount: initialAmount,
-        p_unit: pUnit,
-        s_unit: sUnit,
-        isDualUnit
-      });
-    }
-
-    // 2. Resolve Purchase Bills with line items via resolveBillProcuredItems
+    // 1. Resolve Purchase Bills with line items via resolveBillProcuredItems
+    const actualBillPurchases: any[] = [];
     const list: any[] = purchasesList || [];
 
     list.forEach((bill: any) => {
@@ -400,7 +372,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
           const packQty = isPackRate ? rawQty : (piecesPerPack > 1 ? (rawQty / piecesPerPack) : rawQty);
           const baseQty = isPackRate ? (rawQty * piecesPerPack) : rawQty;
 
-          matchedPurchases.push({
+          actualBillPurchases.push({
             id: bill.id || 'pb-' + Date.now(),
             date: bill.created_at || bill.purchase_date || new Date().toISOString(),
             bill_number: (bill.bill_number && bill.bill_number !== 'N/A' && !bill.bill_number.toLowerCase().startsWith('pb-')) ? bill.bill_number : '-',
@@ -420,14 +392,72 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
       });
     });
 
-    // Deduplicate by bill_number & amount if initial stock overlaps
-    const uniqueMap = new Map();
-    matchedPurchases.forEach(item => {
-      const key = `${item.bill_number}_${item.pack_qty}_${item.amount}`;
-      if (!uniqueMap.has(key)) uniqueMap.set(key, item);
-    });
+    const matchedPurchases: any[] = [];
+    matchedPurchases.push(...actualBillPurchases);
 
-    const finalPurchases = Array.from(uniqueMap.values());
+    // 2. Read all persisted individual stock edit logs for this product
+    try {
+      const storageKey = 'lk_prod_stock_logs_' + p.id;
+      const logsRaw = localStorage.getItem(storageKey);
+      if (logsRaw) {
+        const savedLogs: any[] = JSON.parse(logsRaw);
+        savedLogs.forEach((log: any) => {
+          matchedPurchases.push({
+            id: log.id || ('stk-log-' + Math.random()),
+            date: log.date || p.updated_at || new Date().toISOString(),
+            bill_number: log.bill_number || 'STOCK-EDIT',
+            supplier_name: log.supplier_name || 'Direct Stock Addition / Manual Edit',
+            payment_mode: log.payment_mode || 'Stock Adjustment',
+            pack_qty: Number(log.pack_qty || 0),
+            base_qty: Number(log.base_qty || 0),
+            pack_rate: Number(log.pack_rate || p.purchase_price || 0),
+            piece_rate: Number(log.piece_rate || pieceCostRate),
+            selling_price: Number(log.selling_price || pieceSellingRate),
+            amount: Number(log.amount || 0),
+            p_unit: log.p_unit || pUnit,
+            s_unit: log.s_unit || sUnit,
+            isDualUnit
+          });
+        });
+      }
+    } catch (e) {
+      console.error('Error reading stock edit logs:', e);
+    }
+
+    // 3. Calculate sum of base stock accounted for by purchase bills and stock logs
+    const totalAccountedQty = matchedPurchases.reduce((sum, item) => sum + Number(item.base_qty || 0), 0);
+    const unbilledStockDifference = Math.max(0, Number(p.current_stock || 0) - totalAccountedQty);
+
+    // If current stock exceeds total accounted quantity, add fallback entry for remaining stock
+    if (unbilledStockDifference > 0) {
+      const catalogPurchasePrice = Number(p.purchase_price || 0);
+      const extraPackQty = piecesPerPack > 1 ? (unbilledStockDifference / piecesPerPack) : unbilledStockDifference;
+      const extraPackRate = catalogPurchasePrice;
+      const extraPieceRate = pieceCostRate;
+      const extraAmount = extraPackQty * extraPackRate;
+
+      const isOpeningOnly = matchedPurchases.length === 0;
+
+      matchedPurchases.push({
+        id: (isOpeningOnly ? 'init-' : 'edit-adj-') + p.id + '-' + (p.updated_at || Date.now()),
+        date: (isOpeningOnly ? p.created_at : p.updated_at) || new Date().toISOString(),
+        bill_number: isOpeningOnly ? 'INIT-STOCK' : 'STOCK-EDIT',
+        supplier_name: isOpeningOnly ? (p.supplier_name || 'Catalog Opening Stock') : 'Direct Stock Addition / Manual Edit',
+        payment_mode: isOpeningOnly ? 'Opening Stock' : 'Stock Adjustment',
+        pack_qty: extraPackQty,
+        base_qty: unbilledStockDifference,
+        pack_rate: extraPackRate,
+        piece_rate: extraPieceRate,
+        selling_price: pieceSellingRate,
+        amount: extraAmount,
+        p_unit: pUnit,
+        s_unit: sUnit,
+        isDualUnit
+      });
+    }
+
+    // Sort entries chronologically
+    const finalPurchases = [...matchedPurchases];
     finalPurchases.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
     for (let i = 0; i < finalPurchases.length; i++) {
@@ -615,12 +645,28 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
     });
   };
 
+  const shouldScrollToNewItemRef = React.useRef(false);
+
   const handleAddProductItem = () => {
+    shouldScrollToNewItemRef.current = true;
     setProductItems(prev => {
       const collapsedPrev = prev.map(item => ({ ...item, isCollapsed: true }));
       return [...collapsedPrev, createDefaultProductItem()];
     });
   };
+
+  useEffect(() => {
+    if (shouldScrollToNewItemRef.current && productItems.length > 1) {
+      shouldScrollToNewItemRef.current = false;
+      setTimeout(() => {
+        const lastIndex = productItems.length - 1;
+        const newCardEl = document.getElementById(`product-item-card-${lastIndex}`);
+        if (newCardEl) {
+          newCardEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 60);
+    }
+  }, [productItems.length]);
 
   const handleRemoveProductItem = (index: number) => {
     if (productItems.length <= 1) return;
@@ -863,8 +909,12 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
     setTimeout(() => setToastMessage(null), 2500);
   };
 
+  const [isSavingProduct, setIsSavingProduct] = useState(false);
+
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSavingProduct) return;
+    setIsSavingProduct(true);
     try {
       let activeSup: any = suppliers.find(s => s.id === supplierId);
       if (!activeSup && vendorSearchQuery.trim()) {
@@ -992,6 +1042,37 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
         const savedProd = await saveProduct(productPayload as any);
         const effectiveProdId = savedProd?.id || targetProductId;
 
+        if (effectiveProdId && addedStockInflowBaseUnits > 0 && !hasBillDetails) {
+          try {
+            const storageKey = 'lk_prod_stock_logs_' + effectiveProdId;
+            const existingLogsRaw = localStorage.getItem(storageKey);
+            const existingLogs: any[] = existingLogsRaw ? JSON.parse(existingLogsRaw) : [];
+
+            const pieceCost = calculatedBaseUnitCost || (conversionFactor > 1 ? pPrice / conversionFactor : pPrice);
+
+            existingLogs.push({
+              id: 'stk-log-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4),
+              product_id: effectiveProdId,
+              date: new Date().toISOString(),
+              bill_number: 'STOCK-EDIT',
+              supplier_name: activeSup?.supplier_name || 'Direct Stock Addition / Manual Edit',
+              payment_mode: 'Stock Adjustment',
+              pack_qty: purchasePacksAdded,
+              base_qty: addedStockInflowBaseUnits,
+              pack_rate: pPrice,
+              piece_rate: pieceCost,
+              selling_price: sPrice,
+              amount: itemLineCost || (addedStockInflowBaseUnits * pieceCost),
+              p_unit: item.p_unit || 'Nos',
+              s_unit: item.s_unit || item.unit || 'Nos'
+            });
+
+            localStorage.setItem(storageKey, JSON.stringify(existingLogs));
+          } catch (e) {
+            console.error('Failed to store stock edit log:', e);
+          }
+        }
+
         savedBillItems.push({
           product_id: effectiveProdId || 'prod-' + Date.now() + '-' + i,
           product_name: item.product_name,
@@ -1072,13 +1153,17 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
         }
       }
 
-      await refreshAllData();
+      // Refresh data asynchronously in background without blocking modal close
+      refreshAllData().catch(e => console.warn('Background refresh error:', e));
+
       setEditingProduct(null);
       setModalOpen(false);
       triggerToast(`⚡ Purchase Bill & Product catalog updated successfully!`);
       window.dispatchEvent(new Event('storage'));
     } catch (err: any) {
       triggerToast('⚠️ Save failed: ' + err.message);
+    } finally {
+      setIsSavingProduct(false);
     }
   };
 
@@ -1392,24 +1477,24 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
           </div>
 
           {/* Vendor Bills Table */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-700 dark:text-slate-200 border-collapse">
+          <div className="bg-secondary/40 border border-border rounded-2xl shadow-sm overflow-x-auto">
+            <table className="w-full text-left text-xs text-foreground">
               <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/90 text-slate-700 dark:text-slate-200 font-extrabold uppercase tracking-wider text-[11px]">
-                  <th className="py-3 px-4">Bill No. & Date</th>
-                  <th className="py-3 px-4">Vendor Supplier</th>
-                  <th className="py-3 px-4 text-center">No. of Items</th>
-                  <th className="py-3 px-4 text-right">Total Cost (₹)</th>
-                  <th className="py-3 px-4 text-right">Paid Amount (₹)</th>
-                  <th className="py-3 px-4 text-right">Outstanding Dues (₹)</th>
-                  <th className="py-3 px-4 text-center">Status & Mode</th>
-                  <th className="py-3 px-4 text-center">Actions</th>
+                <tr className="bg-muted/80 border-b border-border text-textSecondary font-extrabold uppercase tracking-wider text-[11px] whitespace-nowrap">
+                  <th className="py-3 px-4 whitespace-nowrap">Bill No. & Date</th>
+                  <th className="py-3 px-4 whitespace-nowrap">Vendor Supplier</th>
+                  <th className="py-3 px-4 text-center whitespace-nowrap">No. of Items</th>
+                  <th className="py-3 px-4 text-right whitespace-nowrap">Total Cost (₹)</th>
+                  <th className="py-3 px-4 text-right whitespace-nowrap">Paid Amount (₹)</th>
+                  <th className="py-3 px-4 text-right whitespace-nowrap">Outstanding Dues (₹)</th>
+                  <th className="py-3 px-4 text-center whitespace-nowrap">Status & Mode</th>
+                  <th className="py-3 px-4 text-center whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+              <tbody className="divide-y divide-border/40">
                 {filteredPurchaseBills.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="py-8 text-center text-slate-400 text-xs font-medium">
+                    <td colSpan={8} className="py-8 text-center text-textMuted text-xs font-medium">
                       No vendor purchase bills recorded yet. Click "+ Add Product & Purchase Bill" to log a new bill.
                     </td>
                   </tr>
@@ -1431,21 +1516,21 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                     const formattedTime = isNaN(rawDate.getTime()) ? '' : rawDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
 
                     return (
-                      <tr key={b.id || billNo} className="hover:bg-blue-50/60 dark:hover:bg-slate-800/70 transition">
+                      <tr key={b.id || billNo} className="border-b border-border/40 hover:bg-primary/5 transition-colors">
                         <td className="py-3 px-4 font-mono">
-                          <div className="font-extrabold text-slate-900 dark:text-slate-100 text-xs">{billNo}</div>
-                          <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-0.5">
+                          <div className="font-extrabold text-foreground text-xs">{billNo}</div>
+                          <div className="text-[11px] text-textMuted font-medium mt-0.5">
                             {formattedDate} {formattedTime ? `• ${formattedTime}` : ''}
                           </div>
                         </td>
-                        <td className="py-3 px-4 font-bold uppercase text-blue-600 dark:text-blue-400">
+                        <td className="py-3 px-4 font-bold uppercase text-primary">
                           {vendorName}
                         </td>
-                        <td className="py-3 px-4 text-center">
+                        <td className="py-3 px-4 text-center whitespace-nowrap">
                           <button
                             type="button"
                             onClick={() => handleOpenProcuredItems(b)}
-                            className="inline-flex items-center gap-1.5 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-600 hover:text-white border border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 font-extrabold px-3 py-1.5 rounded-xl text-xs transition cursor-pointer shadow-2xs group"
+                            className="inline-flex items-center gap-1.5 bg-primary/10 hover:bg-primary hover:text-white border border-primary/30 text-primary font-extrabold px-3 py-1.5 rounded-xl text-xs transition cursor-pointer shadow-2xs group"
                             title="Click to view full list of procured items"
                           >
                             <i className="fa-solid fa-boxes-stacked text-[11px]"></i>
@@ -1453,7 +1538,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                             <i className="fa-solid fa-arrow-right text-[10px] opacity-70 group-hover:translate-x-0.5 transition-transform"></i>
                           </button>
                         </td>
-                        <td className="py-3 px-4 text-right font-mono font-black text-slate-900 dark:text-slate-100">
+                        <td className="py-3 px-4 text-right font-mono font-black text-foreground">
                           ₹{totalAmt.toFixed(2)}
                         </td>
                         <td className="py-3 px-4 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
@@ -1462,45 +1547,42 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                         <td className="py-3 px-4 text-right font-mono font-bold text-rose-600 dark:text-rose-400">
                           ₹{dueAmt.toFixed(2)}
                         </td>
-                        <td className="py-3 px-4 text-center">
-                          <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md uppercase border ${
+                        <td className="py-3 px-4 text-center whitespace-nowrap">
+                          <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-lg uppercase border ${
                             isPaid
-                              ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 border-emerald-300'
-                              : 'bg-rose-50 dark:bg-rose-950/60 text-rose-600 border-rose-300'
+                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                              : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30'
                           }`}>
                             {isPaid ? `Paid (${b.payment_mode || 'Cash'})` : `⚠️ Dues ₹${dueAmt.toFixed(0)}`}
                           </span>
                         </td>
-                        <td className="py-3 px-4 text-center">
-                          <div className="flex items-center justify-center gap-1.5">
+                        <td className="py-3 px-4 text-center whitespace-nowrap">
+                          <div className="flex items-center justify-center gap-2 whitespace-nowrap">
                             <button
                               type="button"
                               onClick={() => handleOpenEditBill(b)}
-                              className="text-xs bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-600 hover:text-white border border-amber-200 dark:border-amber-800 text-amber-600 dark:text-amber-400 font-extrabold px-2.5 py-1.5 rounded-lg transition inline-flex items-center gap-1 cursor-pointer shadow-2xs"
+                              className="w-7 h-7 sm:w-8 sm:h-8 bg-blue-500/10 hover:bg-blue-600 hover:text-white border border-blue-500/30 text-blue-600 dark:text-blue-400 rounded-full font-bold transition-all active:scale-95 cursor-pointer flex items-center justify-center shadow-2xs shrink-0"
                               title="Edit bill details, vendor name, or paid amounts"
                             >
-                              <i className="fa-solid fa-pen-to-square text-[11px]"></i>
-                              <span>Edit</span>
+                              <i className="fa-solid fa-pen-to-square text-xs"></i>
                             </button>
 
                             <button
                               type="button"
                               onClick={() => handleOpenViewBillReceipt(b)}
-                              className="text-xs bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-600 hover:text-white border border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 font-extrabold px-2.5 py-1.5 rounded-lg transition inline-flex items-center gap-1 cursor-pointer shadow-2xs"
+                              className="w-7 h-7 sm:w-8 sm:h-8 bg-purple-500/10 hover:bg-purple-600 hover:text-white border border-purple-500/30 text-purple-600 dark:text-purple-400 rounded-full font-bold transition-all active:scale-95 cursor-pointer flex items-center justify-center shadow-2xs shrink-0"
                               title="View printable bill receipt"
                             >
-                              <i className="fa-solid fa-file-invoice text-[11px]"></i>
-                              <span>View Bill</span>
+                              <i className="fa-solid fa-file-invoice text-xs"></i>
                             </button>
 
                             <button
                               type="button"
                               onClick={() => handleDeleteProcurementBill(b)}
-                              className="text-xs bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-600 hover:text-white border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 font-extrabold px-2.5 py-1.5 rounded-lg transition inline-flex items-center gap-1 cursor-pointer shadow-2xs"
+                              className="w-7 h-7 sm:w-8 sm:h-8 bg-rose-500/10 hover:bg-rose-600 hover:text-white border border-rose-500/30 text-rose-600 dark:text-rose-400 rounded-full font-bold transition-all active:scale-95 cursor-pointer flex items-center justify-center shadow-2xs shrink-0"
                               title="Delete this procurement bill record"
                             >
-                              <i className="fa-solid fa-trash text-[11px]"></i>
-                              <span>Delete</span>
+                              <i className="fa-solid fa-trash text-xs"></i>
                             </button>
                           </div>
                         </td>
@@ -1520,10 +1602,11 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
               value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
 
-      <div className="bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-x-auto">
-        <table className="w-full text-left text-sm text-slate-700 dark:text-slate-200 border-collapse">
-          <thead>
-            <tr className="border-b-2 border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/90 text-slate-700 dark:text-slate-200 font-extrabold uppercase tracking-wider text-[11px] divide-x divide-slate-200 dark:divide-slate-700 whitespace-nowrap">
+      <div className="bg-secondary/40 border border-border rounded-2xl shadow-sm overflow-x-auto">
+        <table className="w-full text-left text-sm text-foreground">
+          <thead className="bg-muted/80 border-b border-border text-textSecondary font-extrabold uppercase tracking-wider text-[11px] whitespace-nowrap">
+            <tr>
+              <th className="py-3 px-3.5 text-center whitespace-nowrap">Date & Time</th>
               <th className="py-3 px-3.5 text-center whitespace-nowrap">HSN Code</th>
               <th className="py-3 px-3.5 text-center whitespace-nowrap">{mode === 'stock' ? 'Product Item & Location' : 'Product Name'}</th>
               {mode === 'stock' ? (
@@ -1536,7 +1619,6 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
               ) : (
                 <>
                   <th className="py-3 px-3.5 text-center whitespace-nowrap">Cost (₹)</th>
-                  <th className="py-3 px-3.5 text-center whitespace-nowrap">Margin</th>
                   <th className="py-3 px-3.5 text-center whitespace-nowrap">Selling Price (₹)</th>
                   <th className="py-3 px-3.5 text-center whitespace-nowrap">Available Stock</th>
                 </>
@@ -1546,11 +1628,11 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+          <tbody className="divide-y divide-border/40">
             {isLoading && products.length === 0 ? (
-              <tr><td colSpan={7} className="py-8 text-center text-slate-400 text-xs font-medium">Retrieving inventory records...</td></tr>
+              <tr><td colSpan={7} className="py-8 text-center text-textMuted text-xs font-medium">Retrieving inventory records...</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={7} className="py-8 text-center text-slate-400 text-xs font-medium">No matching stock items found.</td></tr>
+              <tr><td colSpan={7} className="py-8 text-center text-textMuted text-xs font-medium">No matching stock items found.</td></tr>
             ) : filtered.map((p) => {
               const name = p?.product_name || 'Unnamed Product';
               const pUnit = p.p_unit || 'Box';
@@ -1597,10 +1679,18 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                 ? locationParts.join(' ➔ ') 
                 : (p.warehouse_location || 'Main Store');
 
+              const rawProdDate = new Date((p as any).created_at || (p as any).created_date || (p as any).updated_at || Date.now());
+              const formattedProdDate = isNaN(rawProdDate.getTime()) ? '-' : rawProdDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+              const formattedProdTime = isNaN(rawProdDate.getTime()) ? '' : rawProdDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+
               return (
-                <tr key={p.id} className="odd:bg-white dark:odd:bg-slate-900 even:bg-slate-50/70 dark:even:bg-slate-800/30 hover:bg-blue-50/60 dark:hover:bg-slate-800/70 transition-colors divide-x divide-slate-200 dark:divide-slate-800">
+                <tr key={p.id} className="border-b border-border/40 hover:bg-primary/5 transition-colors">
+                  <td className="py-3.5 px-4 text-center font-mono text-xs whitespace-nowrap">
+                    <div className="font-extrabold text-foreground text-xs">{formattedProdDate}</div>
+                    <div className="text-[11px] text-textMuted font-medium mt-0.5">{formattedProdTime}</div>
+                  </td>
                   <td className="py-3.5 px-4 text-center font-mono text-xs">
-                    <span className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded font-bold">
+                    <span className="bg-muted border border-border text-foreground px-2 py-0.5 rounded font-bold">
                       {p.hsn || '-'}
                     </span>
                   </td>
@@ -1608,12 +1698,12 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                     onClick={() => handleShowHistory(p)}
                     title="Click to view transaction ledger details">
                     <div className="flex flex-col items-center justify-center">
-                      <span className="flex items-center justify-center gap-1.5 font-bold text-blue-600 dark:text-blue-400 hover:underline text-xs">
+                      <span className="flex items-center justify-center gap-1.5 font-bold text-primary hover:underline text-xs">
                         <i className="fa-solid fa-clock-rotate-left text-[10px]"></i>
                         {name}
                       </span>
                       {isDualUnit && (
-                        <span className="text-[9.5px] bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 font-extrabold px-2 py-0.5 rounded-full border border-blue-200 dark:border-blue-800 inline-flex items-center gap-1 mt-1 font-mono uppercase shadow-2xs">
+                        <span className="text-[9.5px] bg-primary/10 text-primary font-extrabold px-2 py-0.5 rounded-full border border-primary/20 inline-flex items-center gap-1 mt-1 font-mono uppercase shadow-2xs">
                           📦 1 {pUnit.toUpperCase()} = {piecesPerPack} {sUnit.toUpperCase()}
                         </span>
                       )}
@@ -1622,13 +1712,13 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
 
                   {mode === 'stock' ? (
                     <>
-                      <td className="py-3.5 px-4 text-center font-mono text-xs font-bold text-slate-600 dark:text-slate-400">
+                      <td className="py-3.5 px-4 text-center font-mono text-xs font-bold text-textSecondary">
                         {minStockPacks} {pUnit}
                       </td>
                       <td className="py-3.5 px-4 text-center">
                         <div className="flex flex-col gap-1 max-w-[220px] mx-auto">
                           <div className="flex items-center justify-between gap-2">
-                            <span className={`font-mono font-black text-xs ${isLowStock ? 'text-rose-600 dark:text-rose-400' : 'text-slate-900 dark:text-slate-100'}`}>
+                            <span className={`font-mono font-black text-xs ${isLowStock ? 'text-rose-600 dark:text-rose-400' : 'text-foreground'}`}>
                               {isDualUnit 
                                 ? `${formattedCurrentPack} / ${formattedTotalPack} ${pUnit.toUpperCase()}`
                                 : `${baseStockQty.toFixed(2).replace(/\.00$/, '')} / ${formattedTotalBase} ${sUnit.toUpperCase()}`}
@@ -1644,12 +1734,12 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                             )}
                           </div>
                           {isDualUnit && piecesPerPack > 1 && (
-                            <div className="text-[10px] text-blue-600 dark:text-blue-400 font-bold font-mono text-left">
+                            <div className="text-[10px] text-primary font-bold font-mono text-left">
                               ({baseStockQty.toFixed(2).replace(/\.00$/, '')} / {formattedTotalBase} {sUnit.toUpperCase()})
                             </div>
                           )}
                           {/* Stock Level Progress Meter */}
-                          <div className="w-full bg-slate-200 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden" title={`Available: ${baseStockQty} | Total Added: ${totalAddedBase} (${stockRatio.toFixed(1)}% remaining)`}>
+                          <div className="w-full bg-muted h-1.5 rounded-full overflow-hidden" title={`Available: ${baseStockQty} | Total Added: ${totalAddedBase} (${stockRatio.toFixed(1)}% remaining)`}>
                             <div 
                               className={`h-full transition-all duration-500 ${isLowStock ? 'bg-rose-500' : stockRatio < 30 ? 'bg-amber-500' : 'bg-emerald-500'}`} 
                               style={{ width: `${stockRatio}%` }}
@@ -1657,7 +1747,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                           </div>
                         </div>
                       </td>
-                      <td className="py-3.5 px-4 text-center font-mono font-bold text-blue-600 dark:text-blue-400 text-xs">
+                      <td className="py-3.5 px-4 text-center font-mono font-bold text-primary text-xs">
                         ₹{costValuation.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </td>
                       <td className="py-3.5 px-4 text-center font-mono font-bold text-emerald-600 dark:text-emerald-400 text-xs">
@@ -1666,46 +1756,41 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                     </>
                   ) : (
                     <>
-                      <td className="py-3.5 px-4 text-center font-mono text-xs text-slate-900 dark:text-slate-100">
+                      <td className="py-3.5 px-4 text-center font-mono text-xs text-foreground">
                         <div className="flex flex-col items-center">
-                          <span className="font-bold">₹{purchasePrice.toFixed(2)} {isDualUnit ? <span className="text-[10px] text-blue-600 dark:text-blue-400 font-extrabold">/ {pUnit}</span> : ''}</span>
+                          <span className="font-bold">₹{purchasePrice.toFixed(2)} {isDualUnit ? <span className="text-[10px] text-primary font-extrabold">/ {pUnit}</span> : ''}</span>
                           {isDualUnit && (
-                            <span className="text-[10px] text-slate-400 font-mono">(₹{costPerPiece.toFixed(2)} / {sUnit})</span>
+                            <span className="text-[10px] text-textMuted font-mono">(₹{costPerPiece.toFixed(2)} / {sUnit})</span>
                           )}
                         </div>
                       </td>
-                      <td className="py-3.5 px-4 text-center">
-                        <div className={`font-mono text-xs font-bold ${marginPerPiece >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-                          {marginPerPiece >= 0 ? '+' : ''}₹{marginPerPiece.toFixed(2)} <span className="text-[10px] text-slate-400 font-normal">/ {sUnit}</span>
-                        </div>
-                        <div className={`text-[10px] font-mono ${marginPerPiece >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-                          ({marginPercent >= 0 ? '+' : ''}{marginPercent.toFixed(1)}%)
-                        </div>
-                      </td>
-                      <td className="py-3.5 px-4 text-center font-mono font-bold text-slate-900 dark:text-slate-100 text-xs">
+                      <td className="py-3.5 px-4 text-center font-mono font-bold text-foreground text-xs">
                         <div className="flex flex-col items-center">
-                          <span className="font-bold">₹{piecePrice.toFixed(2)} <span className="text-[10px] text-slate-400 font-normal">/ {sUnit}</span></span>
+                          <span className="font-bold">₹{piecePrice.toFixed(2)} <span className="text-[10px] text-textMuted font-normal">/ {sUnit}</span></span>
                           {isDualUnit && (
-                            <span className="text-[10px] text-slate-400 font-mono">(₹{packPrice.toFixed(2)} / {pUnit})</span>
+                            <span className="text-[10px] text-textMuted font-mono">(₹{packPrice.toFixed(2)} / {pUnit})</span>
                           )}
+                          <div className={`text-[10.5px] font-mono font-bold mt-1 ${marginPerPiece >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                            {marginPerPiece >= 0 ? '+' : ''}₹{marginPerPiece.toFixed(2)} <span className="text-[9.5px] text-textMuted font-normal">/ {sUnit}</span> ({marginPercent >= 0 ? '+' : ''}{marginPercent.toFixed(1)}%)
+                          </div>
                         </div>
                       </td>
                       <td className="py-3.5 px-4 text-center">
                         <div className="flex flex-col items-center justify-center">
                           <div className="flex items-center justify-center gap-1.5">
-                            <span className={`font-mono font-bold text-xs ${isLowStock ? 'text-rose-600 dark:text-rose-400' : 'text-slate-900 dark:text-slate-100'}`}>
+                            <span className={`font-mono font-bold text-xs ${isLowStock ? 'text-rose-600 dark:text-rose-400' : 'text-foreground'}`}>
                               {isDualUnit 
                                 ? `${formattedCurrentPack} / ${formattedTotalPack} ${pUnit.toUpperCase()}`
                                 : `${baseStockQty.toFixed(2).replace(/\.00$/, '')} / ${formattedTotalBase} ${sUnit.toUpperCase()}`}
                             </span>
                             {isLowStock && (
-                              <span className="text-[9px] px-1.5 py-0.5 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 rounded-md font-bold" title="Low stock warning!">
+                              <span className="text-[9px] px-1.5 py-0.5 bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 rounded-md font-bold" title="Low stock warning!">
                                 ⚠️ Low
                               </span>
                             )}
                           </div>
                           {isDualUnit && piecesPerPack > 1 && (
-                            <div className="text-[10px] text-blue-600 dark:text-blue-400 font-bold font-mono">
+                            <div className="text-[10px] text-primary font-bold font-mono">
                               ({baseStockQty.toFixed(2).replace(/\.00$/, '')} / {formattedTotalBase} {sUnit.toUpperCase()})
                             </div>
                           )}
@@ -1715,65 +1800,43 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                   )}
 
                   {mode === 'catalog' ? (
-                    <td className="py-3.5 px-4 text-center">
-                      <div className="flex items-center justify-center gap-2 flex-wrap">
-                        <div 
-                          onClick={() => handleOpenEdit(p)} 
-                          className="inline-flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800/80 hover:bg-blue-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-800 dark:text-slate-200 transition cursor-pointer"
-                          title="Click to edit warehouse location & details"
-                        >
-                          <i className="fa-solid fa-location-dot text-primary text-[11px]"></i>
-                          <span className="font-mono text-xs">{formattedLocationSeq}</span>
+                    <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                      <div className="flex flex-col items-center justify-center gap-1.5 whitespace-nowrap">
+                        <div className="flex items-center justify-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEdit(p)}
+                            className="w-7 h-7 sm:w-8 sm:h-8 bg-blue-500/10 hover:bg-blue-600 hover:text-white border border-blue-500/30 text-blue-600 dark:text-blue-400 rounded-full font-bold transition-all active:scale-95 cursor-pointer flex items-center justify-center shadow-2xs shrink-0"
+                            title="Edit product details, prices, or stock"
+                          >
+                            <i className="fa-solid fa-pen-to-square text-xs"></i>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteProduct(p.id)}
+                            className="w-7 h-7 sm:w-8 sm:h-8 bg-rose-500/10 hover:bg-rose-600 hover:text-white border border-rose-500/30 text-rose-600 dark:text-rose-400 rounded-full font-bold transition-all active:scale-95 cursor-pointer flex items-center justify-center shadow-2xs shrink-0"
+                            title="Delete this product item"
+                          >
+                            <i className="fa-solid fa-trash-can text-xs"></i>
+                          </button>
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={() => handleShowHistory(p)}
-                          className="text-xs bg-purple-50 dark:bg-purple-950/60 hover:bg-purple-600 hover:text-white border border-purple-200 dark:border-purple-800 text-purple-600 dark:text-purple-400 font-extrabold px-2.5 py-1.5 rounded-lg transition inline-flex items-center gap-1 cursor-pointer shadow-2xs"
-                          title="View complete product purchase & sales history ledger"
+                        <div 
+                          onClick={() => handleOpenEdit(p)} 
+                          className="inline-flex items-center gap-1 bg-background hover:bg-muted border border-border px-2.5 py-0.5 rounded-lg text-[11px] font-semibold text-foreground transition cursor-pointer"
+                          title="Click to edit warehouse location & details"
                         >
-                          <i className="fa-solid fa-clock-rotate-left text-[11px]"></i>
-                          <span>History</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handleOpenEdit(p)}
-                          className="text-xs bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-600 hover:text-white border border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 font-extrabold px-2.5 py-1.5 rounded-lg transition inline-flex items-center gap-1 cursor-pointer shadow-2xs"
-                          title="Edit product details, prices, or stock"
-                        >
-                          <i className="fa-solid fa-pen-to-square text-[11px]"></i>
-                          <span>Edit</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteProduct(p.id)}
-                          className="text-xs bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-600 hover:text-white border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 font-extrabold px-2.5 py-1.5 rounded-lg transition inline-flex items-center gap-1 cursor-pointer shadow-2xs"
-                          title="Delete this product item"
-                        >
-                          <i className="fa-solid fa-trash text-[11px]"></i>
-                          <span>Delete</span>
-                        </button>
+                          <i className="fa-solid fa-location-dot text-primary text-[10px]"></i>
+                          <span className="font-mono text-[11px]">{formattedLocationSeq}</span>
+                        </div>
                       </div>
                     </td>
                   ) : (
-                    <td className="py-3.5 px-4 text-center">
-                      <div className="flex items-center justify-center gap-2 flex-wrap">
-                        <div className="inline-flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-800 dark:text-slate-200">
-                          <i className="fa-solid fa-location-dot text-primary text-[11px]"></i>
-                          <span className="font-mono text-xs">{formattedLocationSeq}</span>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => handleShowHistory(p)}
-                          className="text-xs bg-purple-50 dark:bg-purple-950/60 hover:bg-purple-600 hover:text-white border border-purple-200 dark:border-purple-800 text-purple-600 dark:text-purple-400 font-extrabold px-2.5 py-1.5 rounded-lg transition inline-flex items-center gap-1 cursor-pointer shadow-2xs"
-                          title="View complete product purchase & sales history ledger"
-                        >
-                          <i className="fa-solid fa-clock-rotate-left text-[11px]"></i>
-                          <span>History</span>
-                        </button>
+                    <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                      <div className="inline-flex items-center gap-1 bg-background border border-border px-2.5 py-1 rounded-lg text-xs font-semibold text-foreground">
+                        <i className="fa-solid fa-location-dot text-primary text-[10.5px]"></i>
+                        <span className="font-mono text-xs">{formattedLocationSeq}</span>
                       </div>
                     </td>
                   )}
@@ -2100,14 +2163,14 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
 
       {/* Save Modal */}
       {modalOpen && createPortal(
-        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 z-[9999] overflow-y-auto animate-backdrop-fade">
-          <div className="bg-secondary border border-border p-6 rounded-2xl w-full max-w-3xl shadow-2xl my-auto max-h-[85vh] flex flex-col gap-4 overflow-hidden">
+        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-2.5 sm:p-6 z-[9999] overflow-y-auto animate-backdrop-fade">
+          <div className="bg-secondary border border-border p-3.5 sm:p-6 rounded-2xl w-full max-w-3xl shadow-2xl my-auto max-h-[92vh] sm:max-h-[85vh] flex flex-col gap-3.5 sm:gap-4 overflow-hidden">
             
             {/* Sticky Header */}
             <div className="flex justify-between items-center pb-3 border-b border-border shrink-0">
               <div>
                 <span className="text-[10px] font-bold text-primary uppercase tracking-widest">Inventory Management</span>
-                <h3 className="text-lg font-black text-foreground uppercase mt-0.5">{editingProduct ? 'Edit Inventory Product' : 'Add New Inventory Product'}</h3>
+                <h3 className="text-base sm:text-lg font-black text-foreground uppercase mt-0.5">{editingProduct ? 'Edit Inventory Product' : 'Add New Inventory Product'}</h3>
               </div>
               <button type="button" onClick={() => { setEditingProduct(null); setModalOpen(false); }} className="text-textSecondary hover:text-foreground text-xs font-bold bg-background/50 hover:bg-background border border-border px-3 py-1.5 rounded-lg transition">
                 &times; Close
@@ -2242,122 +2305,6 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                             </select>
                           </div>
                         </div>
-
-                        {/* Transaction ID / Ref No. */}
-                        {paymentMode !== 'Cash' && (
-                          <div className="col-span-1 md:col-span-4 animate-fade-in bg-blue-50/80 dark:bg-blue-950/40 p-3.5 rounded-xl border border-blue-200 dark:border-blue-800 space-y-1">
-                            <label className="block text-xs text-blue-900 dark:text-blue-300 font-extrabold flex items-center justify-between">
-                              <span className="flex items-center gap-1.5 uppercase tracking-wide">
-                                <i className="fa-solid fa-receipt text-blue-600"></i> Transaction ID / UTR / Reference No.
-                              </span>
-                            </label>
-                            <input 
-                              type="text"
-                              className="w-full bg-white dark:bg-slate-900 border border-blue-300 dark:border-blue-700 rounded-lg p-2.5 text-xs text-slate-900 dark:text-slate-100 font-mono font-bold focus:border-blue-600 focus:outline-none uppercase"
-                              value={transactionId}
-                              onChange={(e) => setTransactionId(e.target.value)}
-                              placeholder="e.g. UPI-981240192849 / CARD-492019 / GPay Ref ID"
-                            />
-                          </div>
-                        )}
-
-                        {/* PAYMENT STATUS & VENDOR DUES ALLOCATION CARD */}
-                        <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 border-2 border-blue-500/40 p-4 rounded-2xl space-y-3 shadow-md text-white">
-                          <div className="flex justify-between items-center border-b border-blue-500/30 pb-2 flex-wrap gap-2">
-                            <span className="font-extrabold text-xs text-blue-300 uppercase tracking-wide flex items-center gap-2">
-                              <i className="fa-solid fa-wallet text-amber-400"></i> Payment Status & Vendor Dues Allocation
-                            </span>
-                            <span className="text-[10px] font-bold text-amber-300 bg-amber-950/80 px-2.5 py-1 rounded-lg border border-amber-500/40">
-                              Total Bill Cost: ₹{calculatedTotalBillCost.toFixed(2)}
-                            </span>
-                          </div>
-
-                          {/* PAYMENT STATUS TOGGLE BUTTONS */}
-                          <div className="grid grid-cols-3 gap-2">
-                            <button
-                              type="button"
-                              onClick={() => { setPaymentStatus('paid'); setCustomPaidAmount(''); }}
-                              className={`py-2 px-3 rounded-xl font-extrabold text-xs transition border flex flex-col items-center justify-center gap-0.5 cursor-pointer ${
-                                paymentStatus === 'paid'
-                                  ? 'bg-emerald-600 text-white border-emerald-400 shadow-md scale-102'
-                                  : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-700'
-                              }`}
-                            >
-                              <span>🟢 Paid in Full</span>
-                              <span className="text-[9.5px] font-mono opacity-80">(₹{calculatedTotalBillCost.toFixed(2)})</span>
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => { setPaymentStatus('partial'); if (customPaidAmount === '') setCustomPaidAmount(Math.round(calculatedTotalBillCost / 2)); }}
-                              className={`py-2 px-3 rounded-xl font-extrabold text-xs transition border flex flex-col items-center justify-center gap-0.5 cursor-pointer ${
-                                paymentStatus === 'partial'
-                                  ? 'bg-amber-600 text-white border-amber-400 shadow-md scale-102'
-                                  : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-700'
-                              }`}
-                            >
-                              <span>🟡 Partial Paid</span>
-                              <span className="text-[9.5px] font-mono opacity-80">(Pay part, rest due)</span>
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => { setPaymentStatus('credit'); setCustomPaidAmount(0); }}
-                              className={`py-2 px-3 rounded-xl font-extrabold text-xs transition border flex flex-col items-center justify-center gap-0.5 cursor-pointer ${
-                                paymentStatus === 'credit'
-                                  ? 'bg-rose-600 text-white border-rose-400 shadow-md scale-102'
-                                  : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-700'
-                              }`}
-                            >
-                              <span>🔴 Unpaid / Credit</span>
-                              <span className="text-[9.5px] font-mono opacity-80">(100% Pending Dues)</span>
-                            </button>
-                          </div>
-
-                          {/* PARTIAL PAYMENT CUSTOM PAID INPUT */}
-                          {paymentStatus === 'partial' && (
-                            <div className="animate-fade-in bg-amber-950/40 p-3 rounded-xl border border-amber-500/50 space-y-1.5">
-                              <label className="block text-xs font-extrabold text-amber-300 flex justify-between items-center">
-                                <span>Amount Paid Right Now (₹)</span>
-                                <span className="text-[10px] font-mono text-amber-200">Total: ₹{calculatedTotalBillCost.toFixed(2)}</span>
-                              </label>
-                              <input
-                                type="number"
-                                step="any"
-                                min="0"
-                                max={calculatedTotalBillCost}
-                                className="w-full bg-slate-900 border-2 border-amber-500 rounded-xl p-2.5 text-sm text-white font-mono font-black focus:outline-none shadow-inner"
-                                value={customPaidAmount}
-                                onChange={(e) => setCustomPaidAmount(e.target.value === '' ? '' : Number(e.target.value))}
-                                placeholder="Enter amount paid today..."
-                              />
-                            </div>
-                          )}
-
-                          {/* DUES BREAKDOWN BANNER */}
-                          <div className={`p-3 rounded-xl border font-mono text-xs flex justify-between items-center ${
-                            effectiveDueAmount > 0 
-                              ? 'bg-rose-950/80 border-rose-500/60 text-rose-200' 
-                              : 'bg-emerald-950/80 border-emerald-500/60 text-emerald-200'
-                          }`}>
-                            <div className="space-y-0.5">
-                              <div className="font-extrabold flex items-center gap-1.5 text-xs">
-                                <i className={`fa-solid ${effectiveDueAmount > 0 ? 'fa-circle-exclamation text-rose-400' : 'fa-circle-check text-emerald-400'}`}></i>
-                                <span>{effectiveDueAmount > 0 ? 'Vendor Outstanding Pending Dues:' : 'Bill Fully Settled:'}</span>
-                              </div>
-                              <div className="text-[10.5px] font-sans opacity-85">
-                                {effectiveDueAmount > 0 
-                                  ? `₹${effectiveDueAmount.toFixed(2)} pending amount will be added to ${vendorSearchQuery || 'Vendor'}'s Outstanding Balance ledger.`
-                                  : 'No pending dues will be added for this supplier.'
-                                }
-                              </div>
-                            </div>
-                            <div className="text-right font-black text-sm shrink-0">
-                              <div>{effectiveDueAmount > 0 ? `+ ₹${effectiveDueAmount.toFixed(2)}` : '₹0.00'}</div>
-                              <div className="text-[9.5px] font-normal uppercase opacity-75">{effectiveDueAmount > 0 ? 'Dues' : 'Zero Dues'}</div>
-                            </div>
-                          </div>
-                        </div>
                       </div>
                     )}
                   </div>
@@ -2380,6 +2327,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                     return (
                       <div 
                         key={item.id || index}
+                        id={`product-item-card-${index}`}
                         className="bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700/80 hover:border-blue-500/60 rounded-2xl p-4 shadow-sm transition-all flex items-center justify-between gap-3 animate-fade-in"
                       >
                         <div 
@@ -2434,7 +2382,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
 
                   // Full Expanded Form View
                   return (
-                    <div key={item.id || index} className="space-y-4 border border-slate-200 dark:border-slate-800 p-4 sm:p-5 rounded-2xl bg-slate-50/60 dark:bg-slate-900/50 shadow-xs">
+                    <div key={item.id || index} id={`product-item-card-${index}`} className="space-y-4 border border-slate-200 dark:border-slate-800 p-4 sm:p-5 rounded-2xl bg-slate-50/60 dark:bg-slate-900/50 shadow-xs">
                       
                       {/* Item Section Header (for multi-product tracking) */}
                       {productItems.length > 1 && (
@@ -3111,12 +3059,152 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                 </div>
               )}
 
+              {/* TOTAL BILL PAYMENT & VENDOR DUES ALLOCATION SECTION (STANDARD ERP BILLING BOTTOM BAR) */}
+              {!editingProduct && hasBillDetails && (
+                <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 border-2 border-blue-500/40 p-4 sm:p-5 rounded-2xl space-y-4 shadow-xl text-white mt-4 animate-fade-in">
+                  <div className="flex justify-between items-center border-b border-blue-500/30 pb-3 flex-wrap gap-2">
+                    <div className="space-y-0.5">
+                      <span className="font-extrabold text-xs sm:text-sm text-blue-300 uppercase tracking-wider flex items-center gap-2">
+                        <i className="fa-solid fa-wallet text-amber-400"></i> Total Bill Settlement & Payment Allocation
+                      </span>
+                      <p className="text-[11px] text-slate-400 font-sans">Select payment status and manage vendor accounts payable dues</p>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Grand Total Bill Cost</span>
+                      <span className="text-base sm:text-lg font-black text-amber-300 font-mono bg-amber-950/80 px-3 py-1 rounded-xl border border-amber-500/40 inline-block mt-0.5">
+                        ₹{calculatedTotalBillCost.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Transaction ID / UTR / Reference No. */}
+                  {paymentMode !== 'Cash' && (
+                    <div className="bg-blue-950/50 p-3.5 rounded-xl border border-blue-500/30 space-y-1.5 animate-fade-in">
+                      <label className="block text-xs text-blue-300 font-extrabold flex items-center justify-between">
+                        <span className="flex items-center gap-1.5 uppercase tracking-wide">
+                          <i className="fa-solid fa-receipt text-blue-400"></i> Transaction ID / UTR / Reference No.
+                        </span>
+                      </label>
+                      <input 
+                        type="text"
+                        className="w-full bg-slate-900 border border-blue-400/50 rounded-lg p-2.5 text-xs text-slate-100 font-mono font-bold focus:border-blue-400 focus:outline-none uppercase"
+                        value={transactionId}
+                        onChange={(e) => setTransactionId(e.target.value)}
+                        placeholder="E.G. UPI-981240192849 / CARD-492019 / GPAY REF ID"
+                      />
+                    </div>
+                  )}
+
+                  {/* PAYMENT STATUS TOGGLE BUTTONS */}
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-slate-300 uppercase tracking-wide">Select Settlement Option *</label>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                      <button
+                        type="button"
+                        onClick={() => { setPaymentStatus('paid'); setCustomPaidAmount(''); }}
+                        className={`py-2.5 px-3 rounded-xl font-extrabold text-xs transition border flex flex-col items-center justify-center gap-0.5 cursor-pointer ${
+                          paymentStatus === 'paid'
+                            ? 'bg-emerald-600 text-white border-emerald-400 shadow-md scale-102 ring-2 ring-emerald-500/30'
+                            : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-700'
+                        }`}
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                          🟢 Paid in Full
+                        </span>
+                        <span className="text-[10px] font-mono opacity-90">(₹{calculatedTotalBillCost.toFixed(2)})</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => { setPaymentStatus('partial'); if (customPaidAmount === '') setCustomPaidAmount(Math.round(calculatedTotalBillCost / 2)); }}
+                        className={`py-2.5 px-3 rounded-xl font-extrabold text-xs transition border flex flex-col items-center justify-center gap-0.5 cursor-pointer ${
+                          paymentStatus === 'partial'
+                            ? 'bg-amber-600 text-white border-amber-400 shadow-md scale-102 ring-2 ring-amber-500/30'
+                            : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-700'
+                        }`}
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                          🟡 Partial Paid
+                        </span>
+                        <span className="text-[10px] font-mono opacity-90">(Pay part, rest due)</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => { setPaymentStatus('credit'); setCustomPaidAmount(0); }}
+                        className={`py-2.5 px-3 rounded-xl font-extrabold text-xs transition border flex flex-col items-center justify-center gap-0.5 cursor-pointer ${
+                          paymentStatus === 'credit'
+                            ? 'bg-rose-600 text-white border-rose-400 shadow-md scale-102 ring-2 ring-rose-500/30'
+                            : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-700'
+                        }`}
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-rose-400 animate-pulse"></span>
+                          🔴 Unpaid / Credit
+                        </span>
+                        <span className="text-[10px] font-mono opacity-90">(100% Pending Dues)</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* PARTIAL PAYMENT CUSTOM PAID INPUT */}
+                  {paymentStatus === 'partial' && (
+                    <div className="animate-fade-in bg-amber-950/40 p-3.5 rounded-xl border border-amber-500/50 space-y-1.5">
+                      <label className="block text-xs font-extrabold text-amber-300 flex justify-between items-center">
+                        <span>Amount Paid Right Now (₹)</span>
+                        <span className="text-[10px] font-mono text-amber-200">Total: ₹{calculatedTotalBillCost.toFixed(2)}</span>
+                      </label>
+                      <input
+                        type="number"
+                        step="any"
+                        min="0"
+                        max={calculatedTotalBillCost}
+                        className="w-full bg-slate-900 border-2 border-amber-500 rounded-xl p-2.5 text-sm text-white font-mono font-black focus:outline-none shadow-inner"
+                        value={customPaidAmount}
+                        onChange={(e) => setCustomPaidAmount(e.target.value === '' ? '' : Number(e.target.value))}
+                        placeholder="Enter amount paid today..."
+                      />
+                    </div>
+                  )}
+
+                  {/* DUES BREAKDOWN BANNER */}
+                  <div className={`p-3.5 rounded-xl border font-mono text-xs flex justify-between items-center ${
+                    effectiveDueAmount > 0 
+                      ? 'bg-rose-950/80 border-rose-500/60 text-rose-200' 
+                      : 'bg-emerald-950/80 border-emerald-500/60 text-emerald-200'
+                  }`}>
+                    <div className="space-y-0.5">
+                      <div className="font-extrabold flex items-center gap-1.5 text-xs">
+                        <i className={`fa-solid ${effectiveDueAmount > 0 ? 'fa-circle-exclamation text-rose-400' : 'fa-circle-check text-emerald-400'}`}></i>
+                        <span>{effectiveDueAmount > 0 ? 'Vendor Outstanding Pending Dues:' : 'Bill Fully Settled:'}</span>
+                      </div>
+                      <div className="text-[10.5px] font-sans opacity-85">
+                        {effectiveDueAmount > 0 
+                          ? `₹${effectiveDueAmount.toFixed(2)} pending amount will be added to ${vendorSearchQuery || 'Vendor'}'s Outstanding Balance ledger.`
+                          : 'No pending dues will be added for this supplier.'
+                        }
+                      </div>
+                    </div>
+                    <div className="text-right font-black text-sm shrink-0">
+                      <div>{effectiveDueAmount > 0 ? `+ ₹${effectiveDueAmount.toFixed(2)}` : '₹0.00'}</div>
+                      <div className="text-[9.5px] font-normal uppercase opacity-75">{effectiveDueAmount > 0 ? 'Dues' : 'Zero Dues'}</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Sticky Action Footer */}
               <div className="shrink-0 flex gap-3 justify-end pt-3 border-t border-border mt-4">
                 <button type="button" className="px-5 py-2.5 border border-border text-textSecondary rounded-lg text-xs font-bold hover:bg-background transition cursor-pointer" onClick={() => { setEditingProduct(null); setModalOpen(false); }}>Cancel</button>
-                <button type="submit" className="px-5 py-2.5 bg-primary hover:bg-primary/90 text-white font-bold rounded-lg text-xs transition shadow-md cursor-pointer flex items-center gap-2">
-                  <i className="fa-solid fa-check"></i>
-                  <span>Save {productItems.length > 1 ? `${productItems.length} Products & Bill` : 'Item'}</span>
+                <button 
+                  type="submit" 
+                  disabled={isSavingProduct}
+                  className={`px-5 py-2.5 font-bold rounded-lg text-xs transition shadow-md cursor-pointer flex items-center gap-2 ${isSavingProduct ? 'bg-primary/60 text-white cursor-not-allowed' : 'bg-primary hover:bg-primary/90 text-white'}`}
+                >
+                  <i className={`fa-solid ${isSavingProduct ? 'fa-spinner fa-spin' : 'fa-check'}`}></i>
+                  <span>{isSavingProduct ? '⚡ Saving Product & Bill...' : `Save ${productItems.length > 1 ? `${productItems.length} Products & Bill` : 'Item'}`}</span>
                 </button>
               </div>
             </form>

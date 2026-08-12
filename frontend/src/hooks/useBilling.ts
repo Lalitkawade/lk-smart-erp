@@ -65,7 +65,7 @@ export function useBilling(tenantId: string) {
       throw new Error(`Insufficient stock. Only ${stockInBaseUnits} ${baseUnit} available in inventory.`);
     }
 
-    setCart(cart.map(i => (i.product.id === productId && i.isLoose === isLoose) ? { ...i, qty: Math.max(1, qty) } : i));
+    setCart(cart.map(i => (i.product.id === productId && i.isLoose === isLoose) ? { ...i, qty: Math.max(0, qty) } : i));
   };
 
   const updateCartRate = (productId: string, rate: number, isLoose: boolean = true) => {
@@ -85,26 +85,28 @@ export function useBilling(tenantId: string) {
     const otherItemsBaseUnits = cart
       .filter(i => i.product.id === productId && !(i.isLoose === currentIsLoose))
       .reduce((sum, i) => sum + (i.qty * (i.isLoose ? 1 : piecesPerPack)), 0);
+    const targetItem = cart.find(i => i.product.id === productId && i.isLoose === currentIsLoose);
+    if (!targetItem) return;
 
-    const requestedBaseUnits = otherItemsBaseUnits + (item.qty * (targetIsLoose ? 1 : piecesPerPack));
-
-    if (requestedBaseUnits > stockInBaseUnits) {
-      const baseUnit = item.product.unit || item.product.s_unit || 'Pcs';
-      throw new Error(`Cannot switch unit. Only ${stockInBaseUnits} ${baseUnit} available in inventory.`);
-    }
-
-    const { piecePrice, packPrice } = getProductUnitRates(item.product);
+    const { piecePrice, packPrice } = getProductUnitRates(targetItem.product);
     const newRate = targetIsLoose ? piecePrice : packPrice;
-    const pUnit = item.product.p_unit || 'Box';
-    const sUnit = item.product.s_unit || item.product.unit || 'Pcs';
-    const newUnitName = targetIsLoose ? sUnit : pUnit;
+    const existingTargetIndex = cart.findIndex(i => i.product.id === productId && i.isLoose === targetIsLoose);
 
-    setCart(cart.map(i => (i.product.id === productId && i.isLoose === currentIsLoose) ? {
-      ...i,
-      isLoose: targetIsLoose,
-      unitName: newUnitName,
-      rate: newRate
-    } : i));
+    if (existingTargetIndex >= 0) {
+      setCart(cart.filter(i => !(i.product.id === productId && i.isLoose === currentIsLoose)).map((i, idx) => {
+        if (i.product.id === productId && i.isLoose === targetIsLoose) {
+          return { ...i, qty: i.qty + targetItem.qty, rate: newRate };
+        }
+        return i;
+      }));
+    } else {
+      setCart(cart.map(i => {
+        if (i.product.id === productId && i.isLoose === currentIsLoose) {
+          return { ...i, isLoose: targetIsLoose, rate: newRate };
+        }
+        return i;
+      }));
+    }
   };
 
   const removeFromCart = (productId: string, isLoose: boolean = true) => {
@@ -112,9 +114,10 @@ export function useBilling(tenantId: string) {
   };
 
   const processCheckout = async (options?: { amountCollected?: number; repayUdharAmount?: number; paymentMode?: string; transactionId?: string; discountAmount?: number }) => {
-    if (cart.length === 0) throw new Error('Cart is empty.');
+    const activeCart = cart.filter(i => i.qty > 0);
+    if (activeCart.length === 0) throw new Error('Cart is empty or has 0 quantity items.');
 
-    const cartSubtotal = cart.reduce((acc, curr) => acc + curr.qty * curr.rate, 0);
+    const cartSubtotal = activeCart.reduce((acc, curr) => acc + curr.qty * curr.rate, 0);
     const manualDiscount = options?.discountAmount && options.discountAmount > 0 
       ? Math.min(cartSubtotal, options.discountAmount) 
       : 0;
@@ -308,9 +311,8 @@ export function useBilling(tenantId: string) {
         localStorage.setItem('lk_sales_invoices', JSON.stringify(nextList));
       } catch(e) {}
 
-      try {
-        await refreshAllData();
-      } catch (e) {}
+      // Refresh state asynchronously in background without blocking print modal render
+      refreshAllData().catch(e => console.warn('Background refresh error:', e));
 
       setCart([]);
       setCustomerName('Cash Customer');

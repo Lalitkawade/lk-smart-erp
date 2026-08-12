@@ -45,23 +45,18 @@ export class InventoryService {
     }>
   ): Promise<ServiceResponse<boolean>> {
     try {
-      for (const item of cartItems) {
-        if (!item.product || !item.product.id || !isValidUUID(item.product.id)) continue;
+      const updatePromises = cartItems.map(async (item) => {
+        if (!item.product || !item.product.id || !isValidUUID(item.product.id)) return;
 
         const piecesPerPack = Math.max(1, Number(item.product.pieces_per_pack || 1));
         const totalDeductedBaseUnits = item.isLoose ? item.qty : item.qty * piecesPerPack;
-
-        const { data: prod } = await supabase
-          .from('products')
-          .select('current_stock')
-          .eq('id', item.product.id)
-          .single();
-
-        const currentStock = Number(prod?.current_stock ?? item.product.current_stock ?? 0);
+        const currentStock = Number(item.product.current_stock ?? 0);
         const newStock = Math.max(0, currentStock - totalDeductedBaseUnits);
 
-        await supabase.from('products').update({ current_stock: newStock }).eq('id', item.product.id);
-      }
+        return supabase.from('products').update({ current_stock: newStock }).eq('id', item.product.id);
+      });
+
+      await Promise.all(updatePromises.filter(Boolean));
       return { data: true, error: null };
     } catch (e: any) {
       return { data: false, error: e.message };

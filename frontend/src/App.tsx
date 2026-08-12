@@ -176,6 +176,34 @@ function App() {
     }
   }, [theme]);
 
+  const udharDueCustomers = useMemo(() => {
+    if (!Array.isArray(customersList)) return [];
+    return customersList.filter((c: any) => Number(c.outstanding || 0) > 0);
+  }, [customersList]);
+
+  // Native Browser & Mobile Device Web Notifications for Udhar Dues Due Today
+  useEffect(() => {
+    if (udharDueCustomers.length > 0 && Boolean(user)) {
+      if ('Notification' in window) {
+        if (Notification.permission === 'granted') {
+          const totalDues = udharDueCustomers.reduce((acc: number, c: any) => acc + Number(c.outstanding || 0), 0);
+          const names = udharDueCustomers.map((c: any) => c.customer_name).slice(0, 3).join(', ');
+          try {
+            new Notification('⚠️ Udhar Payment Due Alert - LK Smart ERP', {
+              body: `Active Udhar Dues: ${udharDueCustomers.length} Customer(s) (${names}) have ₹${totalDues.toLocaleString('en-IN')} pending payments due today!`,
+              icon: '/logo.png',
+              tag: 'udhar-due-notification'
+            });
+          } catch (e) {
+            console.warn('Browser notification error:', e);
+          }
+        } else if (Notification.permission !== 'denied') {
+          Notification.requestPermission();
+        }
+      }
+    }
+  }, [udharDueCustomers.length, user]);
+
 
   const toggleTheme = () => {
     const nextTheme = theme === 'dark' ? 'light' : 'dark';
@@ -756,12 +784,43 @@ function App() {
                         </div>
                       </div>
                     )}
-                    {getCustomerDues() > 0 && (
-                      <div onClick={() => { setActiveTab('customers'); setShowNotifications(false); }} className="p-2 rounded bg-orange-500/5 hover:bg-orange-500/10 border border-orange-500/10 cursor-pointer text-xs flex gap-2">
-                        <i className="fa-solid fa-hand-holding-dollar text-orange-500 mt-0.5"></i>
-                        <div>
-                          <div className="font-bold text-orange-500">Pending Customer Payments</div>
-                          <div className="text-[10px] text-textSecondary mt-0.5">₹{getCustomerDues().toLocaleString()} outstanding dues from customers.</div>
+                    {udharDueCustomers.length > 0 && (
+                      <div 
+                        onClick={() => { setActiveTab('customers'); setShowNotifications(false); }} 
+                        className="p-3 rounded-xl bg-gradient-to-r from-amber-500/15 via-rose-500/10 to-amber-500/5 border border-amber-500/30 text-xs space-y-2 cursor-pointer hover:bg-amber-500/20 transition shadow-2xs"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex gap-2 items-start">
+                            <i className="fa-solid fa-hand-holding-dollar text-amber-500 text-base mt-0.5 animate-bounce"></i>
+                            <div>
+                              <div className="font-black text-amber-600 dark:text-amber-400 uppercase tracking-wide flex items-center gap-1.5">
+                                <span>Udhar Dues Pending Today</span>
+                                <span className="bg-amber-500 text-white text-[9.5px] px-1.5 py-0.2 rounded-full font-extrabold">{udharDueCustomers.length}</span>
+                              </div>
+                              <div className="text-[11px] font-bold text-foreground mt-0.5 flex items-center gap-2">
+                                <span>Total Dues: <strong className="text-rose-600 dark:text-rose-400 font-mono font-black">₹{getCustomerDues().toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
+                                <span className="text-[10px] text-amber-600 dark:text-amber-400 font-mono font-extrabold bg-amber-500/10 px-1.5 py-0.2 rounded border border-amber-500/20">📅 Due Date: Today</span>
+                              </div>
+                              <div className="text-[10px] text-textMuted mt-0.5 line-clamp-1">
+                                Customers: {udharDueCustomers.map((c: any) => c.customer_name).join(', ')}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="pt-1.5 border-t border-amber-500/20 flex items-center justify-between text-[10px]">
+                          <span className="text-primary font-bold hover:underline flex items-center gap-1">
+                            <i className="fa-solid fa-arrow-right"></i> Open Customer Udhar Ledger
+                          </span>
+                          {udharDueCustomers[0]?.phone && (
+                            <a 
+                              href={`tel:${udharDueCustomers[0].phone}`} 
+                              className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded text-[9.5px] uppercase transition shadow-2xs inline-flex items-center gap-1 cursor-pointer"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <i className="fa-solid fa-phone"></i> Call {udharDueCustomers[0].customer_name.split(' ')[0]}
+                            </a>
+                          )}
                         </div>
                       </div>
                     )}

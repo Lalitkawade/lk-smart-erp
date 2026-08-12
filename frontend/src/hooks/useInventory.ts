@@ -4,7 +4,7 @@ import { useErpContext } from '../context/ErpContext';
 import type { Product } from '../types/erp.types';
 
 export function useInventory(tenantId: string, _businessType?: string) {
-  const { products: contextProducts, isLoading: contextLoading, refreshAllData } = useErpContext();
+  const { products: contextProducts, isLoading: contextLoading, refreshAllData, setProducts } = useErpContext();
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
 
@@ -93,18 +93,20 @@ export function useInventory(tenantId: string, _businessType?: string) {
   };
 
   const deleteProduct = async (productId: string) => {
-    setIsDeleting(true);
+    // Optimistically remove ONLY the deleted row from state immediately (0ms UI latency, no table flicker)
+    if (setProducts) {
+      setProducts(prev => prev.filter(p => p.id !== productId));
+    }
     try {
       const res = await ProductService.deleteProduct(productId);
       if (res.error) {
         throw new Error(res.error);
       }
-      await refreshAllData();
     } catch (err: any) {
       console.error('Product delete error:', err.message || err);
+      // Rollback context state on network/API failure
+      await refreshAllData();
       throw err;
-    } finally {
-      setIsDeleting(false);
     }
   };
 

@@ -18,6 +18,9 @@ interface ErpContextType {
   isLoading: boolean;
   isRealtimeConnected: boolean;
   refreshAllData: () => Promise<void>;
+  setSuppliers: React.Dispatch<React.SetStateAction<Supplier[]>>;
+  setCustomers: React.Dispatch<React.SetStateAction<Customer[]>>;
+  setProducts: React.Dispatch<React.SetStateAction<Product[]>>;
 }
 
 const ErpContext = createContext<ErpContextType | undefined>(undefined);
@@ -207,7 +210,10 @@ export const ErpDataProvider: React.FC<{ children: ReactNode }> = ({ children })
         settings,
         isLoading,
         isRealtimeConnected,
-        refreshAllData
+        refreshAllData,
+        setSuppliers,
+        setCustomers,
+        setProducts
       }}
     >
       {children}

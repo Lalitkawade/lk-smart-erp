@@ -4,7 +4,7 @@ import { useErpContext } from '../context/ErpContext';
 import type { Supplier } from '../types/erp.types';
 
 export function useSuppliers(tenantId: string) {
-  const { suppliers: contextSuppliers, isLoading: contextLoading, refreshAllData } = useErpContext();
+  const { suppliers: contextSuppliers, isLoading: contextLoading, refreshAllData, setSuppliers } = useErpContext();
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
 
@@ -58,18 +58,20 @@ export function useSuppliers(tenantId: string) {
   };
 
   const deleteSupplier = async (supplierId: string) => {
-    setIsDeleting(true);
+    // Optimistically remove ONLY the deleted row from state immediately (0ms UI latency, no table flicker)
+    if (setSuppliers) {
+      setSuppliers(prev => prev.filter(s => s.id !== supplierId));
+    }
     try {
       const res = await SupplierService.deleteSupplier(supplierId);
       if (res.error) {
         throw new Error(res.error);
       }
-      await refreshAllData();
     } catch (err: any) {
       console.error('Supplier delete error:', err.message || err);
+      // Rollback context state on network/API failure
+      await refreshAllData();
       throw err;
-    } finally {
-      setIsDeleting(false);
     }
   };
 

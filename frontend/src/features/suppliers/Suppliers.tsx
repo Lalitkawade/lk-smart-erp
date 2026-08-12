@@ -81,6 +81,8 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
 
 
 
+  const [phoneError, setPhoneError] = useState<string | null>(null);
+
   const formatDateForInput = (dateVal?: string | null) => {
     if (!dateVal) return '';
     if (/^\d{4}-\d{2}-\d{2}$/.test(dateVal)) return dateVal;
@@ -95,6 +97,7 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
 
   const handleOpenAdd = () => {
     setEditingSupplier(null);
+    setPhoneError(null);
     setFormData({
       supplier_name: '',
       phone: '',
@@ -109,6 +112,7 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
 
   const handleOpenEdit = (s: Supplier) => {
     setEditingSupplier(s);
+    setPhoneError(null);
     setFormData({
       supplier_name: s.supplier_name,
       phone: s.phone || '',
@@ -130,12 +134,15 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
 
   const handleSaveSupplier = async (e: React.FormEvent) => {
     e.preventDefault();
+    setPhoneError(null);
     if (!formData.supplier_name.trim()) return;
 
     if (formData.phone.trim()) {
       const cleanPhone = formData.phone.trim().replace(/\D/g, '');
       if (cleanPhone.length !== 10) {
-        triggerToast('⚠️ Phone number must be compulsory 10 digits!');
+        const msg = '⚠️ Phone number must be compulsory 10 digits!';
+        setPhoneError(msg);
+        triggerToast(msg);
         return;
       }
     }
@@ -490,7 +497,7 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-            {isLoading ? (
+            {isLoading && suppliers.length === 0 ? (
               <tr>
                 <td colSpan={9} className="py-12 text-center text-slate-400 text-xs font-medium">
                   <div className="flex flex-col items-center justify-center gap-2">
@@ -560,37 +567,37 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
                     </span>
                   </td>
                   <td className="py-3.5 px-4 text-center">
-                    <div className="flex flex-col items-center justify-center gap-1.5 min-w-[260px] max-w-[300px] mx-auto">
+                    <div className="flex flex-col items-center justify-center gap-1.5 min-w-[180px] max-w-[240px] mx-auto">
                       {hasPayable && (
                         <button 
                           className="w-full text-[11px] bg-emerald-600 hover:bg-emerald-500 text-white font-black py-1 px-2 rounded-lg transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1 shadow-xs"
                           onClick={() => handleOpenPayModal(s)}
-                          title="Record payment payout to vendor"
+                          title={`Record payout to vendor (₹${stats.realtimeOutstanding.toFixed(2)})`}
                         >
-                          💵 Pay Vendor (₹{stats.realtimeOutstanding.toLocaleString()})
+                          <i className="fa-solid fa-hand-holding-dollar"></i> Pay Vendor (₹{stats.realtimeOutstanding.toLocaleString()})
                         </button>
                       )}
-                      <div className="grid grid-cols-3 gap-1 w-full">
+                      <div className="flex items-center justify-center gap-2 w-full">
                         <button 
-                          className="text-[10px] bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 py-1 px-1 rounded-lg font-bold transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1"
+                          className="w-7 h-7 sm:w-8 sm:h-8 bg-purple-500/10 hover:bg-purple-600 hover:text-white border border-purple-500/30 text-purple-600 dark:text-purple-400 rounded-full font-bold transition-all active:scale-95 cursor-pointer flex items-center justify-center shadow-2xs shrink-0"
                           onClick={() => setStatementSupplier(s)}
                           title="View vendor ledger statement"
                         >
-                          <i className="fa-solid fa-file-invoice text-[9px]"></i> Statement
+                          <i className="fa-solid fa-file-invoice text-xs"></i>
                         </button>
                         <button 
-                          className="text-[10px] bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 py-1 px-1 rounded-lg font-bold transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1"
+                          className="w-7 h-7 sm:w-8 sm:h-8 bg-blue-500/10 hover:bg-blue-600 hover:text-white border border-blue-500/30 text-blue-600 dark:text-blue-400 rounded-full font-bold transition-all active:scale-95 cursor-pointer flex items-center justify-center shadow-2xs shrink-0"
                           onClick={() => handleOpenEdit(s)}
                           title="Edit vendor profile"
                         >
-                          <i className="fa-solid fa-pen-to-square text-[9px]"></i> Edit
+                          <i className="fa-solid fa-pen-to-square text-xs"></i>
                         </button>
                         <button 
-                          className="text-[10px] bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-600 hover:text-white border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 py-1 px-1 rounded-lg font-bold transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1"
+                          className="w-7 h-7 sm:w-8 sm:h-8 bg-rose-500/10 hover:bg-rose-600 hover:text-white border border-rose-500/30 text-rose-600 dark:text-rose-400 rounded-full font-bold transition-all active:scale-95 cursor-pointer flex items-center justify-center shadow-2xs shrink-0"
                           onClick={() => handleDeleteSupplier(s.id)}
                           title="Delete vendor record"
                         >
-                          <i className="fa-solid fa-trash-can text-[9px]"></i> Delete
+                          <i className="fa-solid fa-trash-can text-xs"></i>
                         </button>
                       </div>
                     </div>
@@ -624,6 +631,13 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
 
             {/* Scrollable Form Body */}
             <form onSubmit={handleSaveSupplier} className="flex-1 min-h-0 overflow-y-auto pr-2 space-y-4 scrollbar-thin">
+              {phoneError && (
+                <div className="p-3.5 bg-rose-500/15 border border-rose-500/40 rounded-xl text-rose-600 dark:text-rose-400 text-xs font-bold flex items-center gap-2.5 shadow-sm">
+                  <i className="fa-solid fa-triangle-exclamation text-base text-rose-500 shrink-0"></i>
+                  <span>{phoneError}</span>
+                </div>
+              )}
+
               <div>
                 <label className="block text-xs font-semibold text-textSecondary mb-1">Supplier / Distributor Name *</label>
                 <input type="text" className="w-full bg-background border border-border rounded-lg p-2.5 text-xs text-foreground uppercase font-bold"
@@ -632,8 +646,26 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-textSecondary mb-1">Phone Number</label>
-                  <input type="text" maxLength={10} className="w-full bg-background border border-border rounded-lg p-2.5 text-xs text-foreground font-semibold"
-                    value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value.replace(/\D/g, '').slice(0, 10) })} placeholder="e.g. 9876543210" />
+                  <input 
+                    type="text" 
+                    maxLength={10} 
+                    className={`w-full bg-background border ${phoneError ? 'border-rose-500 ring-2 ring-rose-500/20 bg-rose-500/5' : 'border-border'} rounded-lg p-2.5 text-xs text-foreground font-semibold transition`}
+                    value={formData.phone} 
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                      setFormData({ ...formData, phone: val });
+                      if (val.length === 10 || val.length === 0) {
+                        setPhoneError(null);
+                      }
+                    }} 
+                    placeholder="e.g. 9876543210" 
+                  />
+                  {phoneError && (
+                    <p className="mt-1 text-[11px] font-bold text-rose-500 flex items-center gap-1">
+                      <i className="fa-solid fa-circle-exclamation text-[10px]"></i>
+                      {phoneError}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-textSecondary mb-1">Email ID</label>
@@ -728,31 +760,55 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
           
           <style>{`
             @media print {
+              @page {
+                size: A4 portrait;
+                margin: 5mm;
+              }
               body * {
-                visibility: hidden;
+                visibility: hidden !important;
               }
               #supplier-print-area, #supplier-print-area * {
-                visibility: visible;
+                visibility: visible !important;
               }
               #supplier-print-area {
-                position: absolute;
-                left: 0;
-                top: 0;
-                width: 100%;
+                position: absolute !important;
+                left: 0 !important;
+                top: 0 !important;
+                width: 100% !important;
+                max-width: 100% !important;
+                max-height: none !important;
+                overflow: visible !important;
                 background: white !important;
                 color: black !important;
-                padding: 20px !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                box-shadow: none !important;
+                border: none !important;
+              }
+              #supplier-print-area table {
+                width: 100% !important;
+                table-layout: fixed !important;
+                border-collapse: collapse !important;
+              }
+              #supplier-print-area th, #supplier-print-area td {
+                font-size: 9.5px !important;
+                padding: 4px 3px !important;
+                word-wrap: break-word !important;
+                overflow-wrap: break-word !important;
+              }
+              .print\:hidden {
+                display: none !important;
               }
             }
           `}</style>
 
-          <div className="bg-secondary border border-border rounded-2xl w-full max-w-4xl shadow-2xl print:bg-white print:border-none print:shadow-none print:p-0 flex flex-col justify-between max-h-[92vh] overflow-hidden" id="supplier-print-area">
+          <div className="bg-secondary border border-border rounded-2xl w-full max-w-5xl sm:max-w-6xl shadow-2xl print:bg-white print:border-none print:shadow-none print:p-0 flex flex-col justify-between max-h-[92vh] overflow-hidden" id="supplier-print-area">
             
             {/* Modal Header */}
-            <div className="p-4 sm:p-5 border-b border-border flex justify-between items-center bg-background/50 shrink-0 print:bg-white print:border-slate-300">
+            <div className="p-3.5 sm:p-5 border-b border-border flex justify-between items-center bg-background/50 shrink-0 print:bg-white print:border-slate-300">
               <div>
                 <span className="text-[10px] font-mono font-bold text-primary uppercase tracking-widest block">Accounts Payable Ledger</span>
-                <h3 className="text-lg font-black text-foreground print:text-black uppercase tracking-tight">
+                <h3 className="text-base sm:text-lg font-black text-foreground print:text-black uppercase tracking-tight">
                   Supplier Account Statement & Financial Ledger
                 </h3>
               </div>
@@ -766,7 +822,7 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
             </div>
 
             {/* Scrollable Modal Content */}
-            <div className="p-4 sm:p-6 space-y-5 overflow-y-auto flex-1 scrollbar-thin print:overflow-visible print:p-0">
+            <div className="p-3.5 sm:p-6 space-y-4 sm:space-y-5 overflow-y-auto flex-1 scrollbar-thin print:overflow-visible print:p-0">
               
               {/* Top Financial Summary Bento Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 print:grid-cols-3">
@@ -824,19 +880,19 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
                   <span className="text-[10px] font-mono text-textMuted font-bold">{statementLedger.items.length} Ledger Entries</span>
                 </div>
 
-                <div className="overflow-x-auto border border-border rounded-xl">
-                  <table className="w-full text-left text-xs text-textSecondary print:text-black border-collapse">
+                <div className="overflow-x-auto border border-border rounded-xl print:border-none print:overflow-visible">
+                  <table className="w-full text-left text-xs text-textSecondary print:text-black">
                     <thead>
-                      <tr className="border-b border-border bg-slate-100 dark:bg-slate-800/80 text-textPrimary text-[10.5px] font-extrabold uppercase divide-x divide-border">
-                        <th className="py-2.5 px-3 text-center whitespace-nowrap">Tx Date & Time</th>
-                        <th className="py-2.5 px-3 whitespace-nowrap">Voucher Details</th>
-                        <th className="py-2.5 px-3 text-center whitespace-nowrap">Ref / Bill No.</th>
-                        <th className="py-2.5 px-3 text-right whitespace-nowrap text-blue-600 dark:text-blue-400">Bill Add (Debit +)</th>
-                        <th className="py-2.5 px-3 text-right whitespace-nowrap text-emerald-600 dark:text-emerald-400">Settlement (Credit -)</th>
-                        <th className="py-2.5 px-3 text-right whitespace-nowrap text-amber-600 dark:text-amber-400">Running Balance</th>
+                      <tr className="border-b border-border bg-muted/80 text-foreground text-[11px] font-extrabold uppercase whitespace-nowrap">
+                        <th className="py-3 px-2 text-center w-[16%]">Tx Date & Time</th>
+                        <th className="py-3 px-2 text-left w-[27%]">Voucher Details</th>
+                        <th className="py-3 px-2 text-center w-[12%]">Ref / Bill No.</th>
+                        <th className="py-3 px-2 text-right w-[15%] text-blue-600 dark:text-blue-400">Bill Add (Debit +)</th>
+                        <th className="py-3 px-2 text-right w-[15%] text-emerald-600 dark:text-emerald-400">Settlement (Credit -)</th>
+                        <th className="py-3 px-2 text-right w-[15%] text-amber-600 dark:text-amber-400">Running Bal</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-border">
+                    <tbody className="divide-y divide-border/50">
                       {statementLedger.items.length === 0 ? (
                         <tr>
                           <td colSpan={6} className="py-8 text-center text-textMuted">No procurement or payout transactions logged for this vendor.</td>
@@ -846,28 +902,28 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
                           const formattedDateTime = formatLedgerDateTime(row.date);
 
                           return (
-                            <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors divide-x divide-border">
-                              <td className="py-2.5 px-3 text-center font-mono text-[11px] font-semibold whitespace-nowrap">
+                            <tr key={idx} className="hover:bg-primary/5 transition-colors border-b border-border/40">
+                              <td className="py-2.5 px-2 text-center font-mono text-[11px] font-semibold">
                                 {formattedDateTime}
                               </td>
-                              <td className="py-2.5 px-3 font-bold text-foreground print:text-black whitespace-nowrap">
+                              <td className="py-2.5 px-2 font-bold text-foreground print:text-black">
                                 <div className="flex items-center gap-1.5">
-                                  <i className={`fa-solid ${row.debit > 0 ? 'fa-file-invoice text-blue-500' : 'fa-circle-check text-emerald-500'} text-xs`}></i>
+                                  <i className={`fa-solid ${row.debit > 0 ? 'fa-file-invoice text-blue-500' : 'fa-circle-check text-emerald-500'} text-xs shrink-0`}></i>
                                   <span>{row.type}</span>
                                 </div>
                               </td>
-                              <td className="py-2.5 px-3 text-center font-mono font-bold text-xs">
-                                <span className="bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
+                              <td className="py-2.5 px-2 text-center font-mono font-bold text-xs">
+                                <span className="bg-muted px-1.5 py-0.5 rounded border border-border">
                                   {row.ref}
                                 </span>
                               </td>
-                              <td className="py-2.5 px-3 text-right font-mono font-bold text-blue-600 dark:text-blue-400 whitespace-nowrap">
+                              <td className="py-2.5 px-2 text-right font-mono font-bold text-blue-600 dark:text-blue-400">
                                 {row.debit > 0 ? `₹${row.debit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}
                               </td>
-                              <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+                              <td className="py-2.5 px-2 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
                                 {row.credit > 0 ? `₹${row.credit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}
                               </td>
-                              <td className="py-2.5 px-3 text-right font-mono font-black text-amber-600 dark:text-amber-400 whitespace-nowrap">
+                              <td className="py-2.5 px-2 text-right font-mono font-black text-amber-600 dark:text-amber-400">
                                 ₹{row.runningBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                               </td>
                             </tr>

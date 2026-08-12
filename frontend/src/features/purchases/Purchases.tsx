@@ -198,6 +198,7 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
 
   // Quick Vendor Registration State
   const [quickVendorModalOpen, setQuickVendorModalOpen] = useState(false);
+  const [quickVendorPhoneError, setQuickVendorPhoneError] = useState<string | null>(null);
   const [quickVendorFormData, setQuickVendorFormData] = useState({
     supplier_name: '',
     phone: '',
@@ -214,7 +215,16 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
 
   const handleQuickCreateVendor = async (e: React.FormEvent) => {
     e.preventDefault();
+    setQuickVendorPhoneError(null);
     if (!quickVendorFormData.supplier_name.trim()) return;
+
+    if (quickVendorFormData.phone.trim()) {
+      const cleanPhone = quickVendorFormData.phone.trim().replace(/\D/g, '');
+      if (cleanPhone.length !== 10) {
+        setQuickVendorPhoneError('⚠️ Mobile number must be compulsory 10 digits!');
+        return;
+      }
+    }
 
     const formattedName = quickVendorFormData.supplier_name.trim().toUpperCase();
     const newSupplierObj: Supplier = {
@@ -1022,6 +1032,13 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
             </div>
 
             <form onSubmit={handleQuickCreateVendor} className="space-y-3 text-xs">
+              {quickVendorPhoneError && (
+                <div className="p-3 bg-rose-500/15 border border-rose-500/40 rounded-xl text-rose-600 dark:text-rose-400 text-xs font-bold flex items-center gap-2 shadow-sm">
+                  <i className="fa-solid fa-triangle-exclamation text-sm text-rose-500 shrink-0"></i>
+                  <span>{quickVendorPhoneError}</span>
+                </div>
+              )}
+
               <div>
                 <label className="block text-xs font-semibold text-textSecondary mb-1">Supplier / Distributor Name *</label>
                 <input 
@@ -1039,11 +1056,22 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
                   <label className="block text-xs font-semibold text-textSecondary mb-1">Mobile Phone Number</label>
                   <input 
                     type="tel" 
-                    className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground font-semibold focus:border-primary focus:outline-none"
+                    maxLength={10}
+                    className={`w-full bg-background border ${quickVendorPhoneError ? 'border-rose-500 ring-2 ring-rose-500/20 bg-rose-500/5' : 'border-border'} rounded-lg p-2 text-xs text-foreground font-semibold focus:border-primary focus:outline-none transition`}
                     value={quickVendorFormData.phone} 
-                    onChange={(e) => setQuickVendorFormData({ ...quickVendorFormData, phone: e.target.value })} 
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                      setQuickVendorFormData({ ...quickVendorFormData, phone: val });
+                      if (val.length === 10 || val.length === 0) setQuickVendorPhoneError(null);
+                    }} 
                     placeholder="e.g. 9876543210" 
                   />
+                  {quickVendorPhoneError && (
+                    <p className="mt-1 text-[11px] font-bold text-rose-500 flex items-center gap-1">
+                      <i className="fa-solid fa-circle-exclamation text-[10px]"></i>
+                      {quickVendorPhoneError}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-textSecondary mb-1">Email ID</label>

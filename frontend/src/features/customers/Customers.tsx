@@ -18,6 +18,7 @@ interface Customer {
   dob?: string | null;
   credit_limit: number;
   outstanding: number;
+  due_date?: string | null;
   created_at: string;
 }
 
@@ -74,7 +75,8 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
     address: '',
     dob: '',
     credit_limit: 50000,
-    outstanding: 0
+    outstanding: 0,
+    due_date: ''
   });
 
   // Pay Down Outstanding Form
@@ -88,8 +90,11 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
 
 
 
+  const [phoneError, setPhoneError] = useState<string | null>(null);
+
   const handleOpenAdd = () => {
     setEditingCustomer(null);
+    setPhoneError(null);
     setFormData({
       customer_name: '',
       phone: '',
@@ -97,13 +102,15 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
       address: '',
       dob: '',
       credit_limit: 50000,
-      outstanding: 0
+      outstanding: 0,
+      due_date: ''
     });
     setModalOpen(true);
   };
 
   const handleOpenEdit = (c: Customer) => {
     setEditingCustomer(c);
+    setPhoneError(null);
     setFormData({
       customer_name: c.customer_name,
       phone: c.phone || '',
@@ -111,7 +118,8 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
       address: c.address || '',
       dob: c.dob || '',
       credit_limit: c.credit_limit,
-      outstanding: c.outstanding
+      outstanding: c.outstanding,
+      due_date: c.due_date || ''
     });
     setModalOpen(true);
   };
@@ -125,12 +133,15 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
 
   const handleSaveCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
+    setPhoneError(null);
     if (!formData.customer_name.trim()) return;
 
     if (formData.phone.trim()) {
       const cleanPhone = formData.phone.trim().replace(/\D/g, '');
       if (cleanPhone.length !== 10) {
-        triggerToast('⚠️ Phone number must be compulsory 10 digits!');
+        const msg = '⚠️ Phone number must be compulsory 10 digits!';
+        setPhoneError(msg);
+        triggerToast(msg);
         return;
       }
     }
@@ -146,6 +157,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
       dob: formData.dob || '',
       credit_limit: Number(formData.credit_limit || 0),
       outstanding: Number(formData.outstanding || 0),
+      due_date: formData.due_date || null,
       created_at: editingCustomer?.created_at
     };
 
@@ -412,6 +424,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
       realtimeOutstanding: number;
       lastPurchaseDate: string | null;
       lastPaymentDate: string | null;
+      udharDueDate: string | null;
     }>();
 
     masterCustomersList.forEach(c => {
@@ -461,11 +474,24 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
         lastPayDate = sortedPays[0].payment_date || null;
       }
 
+      // Compute Udhar Due Date: custom set due_date OR last purchase date + 15 days credit window
+      let computedDueDate: string | null = c.due_date || null;
+      if (!computedDueDate && lastPurchDate && realtimeOutstanding > 0) {
+        const d = new Date(lastPurchDate);
+        d.setDate(d.getDate() + 15);
+        computedDueDate = d.toISOString().slice(0, 10);
+      } else if (!computedDueDate && realtimeOutstanding > 0) {
+        const d = new Date(c.created_at || Date.now());
+        d.setDate(d.getDate() + 15);
+        computedDueDate = d.toISOString().slice(0, 10);
+      }
+
       map.set(c.id, {
         totalPurchases: totalSpent,
         realtimeOutstanding: realtimeOutstanding,
         lastPurchaseDate: lastPurchDate,
-        lastPaymentDate: lastPayDate
+        lastPaymentDate: lastPayDate,
+        udharDueDate: computedDueDate
       });
     });
 
@@ -549,7 +575,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-            {isLoading ? (
+            {isLoading && customers.length === 0 ? (
               <tr>
                 <td colSpan={8} className="py-12 text-center text-slate-400 text-xs font-medium">
                   <div className="flex flex-col items-center justify-center gap-2">
@@ -601,6 +627,12 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                       ₹{stats.realtimeOutstanding.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </span>
                     <div className="text-[10px] text-slate-400 font-mono mt-0.5">Limit: ₹{Number(c.credit_limit || 0).toLocaleString()}</div>
+                    {hasUdhar && stats.udharDueDate && (
+                      <div className="text-[10px] font-extrabold text-amber-600 dark:text-amber-400 font-mono mt-1 flex items-center justify-center gap-1 bg-amber-500/10 border border-amber-500/30 px-1.5 py-0.5 rounded-md inline-flex" title={`Udhar due date for ${c.customer_name}`}>
+                        <i className="fa-solid fa-calendar-day text-[9px]"></i>
+                        <span>Due: {new Date(stats.udharDueDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</span>
+                      </div>
+                    )}
                   </td>
                   <td className="py-3.5 px-4 text-center text-xs font-mono text-slate-600 dark:text-slate-300">
                     {stats.lastPurchaseDate ? new Date(stats.lastPurchaseDate).toLocaleDateString('en-IN') : '-'}
@@ -614,47 +646,47 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                     </span>
                   </td>
                   <td className="py-3.5 px-4 text-center">
-                    <div className="flex flex-col items-center justify-center gap-1.5 min-w-[260px] max-w-[300px] mx-auto">
+                    <div className="flex flex-col items-center justify-center gap-1.5 min-w-[200px] max-w-[260px] mx-auto">
                       {hasUdhar && (
                         <button
                           className="w-full text-[11px] bg-emerald-600 hover:bg-emerald-500 text-white font-black py-1 px-2 rounded-lg transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1 shadow-xs"
                           onClick={() => handleOpenPayModal(c)}
-                          title="Receive outstanding payment from this customer"
+                          title={`Collect Udhar payment (₹${stats.realtimeOutstanding.toFixed(2)})`}
                         >
-                          💵 Pay Udhar (₹{stats.realtimeOutstanding.toLocaleString()})
+                          <i className="fa-solid fa-hand-holding-dollar"></i> Pay Udhar (₹{stats.realtimeOutstanding.toLocaleString()})
                         </button>
                       )}
-                      <div className="grid grid-cols-4 gap-1 w-full">
+                      <div className="flex items-center justify-center gap-2 w-full">
                         <button
-                          className="text-[10px] bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-600 hover:text-white border border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 py-1 px-1 rounded-lg font-bold transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1"
+                          className="w-7 h-7 sm:w-8 sm:h-8 bg-indigo-500/10 hover:bg-indigo-600 hover:text-white border border-indigo-500/30 text-indigo-600 dark:text-indigo-400 rounded-full font-bold transition-all active:scale-95 cursor-pointer flex items-center justify-center shadow-2xs shrink-0"
                           onClick={() => onNewInvoice && onNewInvoice(c.customer_name)}
-                          title="Create new sales bill for this customer"
+                          title="Create new sales invoice bill for customer"
                         >
-                          <i className="fa-solid fa-cart-shopping text-[9px]"></i> Invoice
+                          <i className="fa-solid fa-cart-shopping text-xs"></i>
                         </button>
                         <button
-                          className="text-[10px] bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 py-1 px-1 rounded-lg font-bold transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1"
+                          className="w-7 h-7 sm:w-8 sm:h-8 bg-purple-500/10 hover:bg-purple-600 hover:text-white border border-purple-500/30 text-purple-600 dark:text-purple-400 rounded-full font-bold transition-all active:scale-95 cursor-pointer flex items-center justify-center shadow-2xs shrink-0"
                           onClick={() => {
                             setStatementTab('ledger');
                             setStatementCustomer(c);
                           }}
-                          title="View customer history & ledger"
+                          title="View customer statement & history ledger"
                         >
-                          <i className="fa-solid fa-clock-rotate-left text-[9px]"></i> History
+                          <i className="fa-solid fa-clock-rotate-left text-xs"></i>
                         </button>
                         <button
-                          className="text-[10px] bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 py-1 px-1 rounded-lg font-bold transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1"
+                          className="w-7 h-7 sm:w-8 sm:h-8 bg-blue-500/10 hover:bg-blue-600 hover:text-white border border-blue-500/30 text-blue-600 dark:text-blue-400 rounded-full font-bold transition-all active:scale-95 cursor-pointer flex items-center justify-center shadow-2xs shrink-0"
                           onClick={() => handleOpenEdit(c)}
-                          title="Edit customer details"
+                          title="Edit customer profile details"
                         >
-                          <i className="fa-solid fa-pen-to-square text-[9px]"></i> Edit
+                          <i className="fa-solid fa-pen-to-square text-xs"></i>
                         </button>
                         <button
-                          className="text-[10px] bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-600 hover:text-white border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 py-1 px-1 rounded-lg font-bold transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1"
+                          className="w-7 h-7 sm:w-8 sm:h-8 bg-rose-500/10 hover:bg-rose-600 hover:text-white border border-rose-500/30 text-rose-600 dark:text-rose-400 rounded-full font-bold transition-all active:scale-95 cursor-pointer flex items-center justify-center shadow-2xs shrink-0"
                           onClick={() => handleDeleteCustomer(c.id)}
                           title="Delete customer profile"
                         >
-                          <i className="fa-solid fa-trash-can text-[9px]"></i> Delete
+                          <i className="fa-solid fa-trash-can text-xs"></i>
                         </button>
                       </div>
                     </div>
@@ -688,6 +720,13 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
 
             {/* Scrollable Form Body */}
             <form onSubmit={handleSaveCustomer} className="flex-1 min-h-0 overflow-y-auto pr-2 space-y-4 scrollbar-thin">
+              {phoneError && (
+                <div className="p-3.5 bg-rose-500/15 border border-rose-500/40 rounded-xl text-rose-600 dark:text-rose-400 text-xs font-bold flex items-center gap-2.5 shadow-sm">
+                  <i className="fa-solid fa-triangle-exclamation text-base text-rose-500 shrink-0"></i>
+                  <span>{phoneError}</span>
+                </div>
+              )}
+
               <div>
                 <label className="block text-xs font-semibold text-textSecondary mb-1">Customer / Enterprise Name *</label>
                 <input type="text" className="w-full bg-background border border-border rounded-lg p-2.5 text-xs text-foreground uppercase font-bold"
@@ -696,8 +735,26 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-textSecondary mb-1">Phone Number</label>
-                  <input type="text" maxLength={10} className="w-full bg-background border border-border rounded-lg p-2.5 text-xs text-foreground font-semibold"
-                    value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value.replace(/\D/g, '').slice(0, 10) })} placeholder="e.g. 9876543210" />
+                  <input 
+                    type="text" 
+                    maxLength={10} 
+                    className={`w-full bg-background border ${phoneError ? 'border-rose-500 ring-2 ring-rose-500/20 bg-rose-500/5' : 'border-border'} rounded-lg p-2.5 text-xs text-foreground font-semibold transition`}
+                    value={formData.phone} 
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                      setFormData({ ...formData, phone: val });
+                      if (val.length === 10 || val.length === 0) {
+                        setPhoneError(null);
+                      }
+                    }} 
+                    placeholder="e.g. 9876543210" 
+                  />
+                  {phoneError && (
+                    <p className="mt-1 text-[11px] font-bold text-rose-500 flex items-center gap-1">
+                      <i className="fa-solid fa-circle-exclamation text-[10px]"></i>
+                      {phoneError}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-textSecondary mb-1">Email ID</label>
@@ -710,7 +767,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                     value={formData.dob} onChange={(e) => setFormData({ ...formData, dob: e.target.value })} />
                 </div>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-textSecondary mb-1">Credit Limit (₹) *</label>
                   <input type="number" className="w-full bg-background border border-border rounded-lg p-2.5 text-xs text-foreground font-mono font-bold"
@@ -729,7 +786,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                         className="text-[10px] font-extrabold text-amber-500 hover:text-amber-400 underline flex items-center gap-1 cursor-pointer"
                       >
                         <i className={`fa-solid ${isEditingOutstanding ? 'fa-lock' : 'fa-pen-to-square'}`}></i>
-                        {isEditingOutstanding ? 'Lock Field' : '✏️ Correct Dues'}
+                        {isEditingOutstanding ? 'Lock' : '✏️ Correct Dues'}
                       </button>
                     )}
                   </div>
@@ -743,6 +800,15 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                     placeholder="0"
                     onFocus={(e) => e.target.select()}
                     onChange={(e) => setFormData({ ...formData, outstanding: e.target.value === '' ? 0 : (parseInt(e.target.value) || 0) })} />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-textSecondary mb-1">Udhar Payment Due Date</label>
+                  <input 
+                    type="date" 
+                    className="w-full bg-background border border-border rounded-lg p-2.5 text-xs text-foreground font-mono font-semibold"
+                    value={formData.due_date} 
+                    onChange={(e) => setFormData({ ...formData, due_date: e.target.value })} 
+                  />
                 </div>
               </div>
               <div>
@@ -936,26 +1002,50 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
 
           <style>{`
             @media print {
+              @page {
+                size: A4 portrait;
+                margin: 5mm;
+              }
               body * {
-                visibility: hidden;
+                visibility: hidden !important;
               }
               #statement-print-area, #statement-print-area * {
-                visibility: visible;
+                visibility: visible !important;
               }
               #statement-print-area {
-                position: absolute;
-                left: 0;
-                top: 0;
-                width: 100%;
+                position: absolute !important;
+                left: 0 !important;
+                top: 0 !important;
+                width: 100% !important;
+                max-width: 100% !important;
+                max-height: none !important;
+                overflow: visible !important;
                 background: white !important;
                 color: black !important;
-                padding: 15px !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                box-shadow: none !important;
+                border: none !important;
+              }
+              #statement-print-area table {
+                width: 100% !important;
+                table-layout: fixed !important;
+                border-collapse: collapse !important;
+              }
+              #statement-print-area th, #statement-print-area td {
+                font-size: 9px !important;
+                padding: 3px 2px !important;
+                word-wrap: break-word !important;
+                overflow-wrap: break-word !important;
+              }
+              .print\:hidden {
+                display: none !important;
               }
             }
           `}</style>
 
-          <div className="bg-secondary border border-border p-6 rounded-xl w-full max-w-4xl shadow-2xl print:bg-white print:border-none print:shadow-none print:p-0 flex flex-col justify-between max-h-[90vh]" id="statement-print-area">
-            <div className="space-y-4 overflow-y-auto pr-1">
+          <div className="bg-secondary border border-border p-3.5 sm:p-6 rounded-2xl w-full max-w-6xl sm:max-w-7xl shadow-2xl print:bg-white print:border-none print:shadow-none print:p-0 flex flex-col justify-between max-h-[92vh] sm:max-h-[90vh]" id="statement-print-area">
+            <div className="space-y-4 overflow-y-auto pr-1 print:overflow-visible print:pr-0 scrollbar-thin">
 
               {/* Header */}
               {(() => {
@@ -964,16 +1054,16 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
 
                 return (
                   <>
-                    <div className="flex justify-between items-center pb-3 border-b border-border print:border-slate-300">
+                    <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2.5 pb-3 border-b border-border print:border-slate-300">
                       <div>
                         <span className="text-[10px] font-bold text-primary uppercase tracking-widest print:hidden">Customer History & Ledger Hub</span>
-                        <h3 className="text-lg font-black text-foreground print:text-black uppercase mt-0.5">{statementCustomer.customer_name} — Account Profile</h3>
+                        <h3 className="text-base sm:text-lg font-black text-foreground print:text-black uppercase mt-0.5">{statementCustomer.customer_name} — Account Profile</h3>
                       </div>
-                      <div className="flex gap-2 print:hidden">
+                      <div className="flex flex-wrap sm:flex-nowrap gap-1.5 sm:gap-2 print:hidden">
                         {stmtDues > 0 && (
                           <button
                             onClick={() => handleOpenPayModal(statementCustomer)}
-                            className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-lg text-xs transition shadow-md flex items-center gap-1 active:scale-95 cursor-pointer"
+                            className="px-2.5 sm:px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-lg text-[11px] sm:text-xs transition shadow-md flex items-center gap-1 active:scale-95 cursor-pointer whitespace-nowrap"
                           >
                             💵 Collect Udhar (₹{stmtDues.toFixed(2)})
                           </button>
@@ -984,7 +1074,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                             setStatementCustomer(null);
                             if (onNewInvoice) onNewInvoice(name);
                           }}
-                          className="px-3.5 py-1.5 bg-primary hover:bg-primary/90 text-white font-bold rounded-lg text-xs transition shadow-md flex items-center gap-1 active:scale-95 cursor-pointer"
+                          className="px-2.5 sm:px-3.5 py-1.5 bg-primary hover:bg-primary/90 text-white font-bold rounded-lg text-[11px] sm:text-xs transition shadow-md flex items-center gap-1 active:scale-95 cursor-pointer whitespace-nowrap"
                         >
                           🛒 Create New Invoice
                         </button>
@@ -998,7 +1088,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                     </div>
 
                     {/* Customer Metadata Card */}
-                    <div className="bg-background p-4 border border-border rounded-xl grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-xs print:bg-white print:border-slate-300 print:text-black">
+                    <div className="bg-background p-3.5 sm:p-4 border border-border rounded-xl grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 text-xs print:bg-white print:border-slate-300 print:text-black">
                       <div>
                         <div className="text-textMuted text-[10px] uppercase font-bold">Account Name</div>
                         <div className="text-foreground print:text-black font-bold uppercase">{statementCustomer.customer_name}</div>
@@ -1031,7 +1121,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
               })()}
 
               {/* Interactive History Tabs */}
-              <div className="flex border-b border-border text-xs font-bold gap-2 print:hidden">
+              <div className="flex border-b border-border text-xs font-bold gap-1.5 sm:gap-2 print:hidden overflow-x-auto whitespace-nowrap scrollbar-none pb-0.5">
                 <button
                   onClick={() => setStatementTab('ledger')}
                   className={`py-2 px-3 border-b-2 transition ${statementTab === 'ledger' ? 'border-primary text-primary' : 'border-transparent text-textMuted hover:text-foreground'}`}
@@ -1087,18 +1177,18 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                   </div>
 
                   {/* Organized Financial Statement Table */}
-                  <div className="overflow-x-auto border border-border print:border-slate-300 rounded-xl bg-background/25">
-                    <table className="w-full text-left text-xs text-textSecondary print:text-black border-collapse">
+                  <div className="overflow-x-auto border border-border print:border-slate-300 rounded-xl bg-background/25 print:overflow-visible">
+                    <table className="w-full text-left text-xs text-textSecondary print:text-black">
                       <thead>
                         <tr className="border-b border-border print:border-slate-300 bg-background/50 print:bg-slate-100 text-textPrimary print:text-black text-[10px] font-extrabold uppercase tracking-wider whitespace-nowrap">
-                          <th className="p-3 text-center">#</th>
-                          <th className="p-3">Tx Date & Time</th>
-                          <th className="p-3">Entry / Particulars</th>
-                          <th className="p-3">Ref / Inv No.</th>
-                          <th className="p-3">Mode</th>
-                          <th className="p-3 text-right">Debit (Billed +)</th>
-                          <th className="p-3 text-right">Credit (Paid -)</th>
-                          <th className="p-3 text-right font-black">Running Balance</th>
+                          <th className="p-2.5 text-center w-[4%]">#</th>
+                          <th className="p-2.5 text-center w-[16%]">Tx Date & Time</th>
+                          <th className="p-2.5 text-left w-[25%]">Entry / Particulars</th>
+                          <th className="p-2.5 text-center w-[15%]">Ref / Inv No.</th>
+                          <th className="p-2.5 text-center w-[8%]">Mode</th>
+                          <th className="p-2.5 text-right w-[10%]">Debit (+)</th>
+                          <th className="p-2.5 text-right w-[10%]">Credit (-)</th>
+                          <th className="p-2.5 text-right w-[12%] font-black">Running Bal</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border print:divide-slate-200">

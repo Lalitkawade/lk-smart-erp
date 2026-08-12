@@ -237,12 +237,13 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
 
   const handleQuickCreateCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
+    setQuickCustPhoneError(null);
     if (!quickCustFormData.customer_name.trim()) return;
 
     if (quickCustFormData.phone.trim()) {
       const cleanPhone = quickCustFormData.phone.trim().replace(/\D/g, '');
       if (cleanPhone.length !== 10) {
-        alert('⚠️ Mobile number must be compulsory 10 digits!');
+        setQuickCustPhoneError('⚠️ Mobile number must be compulsory 10 digits!');
         return;
       }
     }
@@ -354,11 +355,13 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
 
   const handleQtyChange = (productId: string, qty: number, isLoose: boolean = false) => {
     try {
-      updateCartQty(productId, qty, isLoose);
+      updateCartQty(productId, Math.max(0, qty), isLoose);
     } catch (e: any) {
       alert(e.message);
     }
   };
+
+  const [isBillingProcessing, setIsBillingProcessing] = useState(false);
 
   const handleCheckoutSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -366,6 +369,9 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
       alert('Cart is empty!');
       return;
     }
+
+    if (isBillingProcessing) return;
+    setIsBillingProcessing(true);
 
     const collectedNum = amountCollectedInput.trim() !== ''
       ? parseFloat(amountCollectedInput) || 0
@@ -383,15 +389,16 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
         transactionId: transactionId.trim(),
         discountAmount: manualDiscount
       });
-      alert('Invoice successfully billed, inventory stock decremented.');
       setBillingModal(false);
       setRepayUdharInput('');
       setAmountCollectedInput('');
       setManualDiscountInput('');
-      // Auto open print modal for the newly generated bill!
+      // Auto open print modal for the newly generated bill instantly!
       setPrintInvoice(bill);
     } catch (err: any) {
       alert('Checkout failed: ' + err.message);
+    } finally {
+      setIsBillingProcessing(false);
     }
   };
 
@@ -651,14 +658,244 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
               </div>
 
               {/* Cart & Invoice Desk Panel (Expanded to 7/12 width) */}
-              <div className="w-full md:w-7/12 flex flex-col justify-between pl-0 md:pl-2">
+              <form onSubmit={handleCheckoutSubmit} className="w-full md:w-7/12 flex flex-col justify-between pl-0 md:pl-2 space-y-4">
+                
+                {/* 1. TOP: CUSTOMER SELECTION & MOBILE NUMBER SECTION */}
+                <div className="bg-background/50 border border-border p-3.5 rounded-xl space-y-3 shadow-xs">
+                  <div>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="block text-xs text-textSecondary font-semibold">Select / Search Customer</label>
+                      <div className="flex gap-2 items-center">
+                        <button 
+                          type="button"
+                          onClick={() => {
+                            const query = custSearchQuery.trim();
+                            const isPhone = /^\d+$/.test(query);
+                            setQuickCustFormData({
+                              customer_name: isPhone ? '' : query.toUpperCase(),
+                              phone: isPhone ? query : '',
+                              email: '',
+                              address: '',
+                              dob: '',
+                              credit_limit: 50000
+                            });
+                            setQuickCustModalOpen(true);
+                          }}
+                          className="text-[10px] text-primary font-bold bg-primary/10 hover:bg-primary/20 px-2 py-0.5 rounded border border-primary/30 transition flex items-center gap-1 active:scale-95 cursor-pointer"
+                        >
+                          ➕ Register New Customer
+                        </button>
+                        {matchedCustomer && (
+                          <button
+                            type="button"
+                            onClick={() => setShowHistoryModal(true)}
+                            className="text-[10px] bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 font-bold px-2 py-0.5 rounded border border-blue-500/30 transition flex items-center gap-1 active:scale-95 cursor-pointer"
+                          >
+                            📜 History ({matchedCustomerInvoices.length})
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="relative">
+                      <input 
+                        type="text" 
+                        className="w-full bg-background border border-border rounded-lg p-2.5 text-xs text-foreground font-semibold focus:border-primary focus:outline-none uppercase pr-8"
+                        value={custSearchQuery || customerName} 
+                        onFocus={() => setCustDropdownOpen(true)}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setCustSearchQuery(val);
+                          setCustomerName(val);
+                          setCustDropdownOpen(true);
+                        }} 
+                        placeholder="🔍 Search existing customer by Name or Mobile Phone..."
+                      />
+                      {(customerName || custSearchQuery) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCustomerName('');
+                            setCustomerPhone('');
+                            setCustSearchQuery('');
+                            setCustDropdownOpen(false);
+                          }}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-textMuted hover:text-foreground text-xs font-bold"
+                          title="Clear customer selection"
+                        >
+                          &times;
+                        </button>
+                      )}
+
+                      {/* Floating Interactive Autocomplete Dropdown */}
+                      {custDropdownOpen && (
+                        <div className="absolute left-0 right-0 top-full mt-1 bg-secondary border border-border rounded-xl shadow-2xl z-50 max-h-56 overflow-y-auto divide-y divide-border/40 scrollbar-thin animate-fade-in">
+                          <div 
+                            onClick={() => {
+                              setCustomerName('');
+                              setCustomerPhone('');
+                              setCustSearchQuery('');
+                              setCustDropdownOpen(false);
+                            }}
+                            className="p-2.5 text-xs font-bold text-textMuted hover:bg-background/80 cursor-pointer flex justify-between items-center"
+                          >
+                            <span>🛒 Walk-in Cash Customer (Default)</span>
+                            <span className="text-[10px] text-textMuted">No profile required</span>
+                          </div>
+
+                          {filteredSearchableCustomers.length === 0 ? (
+                            <div className="p-3 text-center text-xs text-textMuted font-semibold">
+                              No matching existing customers found for "{custSearchQuery}".
+                            </div>
+                          ) : (
+                            filteredSearchableCustomers.map((c, idx) => (
+                              <div
+                                key={idx}
+                                onClick={() => {
+                                  setCustomerName(c.customer_name);
+                                  setCustomerPhone(c.phone || '');
+                                  setCustSearchQuery(c.customer_name);
+                                  setCustDropdownOpen(false);
+                                }}
+                                className="p-2.5 hover:bg-primary/10 cursor-pointer flex justify-between items-center text-xs transition"
+                              >
+                                <div>
+                                  <div className="font-extrabold text-foreground uppercase flex items-center gap-1.5">
+                                    {c.customer_name}
+                                    {c.isRegistered ? (
+                                      <span className="text-[9px] bg-primary/20 text-primary font-bold px-1.5 py-0.2 rounded border border-primary/30">✓ Registered</span>
+                                    ) : (
+                                      <span className="text-[9px] bg-blue-500/20 text-blue-300 font-bold px-1.5 py-0.2 rounded border border-blue-500/30">📜 Past Buyer</span>
+                                    )}
+                                  </div>
+                                  <div className="text-[10.5px] text-textMuted font-mono mt-0.5">
+                                    {c.phone ? `Phone: ${c.phone}` : 'No Phone'} • {c.invCount} Bills
+                                  </div>
+                                </div>
+
+                                <div className="text-right font-mono">
+                                  {c.outstanding > 0 ? (
+                                    <span className="text-amber-400 font-extrabold text-xs bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">
+                                      ₹{c.outstanding.toFixed(2)} Udhar
+                                    </span>
+                                  ) : (
+                                    <span className="text-primary font-bold text-[10px]">
+                                      ✓ No Dues
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            ))
+                          )}
+
+                          {/* Quick Register Action Button at bottom of Dropdown */}
+                          {custSearchQuery.trim() && (
+                            <div
+                              onClick={() => {
+                                const query = custSearchQuery.trim();
+                                const isPhone = /^\d+$/.test(query);
+                                setQuickCustFormData({
+                                  customer_name: isPhone ? '' : query.toUpperCase(),
+                                  phone: isPhone ? query : '',
+                                  email: '',
+                                  address: '',
+                                  dob: '',
+                                  credit_limit: 50000
+                                });
+                                setCustDropdownOpen(false);
+                                setQuickCustModalOpen(true);
+                              }}
+                              className="p-2.5 bg-primary/10 hover:bg-primary/20 text-primary font-extrabold text-xs cursor-pointer flex items-center justify-between border-t border-primary/30 transition"
+                            >
+                              <span>➕ Register New Customer Profile for "{custSearchQuery.toUpperCase()}"</span>
+                              <span className="text-[10px] bg-primary text-white px-2 py-0.5 rounded font-black">Register Now &rarr;</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-textSecondary mb-1 font-semibold">Customer Mobile Number</label>
+                    <input type="tel" maxLength={10} className="w-full bg-background border border-border rounded p-2 text-xs text-foreground font-semibold"
+                      value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="e.g. 9876543210" />
+                  </div>
+
+                  {/* Outstanding Balance Display Card */}
+                  {matchedCustomer && (
+                    <div className={`border-2 rounded-xl p-3 text-xs space-y-2 shadow-sm ${previousOutstanding > 0 ? 'bg-amber-500/15 border-amber-500/50 text-slate-900 dark:text-slate-100' : 'bg-primary/10 border-primary/30 text-slate-900 dark:text-slate-100'}`}>
+                      <div className="flex justify-between items-center font-bold">
+                        <span className="flex items-center gap-1.5 uppercase text-[11px] font-black tracking-wider text-amber-950 dark:text-amber-300">
+                          {previousOutstanding > 0 ? '📌 Udhar Account Status:' : '✓ Customer Account Status:'}
+                        </span>
+                        <span className={`px-2.5 py-0.5 rounded text-[10px] font-black uppercase ${previousOutstanding > 0 ? 'bg-amber-500 text-slate-950 border border-amber-600' : 'bg-primary text-white border border-primary/40'}`}>
+                          {previousOutstanding > 0 ? '⚠️ Pending Dues' : '✓ No Dues'}
+                        </span>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] pt-1 border-t border-amber-500/30 font-semibold">
+                        <div>
+                          <span className="text-slate-700 dark:text-slate-300 block text-[10px] font-bold">Previous Outstanding:</span>
+                          <span className="font-mono text-base font-black text-rose-700 dark:text-rose-400">₹{previousOutstanding.toFixed(2)}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-700 dark:text-slate-300 block text-[10px] font-bold">Last Credit Date:</span>
+                          <span className="font-mono text-xs font-black text-slate-900 dark:text-slate-100">
+                            {lastCreditDate ? new Date(lastCreditDate).toLocaleDateString() : 'N/A'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Explicit Previous Udhar Repayment Field */}
+                      {previousOutstanding > 0 && (
+                        <div className="mt-2 pt-2 border-t border-amber-500/30 space-y-2">
+                          <div className="flex justify-between items-center text-xs">
+                            <label className="font-black text-amber-950 dark:text-amber-300 text-[11px]">Repay Previous Udhar (₹):</label>
+                            <div className="flex gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => setRepayUdharInput(previousOutstanding.toString())}
+                                className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white text-[10.5px] font-black rounded-md border border-amber-700 shadow-sm transition active:scale-95"
+                              >
+                                Repay Full Udhar (₹{previousOutstanding.toFixed(2)})
+                              </button>
+                              {repayUdharInput && (
+                                <button
+                                  type="button"
+                                  onClick={() => setRepayUdharInput('')}
+                                  className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-bold rounded-md border border-slate-600 transition"
+                                >
+                                  Clear
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          <input
+                            type="number"
+                            min="0"
+                            max={previousOutstanding}
+                            step="any"
+                            value={repayUdharInput}
+                            onChange={(e) => setRepayUdharInput(e.target.value)}
+                            placeholder={`Enter amount to repay previous udhar (e.g. ₹${previousOutstanding.toFixed(2)})`}
+                            className="w-full bg-slate-900 border-2 border-amber-600 rounded-lg p-2.5 text-xs text-amber-300 font-mono font-bold placeholder-slate-400 focus:outline-none focus:border-amber-400"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* 2. MIDDLE: INVOICE CART & CUSTOMER DESK SECTION */}
                 <div>
                   <h3 className="text-md font-bold text-foreground mb-3 flex justify-between items-center">
                     <span>Invoice Cart & Customer Desk</span>
                     <span className="text-xs text-textMuted font-semibold">{cart.length} item(s) selected</span>
                   </h3>
                   
-                  <div className="space-y-2 overflow-y-auto max-h-[42vh] pr-1 scrollbar-thin border-b border-border/60 pb-3 mb-4">
+                  <div className="space-y-2 overflow-y-auto max-h-[35vh] pr-1 scrollbar-thin border-b border-border/60 pb-3 mb-2">
                     {cart.length === 0 ? (
                       <p className="text-xs text-textMuted text-center py-4 bg-background/20 rounded-lg border border-dashed border-border/50">No items selected yet. Click items on the left panel to add to cart.</p>
                     ) : cart.map((item) => {
@@ -717,10 +954,14 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                               <input 
                                 type="number" 
                                 step="any"
-                                min="1"
+                                min="0"
                                 className="w-16 bg-background border border-border rounded text-center text-xs text-foreground p-1 font-mono font-black focus:outline-none focus:border-primary shadow-inner"
-                                value={item.qty} 
-                                onChange={(e) => handleQtyChange(item.product.id, parseInt(e.target.value) || 1, isLoose)} 
+                                value={item.qty === 0 ? '' : item.qty} 
+                                onFocus={(e) => e.target.select()}
+                                onChange={(e) => {
+                                  const val = e.target.value === '' ? 0 : (parseFloat(e.target.value) || 0);
+                                  handleQtyChange(item.product.id, Math.max(0, val), isLoose);
+                                }} 
                                 title="Quantity" 
                               />
                               <span className="text-[10px] font-bold text-foreground uppercase">{unitName}</span>
@@ -751,497 +992,274 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                   </div>
                 </div>
 
-              {/* Checkout Form */}
-              <form onSubmit={handleCheckoutSubmit} className="mt-6 pt-4 border-t border-border space-y-4">
-                <div>
-                  <div className="flex justify-between items-center mb-1">
-                    <label className="block text-xs text-textSecondary font-semibold">Select / Search Customer</label>
-                    <div className="flex gap-2 items-center">
-                      <button 
-                        type="button"
-                        onClick={() => {
-                          const query = custSearchQuery.trim();
-                          const isPhone = /^\d+$/.test(query);
-                          setQuickCustFormData({
-                            customer_name: isPhone ? '' : query.toUpperCase(),
-                            phone: isPhone ? query : '',
-                            email: '',
-                            address: '',
-                            dob: '',
-                            credit_limit: 50000
-                          });
-                          setQuickCustModalOpen(true);
-                        }}
-                        className="text-[10px] text-primary font-bold bg-primary/10 hover:bg-primary/20 px-2 py-0.5 rounded border border-primary/30 transition flex items-center gap-1 active:scale-95 cursor-pointer"
-                      >
-                        ➕ Register New Customer
-                      </button>
-                      {matchedCustomer && (
-                        <button
-                          type="button"
-                          onClick={() => setShowHistoryModal(true)}
-                          className="text-[10px] bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 font-bold px-2 py-0.5 rounded border border-blue-500/30 transition flex items-center gap-1 active:scale-95"
-                        >
-                          📜 History ({matchedCustomerInvoices.length})
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="relative">
-                    <input 
-                      type="text" 
-                      className="w-full bg-background border border-border rounded-lg p-2.5 text-xs text-foreground font-semibold focus:border-primary focus:outline-none uppercase pr-8"
-                      value={custSearchQuery || customerName} 
-                      onFocus={() => setCustDropdownOpen(true)}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setCustSearchQuery(val);
-                        setCustomerName(val);
-                        setCustDropdownOpen(true);
-                      }} 
-                      placeholder="🔍 Search existing customer by Name or Mobile Phone..."
-                    />
-                    {(customerName || custSearchQuery) && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCustomerName('');
-                          setCustomerPhone('');
-                          setCustSearchQuery('');
-                          setCustDropdownOpen(false);
-                        }}
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-textMuted hover:text-foreground text-xs font-bold"
-                        title="Clear customer selection"
-                      >
-                        &times;
-                      </button>
-                    )}
-
-                    {/* Floating Interactive Autocomplete Dropdown */}
-                    {custDropdownOpen && (
-                      <div className="absolute left-0 right-0 top-full mt-1 bg-secondary border border-border rounded-xl shadow-2xl z-50 max-h-56 overflow-y-auto divide-y divide-border/40 scrollbar-thin animate-fade-in">
-                        <div 
-                          onClick={() => {
-                            setCustomerName('');
-                            setCustomerPhone('');
-                            setCustSearchQuery('');
-                            setCustDropdownOpen(false);
-                          }}
-                          className="p-2.5 text-xs font-bold text-textMuted hover:bg-background/80 cursor-pointer flex justify-between items-center"
-                        >
-                          <span>🛒 Walk-in Cash Customer (Default)</span>
-                          <span className="text-[10px] text-textMuted">No profile required</span>
-                        </div>
-
-                        {filteredSearchableCustomers.length === 0 ? (
-                          <div className="p-3 text-center text-xs text-textMuted font-semibold">
-                            No matching existing customers found for "{custSearchQuery}".
-                          </div>
-                        ) : (
-                          filteredSearchableCustomers.map((c, idx) => (
-                            <div
-                              key={idx}
-                              onClick={() => {
-                                setCustomerName(c.customer_name);
-                                setCustomerPhone(c.phone || '');
-                                setCustSearchQuery(c.customer_name);
-                                setCustDropdownOpen(false);
-                              }}
-                              className="p-2.5 hover:bg-primary/10 cursor-pointer flex justify-between items-center text-xs transition"
-                            >
-                              <div>
-                                <div className="font-extrabold text-foreground uppercase flex items-center gap-1.5">
-                                  {c.customer_name}
-                                  {c.isRegistered ? (
-                                    <span className="text-[9px] bg-primary/20 text-primary font-bold px-1.5 py-0.2 rounded border border-primary/30">✓ Registered</span>
-                                  ) : (
-                                    <span className="text-[9px] bg-blue-500/20 text-blue-300 font-bold px-1.5 py-0.2 rounded border border-blue-500/30">📜 Past Buyer</span>
-                                  )}
-                                </div>
-                                <div className="text-[10.5px] text-textMuted font-mono mt-0.5">
-                                  {c.phone ? `Phone: ${c.phone}` : 'No Phone'} • {c.invCount} Bills
-                                </div>
-                              </div>
-
-                              <div className="text-right font-mono">
-                                {c.outstanding > 0 ? (
-                                  <span className="text-amber-400 font-extrabold text-xs bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">
-                                    ₹{c.outstanding.toFixed(2)} Udhar
-                                  </span>
-                                ) : (
-                                  <span className="text-primary font-bold text-[10px]">
-                                    ✓ No Dues
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          ))
-                        )}
-
-                        {/* Quick Register Action Button at bottom of Dropdown */}
-                        {custSearchQuery.trim() && (
-                          <div
-                            onClick={() => {
-                              const query = custSearchQuery.trim();
-                              const isPhone = /^\d+$/.test(query);
-                              setQuickCustFormData({
-                                customer_name: isPhone ? '' : query.toUpperCase(),
-                                phone: isPhone ? query : '',
-                                email: '',
-                                address: '',
-                                dob: '',
-                                credit_limit: 50000
-                              });
-                              setCustDropdownOpen(false);
-                              setQuickCustModalOpen(true);
-                            }}
-                            className="p-2.5 bg-primary/10 hover:bg-primary/20 text-primary font-extrabold text-xs cursor-pointer flex items-center justify-between border-t border-primary/30 transition"
-                          >
-                            <span>➕ Register New Customer Profile for "{custSearchQuery.toUpperCase()}"</span>
-                            <span className="text-[10px] bg-primary text-white px-2 py-0.5 rounded font-black">Register Now &rarr;</span>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs text-textSecondary mb-1 font-semibold">Customer Mobile Number</label>
-                  <input type="tel" maxLength={10} className="w-full bg-background border border-border rounded p-2 text-xs text-foreground font-semibold"
-                    value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="e.g. 9876543210" />
-                </div>
-
-                {/* Outstanding Balance Display Card */}
-                {matchedCustomer && (
-                  <div className={`border-2 rounded-xl p-3.5 text-xs space-y-2.5 shadow-sm ${previousOutstanding > 0 ? 'bg-amber-500/15 border-amber-500/50 text-slate-900 dark:text-slate-100' : 'bg-primary/10 border-primary/30 text-slate-900 dark:text-slate-100'}`}>
-                    <div className="flex justify-between items-center font-bold">
-                      <span className="flex items-center gap-1.5 uppercase text-[11px] font-black tracking-wider text-amber-950 dark:text-amber-300">
-                        {previousOutstanding > 0 ? '📌 Udhar Account Status:' : '✓ Customer Account Status:'}
-                      </span>
-                      <span className={`px-2.5 py-0.5 rounded text-[10px] font-black uppercase ${previousOutstanding > 0 ? 'bg-amber-500 text-slate-950 border border-amber-600' : 'bg-primary text-white border border-primary/40'}`}>
-                        {previousOutstanding > 0 ? '⚠️ Pending Dues' : '✓ No Dues'}
-                      </span>
-                    </div>
-                    
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] pt-1.5 border-t border-amber-500/30 font-semibold">
-                      <div>
-                        <span className="text-slate-700 dark:text-slate-300 block text-[10px] font-bold">Previous Outstanding:</span>
-                        <span className="font-mono text-base font-black text-rose-700 dark:text-rose-400">₹{previousOutstanding.toFixed(2)}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-700 dark:text-slate-300 block text-[10px] font-bold">Last Credit Date:</span>
-                        <span className="font-mono text-xs font-black text-slate-900 dark:text-slate-100">
-                          {lastCreditDate ? new Date(lastCreditDate).toLocaleDateString() : 'N/A'}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Explicit Previous Udhar Repayment Field */}
-                    {previousOutstanding > 0 && (
-                      <div className="mt-2 pt-2 border-t border-amber-500/30 space-y-2">
-                        <div className="flex justify-between items-center text-xs">
-                          <label className="font-black text-amber-950 dark:text-amber-300 text-[11px]">Repay Previous Udhar (₹):</label>
-                          <div className="flex gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => setRepayUdharInput(previousOutstanding.toString())}
-                              className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white text-[10.5px] font-black rounded-md border border-amber-700 shadow-sm transition active:scale-95"
-                            >
-                              Repay Full Udhar (₹{previousOutstanding.toFixed(2)})
-                            </button>
-                            {repayUdharInput && (
-                              <button
-                                type="button"
-                                onClick={() => setRepayUdharInput('')}
-                                className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-bold rounded-md border border-slate-600 transition"
-                              >
-                                Clear
-                              </button>
-                            )}
-                          </div>
-                        </div>
-
-                        <input
-                          type="number"
-                          min="0"
-                          max={previousOutstanding}
-                          step="any"
-                          value={repayUdharInput}
-                          onChange={(e) => setRepayUdharInput(e.target.value)}
-                          placeholder={`Enter amount to repay previous udhar (e.g. ₹${previousOutstanding.toFixed(2)})`}
-                          className="w-full bg-slate-900 border-2 border-amber-600 rounded-lg p-2.5 text-xs text-amber-300 font-mono font-bold placeholder-slate-400 focus:outline-none focus:border-amber-400"
-                        />
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* UDHAR / CREDIT SALE MODE TOGGLE CARD */}
-                <div className="bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 p-3 rounded-xl flex items-center justify-between gap-3 flex-wrap shadow-xs">
-                  <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-800 dark:text-slate-200 select-none">
-                    <input 
-                      type="checkbox"
-                      checked={isUdharEnabled || paymentMode === 'Credit'}
-                      onChange={(e) => {
-                        const checked = e.target.checked;
-                        setIsUdharEnabled(checked);
-                        if (checked) {
-                          if (amountCollectedInput === totalAmount.toString()) {
-                            setAmountCollectedInput('0');
+                {/* 3. BOTTOM: PAYMENT & CHECKOUT ACTIONS */}
+                <div className="space-y-4 pt-2 border-t border-border">
+                  {/* UDHAR / CREDIT SALE MODE TOGGLE CARD */}
+                  <div className="bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 p-3 rounded-xl flex items-center justify-between gap-3 flex-wrap shadow-xs">
+                    <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-800 dark:text-slate-200 select-none">
+                      <input 
+                        type="checkbox"
+                        checked={isUdharEnabled || paymentMode === 'Credit'}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setIsUdharEnabled(checked);
+                          if (checked) {
+                            if (amountCollectedInput === totalAmount.toString()) {
+                              setAmountCollectedInput('0');
+                            }
+                          } else {
+                            if (paymentMode === 'Credit') setPaymentMode('Cash');
+                            setAmountCollectedInput(totalAmount.toString());
                           }
-                        } else {
-                          if (paymentMode === 'Credit') setPaymentMode('Cash');
-                          setAmountCollectedInput(totalAmount.toString());
-                        }
-                      }}
-                      className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 cursor-pointer"
-                    />
-                    <span className="flex items-center gap-1.5 font-black uppercase text-[11px] text-amber-900 dark:text-amber-300">
-                      <i className="fa-solid fa-hand-holding-dollar text-amber-600 dark:text-amber-400"></i>
-                      <span>Customer asks for Udhar / Partial Payment (Credit Sale)</span>
+                        }}
+                        className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 cursor-pointer"
+                      />
+                      <span className="flex items-center gap-1.5 font-black uppercase text-[11px] text-amber-900 dark:text-amber-300">
+                        <i className="fa-solid fa-hand-holding-dollar text-amber-600 dark:text-amber-400"></i>
+                        <span>Customer asks for Udhar / Partial Payment (Credit Sale)</span>
+                      </span>
+                    </label>
+                    <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-md border ${
+                      (isUdharEnabled || paymentMode === 'Credit') 
+                        ? 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700' 
+                        : 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700'
+                    }`}>
+                      {(isUdharEnabled || paymentMode === 'Credit') ? '📌 Udhar / Partial Mode Active' : '✓ Default Cash Mode (Full Paid)'}
                     </span>
-                  </label>
-                  <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-md border ${
-                    (isUdharEnabled || paymentMode === 'Credit') 
-                      ? 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700' 
-                      : 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700'
-                  }`}>
-                    {(isUdharEnabled || paymentMode === 'Credit') ? '📌 Udhar / Partial Mode Active' : '✓ Default Cash Mode (Full Paid)'}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Payment Mode (Default: Cash)</label>
-                    <select 
-                      className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 font-semibold focus:outline-none focus:border-blue-600 cursor-pointer"
-                      value={paymentMode} 
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setPaymentMode(val);
-                        if (val === 'Credit') {
-                          setIsUdharEnabled(true);
-                          if (amountCollectedInput === totalAmount.toString()) setAmountCollectedInput('0');
-                        }
-                      }}
-                    >
-                      <option value="Cash">Cash (Default Full Payment)</option>
-                      <option value="UPI">UPI / GPay</option>
-                      <option value="Card">Credit / Debit Card</option>
-                      <option value="Bank">Bank Transfer / NEFT</option>
-                      <option value="Credit">Credit (Udhar Account)</option>
-                    </select>
                   </div>
 
-                  <div>
-                    <div className="flex justify-between items-center mb-1">
-                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">Manual Discount (₹)</label>
-                      {manualDiscount > 0 && (
-                        <span className="text-[10px] font-bold text-rose-600 bg-rose-50 dark:bg-rose-950 px-1.5 py-0.2 rounded border border-rose-200 dark:border-rose-800">
-                          -₹{manualDiscount.toFixed(2)}
-                        </span>
-                      )}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Payment Mode (Default: Cash)</label>
+                      <select 
+                        className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 font-semibold focus:outline-none focus:border-blue-600 cursor-pointer"
+                        value={paymentMode} 
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setPaymentMode(val);
+                          if (val === 'Credit') {
+                            setIsUdharEnabled(true);
+                            if (amountCollectedInput === totalAmount.toString()) setAmountCollectedInput('0');
+                          }
+                        }}
+                      >
+                        <option value="Cash">Cash (Default Full Payment)</option>
+                        <option value="UPI">UPI / GPay</option>
+                        <option value="Card">Credit / Debit Card</option>
+                        <option value="Bank">Bank Transfer / NEFT</option>
+                        <option value="Credit">Credit (Udhar Account)</option>
+                      </select>
                     </div>
-                    <input 
-                      type="number"
-                      step="any"
-                      min="0"
-                      max={cartSubtotal}
-                      className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-rose-600 dark:text-rose-400 font-mono font-bold focus:border-rose-500 focus:outline-none"
-                      value={manualDiscountInput}
-                      onChange={(e) => setManualDiscountInput(e.target.value)}
-                      placeholder="e.g. 50 (Flat ₹ off)"
-                    />
-                  </div>
 
-                  {/* Amount Collected & Credit Due Date Controls */}
-                  {(isUdharEnabled || paymentMode === 'Credit') ? (
                     <div>
                       <div className="flex justify-between items-center mb-1">
-                        <label className="block text-xs font-bold text-amber-700 dark:text-amber-300">Amount Collected (₹)</label>
-                        <button
-                          type="button"
-                          onClick={() => setAmountCollectedInput(totalAmount.toString())}
-                          className="text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:underline bg-blue-50 dark:bg-blue-950 px-2 py-0.5 rounded border border-blue-200 dark:border-blue-800 transition cursor-pointer flex items-center gap-1 active:scale-95"
-                        >
-                          ⚡ Auto-Fill Full (₹{totalAmount.toFixed(2)})
-                        </button>
+                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">Manual Discount (₹)</label>
+                        {manualDiscount > 0 && (
+                          <span className="text-[10px] font-bold text-rose-600 bg-rose-50 dark:bg-rose-950 px-1.5 py-0.2 rounded border border-rose-200 dark:border-rose-800">
+                            -₹{manualDiscount.toFixed(2)}
+                          </span>
+                        )}
                       </div>
                       <input 
                         type="number"
                         step="any"
                         min="0"
-                        className="w-full bg-white dark:bg-slate-900 border-2 border-amber-500 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 font-mono font-bold focus:border-amber-600 focus:outline-none shadow-xs"
-                        value={amountCollectedInput}
-                        onChange={(e) => setAmountCollectedInput(e.target.value)}
-                        placeholder={`Enter collected amount (e.g. ₹${(totalAmount * 0.2).toFixed(2)})`}
+                        max={cartSubtotal}
+                        className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-rose-600 dark:text-rose-400 font-mono font-bold focus:border-rose-500 focus:outline-none"
+                        value={manualDiscountInput}
+                        onChange={(e) => setManualDiscountInput(e.target.value)}
+                        placeholder="e.g. 50 (Flat ₹ off)"
                       />
                     </div>
-                  ) : (
-                    <div>
-                      <div className="flex justify-between items-center mb-1">
-                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">Amount Billed & Paid</label>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIsUdharEnabled(true);
-                            setAmountCollectedInput('0');
-                          }}
-                          className="text-[10px] font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950 px-2 py-0.5 rounded border border-amber-200 dark:border-amber-800 hover:bg-amber-100 transition cursor-pointer flex items-center gap-1 active:scale-95"
-                        >
-                          📌 Customer asks for Udhar?
-                        </button>
+
+                    {/* Amount Collected & Credit Due Date Controls */}
+                    {(isUdharEnabled || paymentMode === 'Credit') ? (
+                      <div>
+                        <div className="flex justify-between items-center mb-1">
+                          <label className="block text-xs font-bold text-amber-700 dark:text-amber-300">Amount Collected (₹)</label>
+                          <button
+                            type="button"
+                            onClick={() => setAmountCollectedInput(totalAmount.toString())}
+                            className="text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:underline bg-blue-50 dark:bg-blue-950 px-2 py-0.5 rounded border border-blue-200 dark:border-blue-800 transition cursor-pointer flex items-center gap-1 active:scale-95"
+                          >
+                            ⚡ Auto-Fill Full (₹{totalAmount.toFixed(2)})
+                          </button>
+                        </div>
+                        <input 
+                          type="number"
+                          step="any"
+                          min="0"
+                          className="w-full bg-white dark:bg-slate-900 border-2 border-amber-500 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 font-mono font-bold focus:border-amber-600 focus:outline-none shadow-xs"
+                          value={amountCollectedInput}
+                          onChange={(e) => setAmountCollectedInput(e.target.value)}
+                          placeholder={`Enter collected amount (e.g. ₹${(totalAmount * 0.2).toFixed(2)})`}
+                        />
                       </div>
-                      <div className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs font-mono font-extrabold text-emerald-600 dark:text-emerald-400 flex justify-between items-center">
-                        <span>Full Paid ({paymentMode})</span>
-                        <span>₹{totalAmount.toFixed(2)}</span>
+                    ) : (
+                      <div>
+                        <div className="flex justify-between items-center mb-1">
+                          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">Amount Billed & Paid</label>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsUdharEnabled(true);
+                              setAmountCollectedInput('0');
+                            }}
+                            className="text-[10px] font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950 px-2 py-0.5 rounded border border-amber-200 dark:border-amber-800 hover:bg-amber-100 transition cursor-pointer flex items-center gap-1 active:scale-95"
+                          >
+                            📌 Customer asks for Udhar?
+                          </button>
+                        </div>
+                        <div className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs font-mono font-extrabold text-emerald-600 dark:text-emerald-400 flex justify-between items-center">
+                          <span>Full Paid ({paymentMode})</span>
+                          <span>₹{totalAmount.toFixed(2)}</span>
+                        </div>
                       </div>
+                    )}
+                  </div>
+
+                  {/* Conditional Credit Due Date Input when Udhar Mode is Active */}
+                  {(isUdharEnabled || paymentMode === 'Credit') && (
+                    <div className="animate-fade-in bg-amber-50/90 dark:bg-amber-950/40 p-3.5 rounded-xl border border-amber-200 dark:border-amber-800 space-y-1.5">
+                      <div className="flex justify-between items-center">
+                        <label className="block text-xs font-black text-amber-900 dark:text-amber-300 uppercase tracking-wide flex items-center gap-1.5">
+                          <i className="fa-solid fa-calendar-day text-amber-600"></i> Credit Due Date (Udhar Promise Date) *
+                        </label>
+                        <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400">
+                          Select date when customer promises repayment
+                        </span>
+                      </div>
+                      <input 
+                        type="date"
+                        className="w-full bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 font-mono font-bold focus:border-amber-600 focus:outline-none"
+                        value={creditDueDate}
+                        onChange={(e) => setCreditDueDate(e.target.value)}
+                      />
                     </div>
                   )}
-                </div>
 
-                {/* Conditional Credit Due Date Input when Udhar Mode is Active */}
-                {(isUdharEnabled || paymentMode === 'Credit') && (
-                  <div className="animate-fade-in bg-amber-50/90 dark:bg-amber-950/40 p-3.5 rounded-xl border border-amber-200 dark:border-amber-800 space-y-1.5">
-                    <div className="flex justify-between items-center">
-                      <label className="block text-xs font-black text-amber-900 dark:text-amber-300 uppercase tracking-wide flex items-center gap-1.5">
-                        <i className="fa-solid fa-calendar-day text-amber-600"></i> Credit Due Date (Udhar Promise Date) *
+                  {/* Transaction ID / UTR Input for GPay, Credit Card, Bank Transfer, etc. */}
+                  {(paymentMode === 'UPI' || paymentMode === 'Card' || paymentMode === 'Bank' || (paymentMode !== 'Cash' && paymentMode !== 'Credit')) && (
+                    <div className="animate-fade-in bg-slate-900/60 p-3 rounded-xl border border-primary/40 space-y-1">
+                      <label className="block text-xs text-primary font-extrabold flex items-center justify-between">
+                        <span className="flex items-center gap-1.5 uppercase tracking-wide">
+                          <i className="fa-solid fa-receipt text-primary"></i> Transaction ID / UTR / Ref No.
+                        </span>
+                        <span className="text-[10px] text-primary font-bold uppercase">(GPay / Card / Bank Ref)</span>
                       </label>
-                      <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400">
-                        Select date when customer promises repayment
-                      </span>
+                      <input 
+                        type="text"
+                        className="w-full bg-background border border-primary/60 rounded-lg p-2.5 text-xs text-foreground font-mono font-bold focus:border-primary focus:outline-none uppercase"
+                        value={transactionId}
+                        onChange={(e) => setTransactionId(e.target.value)}
+                        placeholder="e.g. UPI-981240192849 / CARD-492019 / GPay Ref ID"
+                      />
+                      <p className="text-[10px] text-textMuted font-medium">Record reference / transaction ID for GPay, UPI, or Credit Card entries.</p>
                     </div>
-                    <input 
-                      type="date"
-                      className="w-full bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 font-mono font-bold focus:border-amber-600 focus:outline-none"
-                      value={creditDueDate}
-                      onChange={(e) => setCreditDueDate(e.target.value)}
-                    />
+                  )}
+
+                  {/* Smart Real-Time Payment Allocation Calculator Breakdown */}
+                  {(() => {
+                    const currentCollected = amountCollectedInput.trim() !== '' 
+                      ? parseFloat(amountCollectedInput) || 0 
+                      : (paymentMode === 'Credit' ? 0 : totalAmount);
+
+                    const explicitRepay = repayUdharInput.trim() !== ''
+                      ? parseFloat(repayUdharInput) || 0
+                      : 0;
+
+                    const appliedToBill = Math.min(currentCollected, totalAmount);
+                    const excessToUdhar = Math.max(0, currentCollected - totalAmount);
+                    const totalUdharRepaid = Math.min(previousOutstanding, explicitRepay + excessToUdhar);
+                    const unpaidCurrentBill = Math.max(0, totalAmount - currentCollected);
+                    const newUdharBalance = Math.max(0, previousOutstanding - totalUdharRepaid + unpaidCurrentBill);
+                    const grandTotalCollected = currentCollected + explicitRepay;
+
+                    return (
+                      <div className="bg-background/60 p-3 sm:p-4 rounded-xl border border-border space-y-2.5 text-xs shadow-inner">
+                        <div className="flex justify-between items-center text-textSecondary font-semibold">
+                          <span className="truncate pr-1">{t('cartSubTotal', activeLang)}</span>
+                          <span className="font-mono text-foreground font-bold shrink-0 text-right">₹{cartSubtotal.toFixed(2)}</span>
+                        </div>
+
+                        {manualDiscount > 0 && (
+                          <div className="flex justify-between items-center text-rose-500 font-semibold">
+                            <span className="truncate pr-1 flex items-center gap-1">
+                              <i className="fa-solid fa-tag text-[10px]"></i> Manual Flat Discount (₹)
+                            </span>
+                            <span className="font-mono font-bold shrink-0 text-right">-₹{manualDiscount.toFixed(2)}</span>
+                          </div>
+                        )}
+
+                        <div className="flex justify-between items-center text-textSecondary font-semibold border-t border-border/30 pt-1.5">
+                          <span className="truncate pr-1 font-extrabold text-foreground">Final Bill Total Cost</span>
+                          <span className="font-mono text-emerald-600 dark:text-emerald-400 font-black shrink-0 text-right text-xs sm:text-sm">₹{totalAmount.toFixed(2)}</span>
+                        </div>
+
+                        <div className="flex justify-between items-center text-textSecondary font-semibold">
+                          <span className="truncate pr-1">{t('todayBillCollected', activeLang)}</span>
+                          <span className="font-mono font-bold text-primary shrink-0 text-right">₹{currentCollected.toFixed(2)}</span>
+                        </div>
+
+                        {explicitRepay > 0 && (
+                          <div className="flex justify-between items-center text-amber-300 font-semibold">
+                            <span className="truncate pr-1">{t('previousUdharRepaid', activeLang)}</span>
+                            <span className="font-mono font-bold text-amber-400 shrink-0 text-right">-₹{explicitRepay.toFixed(2)}</span>
+                          </div>
+                        )}
+
+                        <div className="flex justify-between items-center text-foreground font-extrabold border-t border-border/40 pt-1.5">
+                          <span className="text-[11px] sm:text-xs tracking-tight uppercase">{t('totalCashCollected', activeLang)}</span>
+                          <span className="font-mono text-primary text-xs sm:text-sm font-black shrink-0 text-right ml-1">₹{grandTotalCollected.toFixed(2)}</span>
+                        </div>
+
+                        <div className="pt-1.5 border-t border-border/60 space-y-1.5 text-[11px]">
+                          <div className="flex justify-between items-center text-foreground font-bold">
+                            <span className="text-[10.5px] sm:text-xs">{t('currentBillStatus', activeLang)}</span>
+                            <span className={`${unpaidCurrentBill === 0 ? 'text-primary font-extrabold' : (appliedToBill > 0 ? 'text-amber-400 font-extrabold' : 'text-rose-400 font-extrabold')} shrink-0 text-right ml-1`}>
+                              {unpaidCurrentBill === 0 ? `✓ ${t('paid', activeLang)}` : (appliedToBill > 0 ? `${t('partial', activeLang)} (₹${unpaidCurrentBill.toFixed(2)} Unpaid)` : t('unpaid', activeLang))}
+                            </span>
+                          </div>
+
+                          {totalUdharRepaid > 0 && (
+                            <div className="flex justify-between items-center text-primary font-bold">
+                              <span className="text-[10.5px] sm:text-xs">{t('appliedToPreviousUdhar', activeLang)}</span>
+                              <span className="font-mono shrink-0 text-right">-₹{totalUdharRepaid.toFixed(2)}</span>
+                            </div>
+                          )}
+
+                          {unpaidCurrentBill > 0 && matchedCustomer && (
+                            <div className="flex justify-between items-center text-rose-400 font-bold">
+                              <span className="text-[10.5px] sm:text-xs">{t('unpaidAddedToUdhar', activeLang)}</span>
+                              <span className="font-mono shrink-0 text-right">+₹{unpaidCurrentBill.toFixed(2)}</span>
+                            </div>
+                          )}
+
+                          {matchedCustomer && (
+                            <div className="flex justify-between items-center text-amber-300 font-black pt-1.5 border-t border-dashed border-border/40 text-xs">
+                              <span className="text-[10.5px] sm:text-xs truncate pr-1">{t('newUdharBalance', activeLang)}</span>
+                              <span className="font-mono text-amber-400 shrink-0 text-right font-black">₹{newUdharBalance.toFixed(2)} {newUdharBalance > 0 ? `(${t('pending', activeLang)})` : '(Cleared)'}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  <div className="flex gap-2.5 pt-1">
+                    <button type="button" className="w-1/3 sm:flex-1 py-2.5 px-3 border border-border hover:bg-background/80 text-textSecondary font-bold rounded-xl text-xs transition active:scale-95 cursor-pointer text-center" onClick={() => setBillingModal(false)}>{t('cancel', activeLang)}</button>
+                    <button 
+                      type="submit" 
+                      disabled={isBillingProcessing}
+                      className={`w-2/3 sm:flex-1 py-2.5 px-4 font-extrabold rounded-xl text-xs sm:text-sm transition shadow-lg active:scale-95 cursor-pointer flex items-center justify-center gap-1.5 ${isBillingProcessing ? 'bg-primary/60 text-white cursor-not-allowed' : 'bg-primary hover:bg-primary/90 text-white'}`}
+                    >
+                      <i className={`fa-solid ${isBillingProcessing ? 'fa-spinner fa-spin' : 'fa-check-double'} text-xs`}></i>
+                      <span>{isBillingProcessing ? '⚡ Billing & Printing...' : t('checkoutAndBill', activeLang)}</span>
+                    </button>
                   </div>
-                )}
-
-                {/* Transaction ID / UTR Input for GPay, Credit Card, Bank Transfer, etc. */}
-                {(paymentMode === 'UPI' || paymentMode === 'Card' || paymentMode === 'Bank' || (paymentMode !== 'Cash' && paymentMode !== 'Credit')) && (
-                  <div className="animate-fade-in bg-slate-900/60 p-3 rounded-xl border border-primary/40 space-y-1">
-                    <label className="block text-xs text-primary font-extrabold flex items-center justify-between">
-                      <span className="flex items-center gap-1.5 uppercase tracking-wide">
-                        <i className="fa-solid fa-receipt text-primary"></i> Transaction ID / UTR / Ref No.
-                      </span>
-                      <span className="text-[10px] text-primary font-bold uppercase">(GPay / Card / Bank Ref)</span>
-                    </label>
-                    <input 
-                      type="text"
-                      className="w-full bg-background border border-primary/60 rounded-lg p-2.5 text-xs text-foreground font-mono font-bold focus:border-primary focus:outline-none uppercase"
-                      value={transactionId}
-                      onChange={(e) => setTransactionId(e.target.value)}
-                      placeholder="e.g. UPI-981240192849 / CARD-492019 / GPay Ref ID"
-                    />
-                    <p className="text-[10px] text-textMuted font-medium">Record reference / transaction ID for GPay, UPI, or Credit Card entries.</p>
-                  </div>
-                )}
-
-                {/* Smart Real-Time Payment Allocation Calculator Breakdown */}
-                {(() => {
-                  const currentCollected = amountCollectedInput.trim() !== '' 
-                    ? parseFloat(amountCollectedInput) || 0 
-                    : (paymentMode === 'Credit' ? 0 : totalAmount);
-
-                  const explicitRepay = repayUdharInput.trim() !== ''
-                    ? parseFloat(repayUdharInput) || 0
-                    : 0;
-
-                  const appliedToBill = Math.min(currentCollected, totalAmount);
-                  const excessToUdhar = Math.max(0, currentCollected - totalAmount);
-                  const totalUdharRepaid = Math.min(previousOutstanding, explicitRepay + excessToUdhar);
-                  const unpaidCurrentBill = Math.max(0, totalAmount - currentCollected);
-                  const newUdharBalance = Math.max(0, previousOutstanding - totalUdharRepaid + unpaidCurrentBill);
-                  const grandTotalCollected = currentCollected + explicitRepay;
-
-                  return (
-                    <div className="bg-background/60 p-3 sm:p-4 rounded-xl border border-border space-y-2.5 text-xs shadow-inner">
-                      <div className="flex justify-between items-center text-textSecondary font-semibold">
-                        <span className="truncate pr-1">{t('cartSubTotal', activeLang)}</span>
-                        <span className="font-mono text-foreground font-bold shrink-0 text-right">₹{cartSubtotal.toFixed(2)}</span>
-                      </div>
-
-                      {manualDiscount > 0 && (
-                        <div className="flex justify-between items-center text-rose-500 font-semibold">
-                          <span className="truncate pr-1 flex items-center gap-1">
-                            <i className="fa-solid fa-tag text-[10px]"></i> Manual Flat Discount (₹)
-                          </span>
-                          <span className="font-mono font-bold shrink-0 text-right">-₹{manualDiscount.toFixed(2)}</span>
-                        </div>
-                      )}
-
-                      <div className="flex justify-between items-center text-textSecondary font-semibold border-t border-border/30 pt-1.5">
-                        <span className="truncate pr-1 font-extrabold text-foreground">Final Bill Total Cost</span>
-                        <span className="font-mono text-emerald-600 dark:text-emerald-400 font-black shrink-0 text-right text-xs sm:text-sm">₹{totalAmount.toFixed(2)}</span>
-                      </div>
-
-                      <div className="flex justify-between items-center text-textSecondary font-semibold">
-                        <span className="truncate pr-1">{t('todayBillCollected', activeLang)}</span>
-                        <span className="font-mono font-bold text-primary shrink-0 text-right">₹{currentCollected.toFixed(2)}</span>
-                      </div>
-
-                      {explicitRepay > 0 && (
-                        <div className="flex justify-between items-center text-amber-300 font-semibold">
-                          <span className="truncate pr-1">{t('previousUdharRepaid', activeLang)}</span>
-                          <span className="font-mono font-bold text-amber-400 shrink-0 text-right">-₹{explicitRepay.toFixed(2)}</span>
-                        </div>
-                      )}
-
-                      <div className="flex justify-between items-center text-foreground font-extrabold border-t border-border/40 pt-1.5">
-                        <span className="text-[11px] sm:text-xs tracking-tight uppercase">{t('totalCashCollected', activeLang)}</span>
-                        <span className="font-mono text-primary text-xs sm:text-sm font-black shrink-0 text-right ml-1">₹{grandTotalCollected.toFixed(2)}</span>
-                      </div>
-
-                      <div className="pt-1.5 border-t border-border/60 space-y-1.5 text-[11px]">
-                        <div className="flex justify-between items-center text-foreground font-bold">
-                          <span className="text-[10.5px] sm:text-xs">{t('currentBillStatus', activeLang)}</span>
-                          <span className={`${unpaidCurrentBill === 0 ? 'text-primary font-extrabold' : (appliedToBill > 0 ? 'text-amber-400 font-extrabold' : 'text-rose-400 font-extrabold')} shrink-0 text-right ml-1`}>
-                            {unpaidCurrentBill === 0 ? `✓ ${t('paid', activeLang)}` : (appliedToBill > 0 ? `${t('partial', activeLang)} (₹${unpaidCurrentBill.toFixed(2)} Unpaid)` : t('unpaid', activeLang))}
-                          </span>
-                        </div>
-
-                        {totalUdharRepaid > 0 && (
-                          <div className="flex justify-between items-center text-primary font-bold">
-                            <span className="text-[10.5px] sm:text-xs">{t('appliedToPreviousUdhar', activeLang)}</span>
-                            <span className="font-mono shrink-0 text-right">-₹{totalUdharRepaid.toFixed(2)}</span>
-                          </div>
-                        )}
-
-                        {unpaidCurrentBill > 0 && matchedCustomer && (
-                          <div className="flex justify-between items-center text-rose-400 font-bold">
-                            <span className="text-[10.5px] sm:text-xs">{t('unpaidAddedToUdhar', activeLang)}</span>
-                            <span className="font-mono shrink-0 text-right">+₹{unpaidCurrentBill.toFixed(2)}</span>
-                          </div>
-                        )}
-
-                        {matchedCustomer && (
-                          <div className="flex justify-between items-center text-amber-300 font-black pt-1.5 border-t border-dashed border-border/40 text-xs">
-                            <span className="text-[10.5px] sm:text-xs truncate pr-1">{t('newUdharBalance', activeLang)}</span>
-                            <span className="font-mono text-amber-400 shrink-0 text-right font-black">₹{newUdharBalance.toFixed(2)} {newUdharBalance > 0 ? `(${t('pending', activeLang)})` : '(Cleared)'}</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                <div className="flex gap-2.5 pt-1">
-                  <button type="button" className="w-1/3 sm:flex-1 py-2.5 px-3 border border-border hover:bg-background/80 text-textSecondary font-bold rounded-xl text-xs transition active:scale-95 cursor-pointer text-center" onClick={() => setBillingModal(false)}>{t('cancel', activeLang)}</button>
-                  <button type="submit" className="w-2/3 sm:flex-1 py-2.5 px-4 bg-primary hover:bg-primary/90 text-white font-extrabold rounded-xl text-xs sm:text-sm transition shadow-lg active:scale-95 cursor-pointer flex items-center justify-center gap-1.5">
-                    <i className="fa-solid fa-check-double text-xs"></i>
-                    <span>{t('checkoutAndBill', activeLang)}</span>
-                  </button>
                 </div>
               </form>
-
             </div>
-            </div>
-
           </div>
         </div>,
         document.body
@@ -1738,6 +1756,13 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
             </div>
 
             <form onSubmit={handleQuickCreateCustomer} className="space-y-3 text-xs">
+              {quickCustPhoneError && (
+                <div className="p-3 bg-rose-500/15 border border-rose-500/40 rounded-xl text-rose-600 dark:text-rose-400 text-xs font-bold flex items-center gap-2 shadow-sm">
+                  <i className="fa-solid fa-triangle-exclamation text-sm text-rose-500 shrink-0"></i>
+                  <span>{quickCustPhoneError}</span>
+                </div>
+              )}
+
               <div>
                 <label className="block text-xs font-semibold text-textSecondary mb-1">Customer Full Name *</label>
                 <input 
@@ -1754,12 +1779,23 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                 <label className="block text-xs font-semibold text-textSecondary mb-1">Mobile Phone Number *</label>
                 <input 
                   type="tel" 
-                  className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground font-semibold focus:border-primary focus:outline-none"
+                  maxLength={10}
+                  className={`w-full bg-background border ${quickCustPhoneError ? 'border-rose-500 ring-2 ring-rose-500/20 bg-rose-500/5' : 'border-border'} rounded-lg p-2 text-xs text-foreground font-semibold focus:border-primary focus:outline-none transition`}
                   value={quickCustFormData.phone} 
-                  onChange={(e) => setQuickCustFormData({ ...quickCustFormData, phone: e.target.value })} 
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                    setQuickCustFormData({ ...quickCustFormData, phone: val });
+                    if (val.length === 10 || val.length === 0) setQuickCustPhoneError(null);
+                  }} 
                   placeholder="e.g. 9876543210" 
                   required 
                 />
+                {quickCustPhoneError && (
+                  <p className="mt-1 text-[11px] font-bold text-rose-500 flex items-center gap-1">
+                    <i className="fa-solid fa-circle-exclamation text-[10px]"></i>
+                    {quickCustPhoneError}
+                  </p>
+                )}
               </div>
 
               <div>
