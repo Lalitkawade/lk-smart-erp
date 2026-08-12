@@ -152,7 +152,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
   const filteredSuppliersForBill = useMemo(() => {
     const query = vendorSearchQuery.trim().toLowerCase();
     if (!query) return suppliers;
-    return suppliers.filter(s => 
+    return suppliers.filter(s =>
       (s.supplier_name && s.supplier_name.toLowerCase().includes(query)) ||
       (s.phone && s.phone.includes(query))
     );
@@ -209,7 +209,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
         newSupplierObj.id = res.data.id;
       }
       refreshAllData().catch(e => console.warn('Background refresh error:', e));
-    } catch (e: any) {}
+    } catch (e: any) { }
 
     setSupplierId(newSupplierObj.id);
     setVendorSearchQuery(newSupplierObj.supplier_name);
@@ -247,7 +247,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
       const next = Array.from(new Set([...prev, unitName]));
       try {
         localStorage.setItem('lk_custom_units', JSON.stringify(next));
-      } catch (e) {}
+      } catch (e) { }
       return next;
     });
   };
@@ -282,7 +282,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
     try {
       const str = localStorage.getItem('lk_sales_invoices');
       if (str) cachedSales = JSON.parse(str);
-    } catch(e) {}
+    } catch (e) { }
 
     const allSales = [...salesList, ...cachedSales];
     const uniqueSalesMap = new Map();
@@ -850,7 +850,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
     setEditingProduct(p);
     setIsEditingBaseStock(false);
     setIsEditingTax(Number(p.gst || 0) > 0);
-    
+
     // Parse location values
     const locationStr = p.warehouse_location || '';
     const parsedGodown = p.godown || (locationStr.includes('|') ? locationStr.split('|')[0].replace(/^Godown:\s*/i, '').trim() : locationStr);
@@ -925,7 +925,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
           const createRes = await SupplierService.createSupplier({
             supplier_name: queryUpper,
             phone: null,
-            tenant_id: (tenantId && isValidUUID(tenantId)) ? tenantId : null,
+            tenant_id: (tenantId && isValidUUID(tenantId)) ? tenantId : undefined,
             outstanding: 0
           });
           if (createRes.data) {
@@ -953,15 +953,15 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
         let isMergeOperation = false;
         let existingStock = 0;
 
-        const matchedExistingProduct = targetProductId 
+        const matchedExistingProduct = targetProductId
           ? products.find(p => p.id === targetProductId)
-          : (item.product_name && item.product_name.trim() 
-              ? products.find(p => {
-                  if (item.barcode && p.barcode && p.barcode === item.barcode.trim()) return true;
-                  if (item.sku && p.sku && p.sku.toUpperCase() === item.sku.trim().toUpperCase()) return true;
-                  return p.product_name && p.product_name.toLowerCase().trim() === item.product_name.toLowerCase().trim();
-                })
-              : undefined);
+          : (item.product_name && item.product_name.trim()
+            ? products.find(p => {
+              if (item.barcode && p.barcode && p.barcode === item.barcode.trim()) return true;
+              if (item.sku && p.sku && p.sku.toUpperCase() === item.sku.trim().toUpperCase()) return true;
+              return p.product_name && p.product_name.toLowerCase().trim() === item.product_name.toLowerCase().trim();
+            })
+            : undefined);
 
         if (!editingProduct && matchedExistingProduct) {
           targetProductId = matchedExistingProduct.id;
@@ -975,7 +975,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
         const calculatedBaseUnitCost = conversionFactor > 0 ? (pPrice / conversionFactor) : pPrice;
 
         const currentBaseStockInDb = editingProduct ? Number(editingProduct.current_stock || 0) : (isMergeOperation ? existingStock : 0);
-        
+
         // Purchase Quantity entered in Purchase Unit (e.g. 1 Box)
         const purchaseQtyInput = Number(item.additional_stock || 0);
         // Base Stock units added = Purchase Qty * Conversion Factor
@@ -986,15 +986,15 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
         const newProductBaseStockAdded = purchaseQtyInput > 0 ? baseUnitsAdded : (rawNewProductPurchaseQty * conversionFactor);
 
         const finalStock = editingProduct
-          ? (purchaseQtyInput > 0 
-              ? (currentBaseStockInDb + baseUnitsAdded) 
-              : Number(item.current_stock || currentBaseStockInDb))
-          : (isMergeOperation 
-              ? (existingStock + newProductBaseStockAdded) 
-              : newProductBaseStockAdded);
+          ? (purchaseQtyInput > 0
+            ? (currentBaseStockInDb + baseUnitsAdded)
+            : Number(item.current_stock || currentBaseStockInDb))
+          : (isMergeOperation
+            ? (existingStock + newProductBaseStockAdded)
+            : newProductBaseStockAdded);
 
-        const addedStockInflowBaseUnits = purchaseQtyInput > 0 
-          ? baseUnitsAdded 
+        const addedStockInflowBaseUnits = purchaseQtyInput > 0
+          ? baseUnitsAdded
           : (editingProduct ? Math.max(0, finalStock - currentBaseStockInDb) : (isMergeOperation ? newProductBaseStockAdded : finalStock));
 
         const purchasePacksAdded = conversionFactor > 0 ? (addedStockInflowBaseUnits / conversionFactor) : addedStockInflowBaseUnits;
@@ -1135,12 +1135,12 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
           if (pRes.data && pRes.data.id) {
             try {
               localStorage.setItem('pb_items_' + pRes.data.id, JSON.stringify(rows));
-            } catch (e) {}
+            } catch (e) { }
           }
           if (finalBillNumber && finalBillNumber !== 'N/A') {
             try {
               localStorage.setItem('pb_items_' + finalBillNumber, JSON.stringify(rows));
-            } catch (e) {}
+            } catch (e) { }
           }
 
           if (pRes.error) {
@@ -1285,14 +1285,14 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
             {mode === 'stock' ? 'Warehouse Inventory & Stock Control' : t('productCatalog')}
           </h2>
           <p className="text-xs text-textMuted mt-1">
-            {mode === 'stock' 
+            {mode === 'stock'
               ? 'Real-time warehouse stock tracking, valuation cards, low stock alerts, and quick stock level adjustments'
               : 'Configure hardware products, HSN codes, purchase rates, margin %, and dual unit conversions'}
           </p>
         </div>
         <div className="w-full sm:w-auto">
-          <button 
-            className="w-full sm:w-auto px-5 py-2.5 bg-primary hover:bg-primary/90 text-white font-extrabold rounded-xl text-xs sm:text-sm text-center shrink-0 shadow-md transition active:scale-95 cursor-pointer flex items-center justify-center gap-2" 
+          <button
+            className="w-full sm:w-auto px-5 py-2.5 bg-primary hover:bg-primary/90 text-white font-extrabold rounded-xl text-xs sm:text-sm text-center shrink-0 shadow-md transition active:scale-95 cursor-pointer flex items-center justify-center gap-2"
             onClick={handleOpenNewBillModal}
           >
             <i className="fa-solid fa-plus text-sm"></i>
@@ -1374,19 +1374,17 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
           <button
             type="button"
             onClick={() => setActiveViewTab('catalog')}
-            className={`w-full py-2.5 px-2 rounded-t-xl transition flex items-center justify-center gap-1.5 cursor-pointer text-center ${
-              activeViewTab === 'catalog'
+            className={`w-full py-2.5 px-2 rounded-t-xl transition flex items-center justify-center gap-1.5 cursor-pointer text-center ${activeViewTab === 'catalog'
                 ? 'bg-secondary border-t-2 border-x border-primary text-primary font-extrabold shadow-2xs'
                 : 'bg-background/50 border-t border-x border-border text-textMuted hover:text-foreground'
-            }`}
+              }`}
           >
             <i className="fa-solid fa-boxes-stacked text-xs shrink-0"></i>
             <span className="truncate">Product Items & Catalog</span>
-            <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono shrink-0 ${
-              activeViewTab === 'catalog'
+            <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono shrink-0 ${activeViewTab === 'catalog'
                 ? 'bg-background text-foreground font-bold'
                 : 'bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-textMuted'
-            }`}>
+              }`}>
               {products.length}
             </span>
           </button>
@@ -1394,19 +1392,17 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
           <button
             type="button"
             onClick={() => setActiveViewTab('bills')}
-            className={`w-full py-2.5 px-2 rounded-t-xl transition flex items-center justify-center gap-1.5 cursor-pointer text-center ${
-              activeViewTab === 'bills'
+            className={`w-full py-2.5 px-2 rounded-t-xl transition flex items-center justify-center gap-1.5 cursor-pointer text-center ${activeViewTab === 'bills'
                 ? 'bg-secondary border-t-2 border-x border-primary text-primary font-extrabold shadow-2xs'
                 : 'bg-background/50 border-t border-x border-border text-textMuted hover:text-foreground'
-            }`}
+              }`}
           >
             <i className="fa-solid fa-receipt text-xs shrink-0"></i>
             <span className="truncate">Procurement & Bills Desk</span>
-            <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono shrink-0 ${
-              activeViewTab === 'bills'
+            <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono shrink-0 ${activeViewTab === 'bills'
                 ? 'bg-background text-foreground font-bold'
                 : 'bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-textMuted'
-            }`}>
+              }`}>
               {purchasesList.length}
             </span>
           </button>
@@ -1548,11 +1544,10 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                           ₹{dueAmt.toFixed(2)}
                         </td>
                         <td className="py-3 px-4 text-center whitespace-nowrap">
-                          <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-lg uppercase border ${
-                            isPaid
+                          <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-lg uppercase border ${isPaid
                               ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
                               : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30'
-                          }`}>
+                            }`}>
                             {isPaid ? `Paid (${b.payment_mode || 'Cash'})` : `⚠️ Dues ₹${dueAmt.toFixed(0)}`}
                           </span>
                         </td>
@@ -1602,251 +1597,251 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
               value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
 
-      <div className="bg-secondary/40 border border-border rounded-2xl shadow-sm overflow-x-auto">
-        <table className="w-full text-left text-sm text-foreground">
-          <thead className="bg-muted/80 border-b border-border text-textSecondary font-extrabold uppercase tracking-wider text-[11px] whitespace-nowrap">
-            <tr>
-              <th className="py-3 px-3.5 text-center whitespace-nowrap">Date & Time</th>
-              <th className="py-3 px-3.5 text-center whitespace-nowrap">HSN Code</th>
-              <th className="py-3 px-3.5 text-center whitespace-nowrap">{mode === 'stock' ? 'Product Item & Location' : 'Product Name'}</th>
-              {mode === 'stock' ? (
-                <>
-                  <th className="py-3 px-3.5 text-center whitespace-nowrap">Safety Min</th>
-                  <th className="py-3 px-3.5 text-center whitespace-nowrap">Live Stock Level & Meter</th>
-                  <th className="py-3 px-3.5 text-center whitespace-nowrap">Valuation (Cost)</th>
-                  <th className="py-3 px-3.5 text-center whitespace-nowrap">Valuation (Retail)</th>
-                </>
-              ) : (
-                <>
-                  <th className="py-3 px-3.5 text-center whitespace-nowrap">Cost (₹)</th>
-                  <th className="py-3 px-3.5 text-center whitespace-nowrap">Selling Price (₹)</th>
-                  <th className="py-3 px-3.5 text-center whitespace-nowrap">Available Stock</th>
-                </>
-              )}
-              <th className="py-3 px-3.5 text-center whitespace-nowrap">
-                {mode === 'catalog' ? 'Warehouse Location & Actions' : 'Warehouse Location'}
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border/40">
-            {isLoading && products.length === 0 ? (
-              <tr><td colSpan={7} className="py-8 text-center text-textMuted text-xs font-medium">Retrieving inventory records...</td></tr>
-            ) : filtered.length === 0 ? (
-              <tr><td colSpan={7} className="py-8 text-center text-textMuted text-xs font-medium">No matching stock items found.</td></tr>
-            ) : filtered.map((p) => {
-              const name = p?.product_name || 'Unnamed Product';
-              const pUnit = p.p_unit || 'Box';
-              const sUnit = p.s_unit || p.unit || 'Nos';
-              const piecesPerPack = Math.max(1, Number(p.pieces_per_pack || 1));
-
-              const isDualUnit = piecesPerPack > 1 || (pUnit && sUnit && pUnit.toLowerCase() !== sUnit.toLowerCase());
-
-              const purchasePrice = Number(p.purchase_price || 0); // Purchase Price per Purchase Unit (e.g. ₹100 / Box)
-              const costPerPiece = piecesPerPack > 0 ? (purchasePrice / piecesPerPack) : purchasePrice; // Base Unit Cost (e.g. ₹1 / Nos)
-              const piecePrice = Number(p.selling_price || 0); // Selling Price per Selling Unit (e.g. ₹2 / Nos)
-              const packPrice = piecePrice * piecesPerPack; // Pack Selling Price (e.g. ₹200 / Box)
-
-              const marginPerPiece = piecePrice - costPerPiece;
-              const marginPercent = costPerPiece > 0 ? (marginPerPiece / costPerPiece) * 100 : 0;
-              const baseStockQty = Number(p?.current_stock || 0);
-              const purchasePackQty = piecesPerPack > 0 ? (baseStockQty / piecesPerPack) : baseStockQty;
-              const minStockPacks = Number(p?.min_stock_level || 10);
-              const isLowStock = baseStockQty <= minStockPacks;
-              const costValuation = baseStockQty * costPerPiece;
-              const retailValuation = baseStockQty * piecePrice;
-
-              const addedInfo = totalStockAddedMap.get(p.id) || { baseInflow: baseStockQty, packInflow: purchasePackQty };
-              const totalAddedBase = Math.max(baseStockQty, addedInfo.baseInflow);
-              const stockRatio = totalAddedBase > 0 ? Math.min(100, Math.max(2, (baseStockQty / totalAddedBase) * 100)) : 100;
-
-              const formattedCurrentPack = (piecesPerPack > 1 && baseStockQty % piecesPerPack !== 0)
-                ? (baseStockQty / piecesPerPack).toFixed(2).replace(/\.00$/, '')
-                : (piecesPerPack > 0 ? Math.floor(baseStockQty / piecesPerPack).toString() : baseStockQty.toString());
-
-              const formattedTotalPack = addedInfo.packInflow.toString();
-              const formattedTotalBase = totalAddedBase.toString();
-
-              const godownVal = p.godown || (p.warehouse_location?.includes('|') ? p.warehouse_location.split('|')[0].replace(/^Godown:\s*/i, '').trim() : '');
-              const rackVal = p.rack_number || (p.warehouse_location?.match(/Rack:\s*([^|]+)/i)?.[1]?.trim() || '');
-              const shelfVal = p.shelf_number || (p.warehouse_location?.match(/Shelf:\s*([^|]+)/i)?.[1]?.trim() || '');
-
-              const locationParts: string[] = [];
-              if (godownVal) locationParts.push(`Godown: ${godownVal}`);
-              if (rackVal) locationParts.push(`Rack: ${rackVal}`);
-              if (shelfVal) locationParts.push(`Shelf: ${shelfVal}`);
-
-              const formattedLocationSeq = locationParts.length > 0 
-                ? locationParts.join(' ➔ ') 
-                : (p.warehouse_location || 'Main Store');
-
-              const rawProdDate = new Date((p as any).created_at || (p as any).created_date || (p as any).updated_at || Date.now());
-              const formattedProdDate = isNaN(rawProdDate.getTime()) ? '-' : rawProdDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-              const formattedProdTime = isNaN(rawProdDate.getTime()) ? '' : rawProdDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
-
-              return (
-                <tr key={p.id} className="border-b border-border/40 hover:bg-primary/5 transition-colors">
-                  <td className="py-3.5 px-4 text-center font-mono text-xs whitespace-nowrap">
-                    <div className="font-extrabold text-foreground text-xs">{formattedProdDate}</div>
-                    <div className="text-[11px] text-textMuted font-medium mt-0.5">{formattedProdTime}</div>
-                  </td>
-                  <td className="py-3.5 px-4 text-center font-mono text-xs">
-                    <span className="bg-muted border border-border text-foreground px-2 py-0.5 rounded font-bold">
-                      {p.hsn || '-'}
-                    </span>
-                  </td>
-                  <td className="py-3.5 px-4 text-center font-bold uppercase cursor-pointer"
-                    onClick={() => handleShowHistory(p)}
-                    title="Click to view transaction ledger details">
-                    <div className="flex flex-col items-center justify-center">
-                      <span className="flex items-center justify-center gap-1.5 font-bold text-primary hover:underline text-xs">
-                        <i className="fa-solid fa-clock-rotate-left text-[10px]"></i>
-                        {name}
-                      </span>
-                      {isDualUnit && (
-                        <span className="text-[9.5px] bg-primary/10 text-primary font-extrabold px-2 py-0.5 rounded-full border border-primary/20 inline-flex items-center gap-1 mt-1 font-mono uppercase shadow-2xs">
-                          📦 1 {pUnit.toUpperCase()} = {piecesPerPack} {sUnit.toUpperCase()}
-                        </span>
-                      )}
-                    </div>
-                  </td>
-
+          <div className="bg-secondary/40 border border-border rounded-2xl shadow-sm overflow-x-auto">
+            <table className="w-full text-left text-sm text-foreground">
+              <thead className="bg-muted/80 border-b border-border text-textSecondary font-extrabold uppercase tracking-wider text-[11px] whitespace-nowrap">
+                <tr>
+                  <th className="py-3 px-3.5 text-center whitespace-nowrap">Date & Time</th>
+                  <th className="py-3 px-3.5 text-center whitespace-nowrap">HSN Code</th>
+                  <th className="py-3 px-3.5 text-center whitespace-nowrap">{mode === 'stock' ? 'Product Item & Location' : 'Product Name'}</th>
                   {mode === 'stock' ? (
                     <>
-                      <td className="py-3.5 px-4 text-center font-mono text-xs font-bold text-textSecondary">
-                        {minStockPacks} {pUnit}
-                      </td>
-                      <td className="py-3.5 px-4 text-center">
-                        <div className="flex flex-col gap-1 max-w-[220px] mx-auto">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className={`font-mono font-black text-xs ${isLowStock ? 'text-rose-600 dark:text-rose-400' : 'text-foreground'}`}>
-                              {isDualUnit 
-                                ? `${formattedCurrentPack} / ${formattedTotalPack} ${pUnit.toUpperCase()}`
-                                : `${baseStockQty.toFixed(2).replace(/\.00$/, '')} / ${formattedTotalBase} ${sUnit.toUpperCase()}`}
-                            </span>
-                            {isLowStock ? (
-                              <span className="text-[9px] px-1.5 py-0.2 bg-rose-500 text-white rounded font-black uppercase tracking-wider animate-pulse">
-                                ⚠️ Low Stock
-                              </span>
-                            ) : (
-                              <span className="text-[9px] px-1.5 py-0.2 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 rounded font-bold uppercase">
-                                ✓ Healthy
-                              </span>
-                            )}
-                          </div>
-                          {isDualUnit && piecesPerPack > 1 && (
-                            <div className="text-[10px] text-primary font-bold font-mono text-left">
-                              ({baseStockQty.toFixed(2).replace(/\.00$/, '')} / {formattedTotalBase} {sUnit.toUpperCase()})
-                            </div>
-                          )}
-                          {/* Stock Level Progress Meter */}
-                          <div className="w-full bg-muted h-1.5 rounded-full overflow-hidden" title={`Available: ${baseStockQty} | Total Added: ${totalAddedBase} (${stockRatio.toFixed(1)}% remaining)`}>
-                            <div 
-                              className={`h-full transition-all duration-500 ${isLowStock ? 'bg-rose-500' : stockRatio < 30 ? 'bg-amber-500' : 'bg-emerald-500'}`} 
-                              style={{ width: `${stockRatio}%` }}
-                            ></div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="py-3.5 px-4 text-center font-mono font-bold text-primary text-xs">
-                        ₹{costValuation.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                      </td>
-                      <td className="py-3.5 px-4 text-center font-mono font-bold text-emerald-600 dark:text-emerald-400 text-xs">
-                        ₹{retailValuation.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                      </td>
+                      <th className="py-3 px-3.5 text-center whitespace-nowrap">Safety Min</th>
+                      <th className="py-3 px-3.5 text-center whitespace-nowrap">Live Stock Level & Meter</th>
+                      <th className="py-3 px-3.5 text-center whitespace-nowrap">Valuation (Cost)</th>
+                      <th className="py-3 px-3.5 text-center whitespace-nowrap">Valuation (Retail)</th>
                     </>
                   ) : (
                     <>
-                      <td className="py-3.5 px-4 text-center font-mono text-xs text-foreground">
-                        <div className="flex flex-col items-center">
-                          <span className="font-bold">₹{purchasePrice.toFixed(2)} {isDualUnit ? <span className="text-[10px] text-primary font-extrabold">/ {pUnit}</span> : ''}</span>
-                          {isDualUnit && (
-                            <span className="text-[10px] text-textMuted font-mono">(₹{costPerPiece.toFixed(2)} / {sUnit})</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="py-3.5 px-4 text-center font-mono font-bold text-foreground text-xs">
-                        <div className="flex flex-col items-center">
-                          <span className="font-bold">₹{piecePrice.toFixed(2)} <span className="text-[10px] text-textMuted font-normal">/ {sUnit}</span></span>
-                          {isDualUnit && (
-                            <span className="text-[10px] text-textMuted font-mono">(₹{packPrice.toFixed(2)} / {pUnit})</span>
-                          )}
-                          <div className={`text-[10.5px] font-mono font-bold mt-1 ${marginPerPiece >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-                            {marginPerPiece >= 0 ? '+' : ''}₹{marginPerPiece.toFixed(2)} <span className="text-[9.5px] text-textMuted font-normal">/ {sUnit}</span> ({marginPercent >= 0 ? '+' : ''}{marginPercent.toFixed(1)}%)
-                          </div>
-                        </div>
-                      </td>
-                      <td className="py-3.5 px-4 text-center">
-                        <div className="flex flex-col items-center justify-center">
-                          <div className="flex items-center justify-center gap-1.5">
-                            <span className={`font-mono font-bold text-xs ${isLowStock ? 'text-rose-600 dark:text-rose-400' : 'text-foreground'}`}>
-                              {isDualUnit 
-                                ? `${formattedCurrentPack} / ${formattedTotalPack} ${pUnit.toUpperCase()}`
-                                : `${baseStockQty.toFixed(2).replace(/\.00$/, '')} / ${formattedTotalBase} ${sUnit.toUpperCase()}`}
-                            </span>
-                            {isLowStock && (
-                              <span className="text-[9px] px-1.5 py-0.5 bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 rounded-md font-bold" title="Low stock warning!">
-                                ⚠️ Low
-                              </span>
-                            )}
-                          </div>
-                          {isDualUnit && piecesPerPack > 1 && (
-                            <div className="text-[10px] text-primary font-bold font-mono">
-                              ({baseStockQty.toFixed(2).replace(/\.00$/, '')} / {formattedTotalBase} {sUnit.toUpperCase()})
-                            </div>
-                          )}
-                        </div>
-                      </td>
+                      <th className="py-3 px-3.5 text-center whitespace-nowrap">Cost (₹)</th>
+                      <th className="py-3 px-3.5 text-center whitespace-nowrap">Selling Price (₹)</th>
+                      <th className="py-3 px-3.5 text-center whitespace-nowrap">Available Stock</th>
                     </>
                   )}
-
-                  {mode === 'catalog' ? (
-                    <td className="py-3.5 px-4 text-center whitespace-nowrap">
-                      <div className="flex flex-col items-center justify-center gap-1.5 whitespace-nowrap">
-                        <div className="flex items-center justify-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => handleOpenEdit(p)}
-                            className="w-7 h-7 sm:w-8 sm:h-8 bg-blue-500/10 hover:bg-blue-600 hover:text-white border border-blue-500/30 text-blue-600 dark:text-blue-400 rounded-full font-bold transition-all active:scale-95 cursor-pointer flex items-center justify-center shadow-2xs shrink-0"
-                            title="Edit product details, prices, or stock"
-                          >
-                            <i className="fa-solid fa-pen-to-square text-xs"></i>
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteProduct(p.id)}
-                            className="w-7 h-7 sm:w-8 sm:h-8 bg-rose-500/10 hover:bg-rose-600 hover:text-white border border-rose-500/30 text-rose-600 dark:text-rose-400 rounded-full font-bold transition-all active:scale-95 cursor-pointer flex items-center justify-center shadow-2xs shrink-0"
-                            title="Delete this product item"
-                          >
-                            <i className="fa-solid fa-trash-can text-xs"></i>
-                          </button>
-                        </div>
-
-                        <div 
-                          onClick={() => handleOpenEdit(p)} 
-                          className="inline-flex items-center gap-1 bg-background hover:bg-muted border border-border px-2.5 py-0.5 rounded-lg text-[11px] font-semibold text-foreground transition cursor-pointer"
-                          title="Click to edit warehouse location & details"
-                        >
-                          <i className="fa-solid fa-location-dot text-primary text-[10px]"></i>
-                          <span className="font-mono text-[11px]">{formattedLocationSeq}</span>
-                        </div>
-                      </div>
-                    </td>
-                  ) : (
-                    <td className="py-3.5 px-4 text-center whitespace-nowrap">
-                      <div className="inline-flex items-center gap-1 bg-background border border-border px-2.5 py-1 rounded-lg text-xs font-semibold text-foreground">
-                        <i className="fa-solid fa-location-dot text-primary text-[10.5px]"></i>
-                        <span className="font-mono text-xs">{formattedLocationSeq}</span>
-                      </div>
-                    </td>
-                  )}
+                  <th className="py-3 px-3.5 text-center whitespace-nowrap">
+                    {mode === 'catalog' ? 'Warehouse Location & Actions' : 'Warehouse Location'}
+                  </th>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-      </>
+              </thead>
+              <tbody className="divide-y divide-border/40">
+                {isLoading && products.length === 0 ? (
+                  <tr><td colSpan={7} className="py-8 text-center text-textMuted text-xs font-medium">Retrieving inventory records...</td></tr>
+                ) : filtered.length === 0 ? (
+                  <tr><td colSpan={7} className="py-8 text-center text-textMuted text-xs font-medium">No matching stock items found.</td></tr>
+                ) : filtered.map((p) => {
+                  const name = p?.product_name || 'Unnamed Product';
+                  const pUnit = p.p_unit || 'Box';
+                  const sUnit = p.s_unit || p.unit || 'Nos';
+                  const piecesPerPack = Math.max(1, Number(p.pieces_per_pack || 1));
+
+                  const isDualUnit = piecesPerPack > 1 || (pUnit && sUnit && pUnit.toLowerCase() !== sUnit.toLowerCase());
+
+                  const purchasePrice = Number(p.purchase_price || 0); // Purchase Price per Purchase Unit (e.g. ₹100 / Box)
+                  const costPerPiece = piecesPerPack > 0 ? (purchasePrice / piecesPerPack) : purchasePrice; // Base Unit Cost (e.g. ₹1 / Nos)
+                  const piecePrice = Number(p.selling_price || 0); // Selling Price per Selling Unit (e.g. ₹2 / Nos)
+                  const packPrice = piecePrice * piecesPerPack; // Pack Selling Price (e.g. ₹200 / Box)
+
+                  const marginPerPiece = piecePrice - costPerPiece;
+                  const marginPercent = costPerPiece > 0 ? (marginPerPiece / costPerPiece) * 100 : 0;
+                  const baseStockQty = Number(p?.current_stock || 0);
+                  const purchasePackQty = piecesPerPack > 0 ? (baseStockQty / piecesPerPack) : baseStockQty;
+                  const minStockPacks = Number(p?.min_stock_level || 10);
+                  const isLowStock = baseStockQty <= minStockPacks;
+                  const costValuation = baseStockQty * costPerPiece;
+                  const retailValuation = baseStockQty * piecePrice;
+
+                  const addedInfo = totalStockAddedMap.get(p.id) || { baseInflow: baseStockQty, packInflow: purchasePackQty };
+                  const totalAddedBase = Math.max(baseStockQty, addedInfo.baseInflow);
+                  const stockRatio = totalAddedBase > 0 ? Math.min(100, Math.max(2, (baseStockQty / totalAddedBase) * 100)) : 100;
+
+                  const formattedCurrentPack = (piecesPerPack > 1 && baseStockQty % piecesPerPack !== 0)
+                    ? (baseStockQty / piecesPerPack).toFixed(2).replace(/\.00$/, '')
+                    : (piecesPerPack > 0 ? Math.floor(baseStockQty / piecesPerPack).toString() : baseStockQty.toString());
+
+                  const formattedTotalPack = addedInfo.packInflow.toString();
+                  const formattedTotalBase = totalAddedBase.toString();
+
+                  const godownVal = p.godown || (p.warehouse_location?.includes('|') ? p.warehouse_location.split('|')[0].replace(/^Godown:\s*/i, '').trim() : '');
+                  const rackVal = p.rack_number || (p.warehouse_location?.match(/Rack:\s*([^|]+)/i)?.[1]?.trim() || '');
+                  const shelfVal = p.shelf_number || (p.warehouse_location?.match(/Shelf:\s*([^|]+)/i)?.[1]?.trim() || '');
+
+                  const locationParts: string[] = [];
+                  if (godownVal) locationParts.push(`Godown: ${godownVal}`);
+                  if (rackVal) locationParts.push(`Rack: ${rackVal}`);
+                  if (shelfVal) locationParts.push(`Shelf: ${shelfVal}`);
+
+                  const formattedLocationSeq = locationParts.length > 0
+                    ? locationParts.join(' ➔ ')
+                    : (p.warehouse_location || 'Main Store');
+
+                  const rawProdDate = new Date((p as any).created_at || (p as any).created_date || (p as any).updated_at || Date.now());
+                  const formattedProdDate = isNaN(rawProdDate.getTime()) ? '-' : rawProdDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+                  const formattedProdTime = isNaN(rawProdDate.getTime()) ? '' : rawProdDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+
+                  return (
+                    <tr key={p.id} className="border-b border-border/40 hover:bg-primary/5 transition-colors">
+                      <td className="py-3.5 px-4 text-center font-mono text-xs whitespace-nowrap">
+                        <div className="font-extrabold text-foreground text-xs">{formattedProdDate}</div>
+                        <div className="text-[11px] text-textMuted font-medium mt-0.5">{formattedProdTime}</div>
+                      </td>
+                      <td className="py-3.5 px-4 text-center font-mono text-xs">
+                        <span className="bg-muted border border-border text-foreground px-2 py-0.5 rounded font-bold">
+                          {p.hsn || '-'}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 text-center font-bold uppercase cursor-pointer"
+                        onClick={() => handleShowHistory(p)}
+                        title="Click to view transaction ledger details">
+                        <div className="flex flex-col items-center justify-center">
+                          <span className="flex items-center justify-center gap-1.5 font-bold text-primary hover:underline text-xs">
+                            <i className="fa-solid fa-clock-rotate-left text-[10px]"></i>
+                            {name}
+                          </span>
+                          {isDualUnit && (
+                            <span className="text-[9.5px] bg-primary/10 text-primary font-extrabold px-2 py-0.5 rounded-full border border-primary/20 inline-flex items-center gap-1 mt-1 font-mono uppercase shadow-2xs">
+                              📦 1 {pUnit.toUpperCase()} = {piecesPerPack} {sUnit.toUpperCase()}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      {mode === 'stock' ? (
+                        <>
+                          <td className="py-3.5 px-4 text-center font-mono text-xs font-bold text-textSecondary">
+                            {minStockPacks} {pUnit}
+                          </td>
+                          <td className="py-3.5 px-4 text-center">
+                            <div className="flex flex-col gap-1 max-w-[220px] mx-auto">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className={`font-mono font-black text-xs ${isLowStock ? 'text-rose-600 dark:text-rose-400' : 'text-foreground'}`}>
+                                  {isDualUnit
+                                    ? `${formattedCurrentPack} / ${formattedTotalPack} ${pUnit.toUpperCase()}`
+                                    : `${baseStockQty.toFixed(2).replace(/\.00$/, '')} / ${formattedTotalBase} ${sUnit.toUpperCase()}`}
+                                </span>
+                                {isLowStock ? (
+                                  <span className="text-[9px] px-1.5 py-0.2 bg-rose-500 text-white rounded font-black uppercase tracking-wider animate-pulse">
+                                    ⚠️ Low Stock
+                                  </span>
+                                ) : (
+                                  <span className="text-[9px] px-1.5 py-0.2 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 rounded font-bold uppercase">
+                                    ✓ Healthy
+                                  </span>
+                                )}
+                              </div>
+                              {isDualUnit && piecesPerPack > 1 && (
+                                <div className="text-[10px] text-primary font-bold font-mono text-left">
+                                  ({baseStockQty.toFixed(2).replace(/\.00$/, '')} / {formattedTotalBase} {sUnit.toUpperCase()})
+                                </div>
+                              )}
+                              {/* Stock Level Progress Meter */}
+                              <div className="w-full bg-muted h-1.5 rounded-full overflow-hidden" title={`Available: ${baseStockQty} | Total Added: ${totalAddedBase} (${stockRatio.toFixed(1)}% remaining)`}>
+                                <div
+                                  className={`h-full transition-all duration-500 ${isLowStock ? 'bg-rose-500' : stockRatio < 30 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                                  style={{ width: `${stockRatio}%` }}
+                                ></div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-4 text-center font-mono font-bold text-primary text-xs">
+                            ₹{costValuation.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="py-3.5 px-4 text-center font-mono font-bold text-emerald-600 dark:text-emerald-400 text-xs">
+                            ₹{retailValuation.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="py-3.5 px-4 text-center font-mono text-xs text-foreground">
+                            <div className="flex flex-col items-center">
+                              <span className="font-bold">₹{purchasePrice.toFixed(2)} {isDualUnit ? <span className="text-[10px] text-primary font-extrabold">/ {pUnit}</span> : ''}</span>
+                              {isDualUnit && (
+                                <span className="text-[10px] text-textMuted font-mono">(₹{costPerPiece.toFixed(2)} / {sUnit})</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-4 text-center font-mono font-bold text-foreground text-xs">
+                            <div className="flex flex-col items-center">
+                              <span className="font-bold">₹{piecePrice.toFixed(2)} <span className="text-[10px] text-textMuted font-normal">/ {sUnit}</span></span>
+                              {isDualUnit && (
+                                <span className="text-[10px] text-textMuted font-mono">(₹{packPrice.toFixed(2)} / {pUnit})</span>
+                              )}
+                              <div className={`text-[10.5px] font-mono font-bold mt-1 ${marginPerPiece >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                                {marginPerPiece >= 0 ? '+' : ''}₹{marginPerPiece.toFixed(2)} <span className="text-[9.5px] text-textMuted font-normal">/ {sUnit}</span> ({marginPercent >= 0 ? '+' : ''}{marginPercent.toFixed(1)}%)
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-4 text-center">
+                            <div className="flex flex-col items-center justify-center">
+                              <div className="flex items-center justify-center gap-1.5">
+                                <span className={`font-mono font-bold text-xs ${isLowStock ? 'text-rose-600 dark:text-rose-400' : 'text-foreground'}`}>
+                                  {isDualUnit
+                                    ? `${formattedCurrentPack} / ${formattedTotalPack} ${pUnit.toUpperCase()}`
+                                    : `${baseStockQty.toFixed(2).replace(/\.00$/, '')} / ${formattedTotalBase} ${sUnit.toUpperCase()}`}
+                                </span>
+                                {isLowStock && (
+                                  <span className="text-[9px] px-1.5 py-0.5 bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 rounded-md font-bold" title="Low stock warning!">
+                                    ⚠️ Low
+                                  </span>
+                                )}
+                              </div>
+                              {isDualUnit && piecesPerPack > 1 && (
+                                <div className="text-[10px] text-primary font-bold font-mono">
+                                  ({baseStockQty.toFixed(2).replace(/\.00$/, '')} / {formattedTotalBase} {sUnit.toUpperCase()})
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </>
+                      )}
+
+                      {mode === 'catalog' ? (
+                        <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                          <div className="flex flex-col items-center justify-center gap-1.5 whitespace-nowrap">
+                            <div className="flex items-center justify-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEdit(p)}
+                                className="w-7 h-7 sm:w-8 sm:h-8 bg-blue-500/10 hover:bg-blue-600 hover:text-white border border-blue-500/30 text-blue-600 dark:text-blue-400 rounded-full font-bold transition-all active:scale-95 cursor-pointer flex items-center justify-center shadow-2xs shrink-0"
+                                title="Edit product details, prices, or stock"
+                              >
+                                <i className="fa-solid fa-pen-to-square text-xs"></i>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteProduct(p.id)}
+                                className="w-7 h-7 sm:w-8 sm:h-8 bg-rose-500/10 hover:bg-rose-600 hover:text-white border border-rose-500/30 text-rose-600 dark:text-rose-400 rounded-full font-bold transition-all active:scale-95 cursor-pointer flex items-center justify-center shadow-2xs shrink-0"
+                                title="Delete this product item"
+                              >
+                                <i className="fa-solid fa-trash-can text-xs"></i>
+                              </button>
+                            </div>
+
+                            <div
+                              onClick={() => handleOpenEdit(p)}
+                              className="inline-flex items-center gap-1 bg-background hover:bg-muted border border-border px-2.5 py-0.5 rounded-lg text-[11px] font-semibold text-foreground transition cursor-pointer"
+                              title="Click to edit warehouse location & details"
+                            >
+                              <i className="fa-solid fa-location-dot text-primary text-[10px]"></i>
+                              <span className="font-mono text-[11px]">{formattedLocationSeq}</span>
+                            </div>
+                          </div>
+                        </td>
+                      ) : (
+                        <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                          <div className="inline-flex items-center gap-1 bg-background border border-border px-2.5 py-1 rounded-lg text-xs font-semibold text-foreground">
+                            <i className="fa-solid fa-location-dot text-primary text-[10.5px]"></i>
+                            <span className="font-mono text-xs">{formattedLocationSeq}</span>
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
 
       {/* Printable Vendor Purchase Invoice Receipt Modal */}
@@ -2165,7 +2160,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
       {modalOpen && createPortal(
         <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-2.5 sm:p-6 z-[9999] overflow-y-auto animate-backdrop-fade">
           <div className="bg-secondary border border-border p-3.5 sm:p-6 rounded-2xl w-full max-w-3xl shadow-2xl my-auto max-h-[92vh] sm:max-h-[85vh] flex flex-col gap-3.5 sm:gap-4 overflow-hidden">
-            
+
             {/* Sticky Header */}
             <div className="flex justify-between items-center pb-3 border-b border-border shrink-0">
               <div>
@@ -2179,7 +2174,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
 
             {/* Scrollable Form Body */}
             <form onSubmit={handleSaveProduct} className="flex-1 min-h-0 overflow-y-auto pr-2 space-y-4 scrollbar-thin">
-              
+
               {/* TOP VENDOR & PROCUREMENT BILL SECTION */}
               {!editingProduct && (
                 <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 rounded-2xl p-4 sm:p-5 space-y-4 shadow-xs">
@@ -2187,8 +2182,8 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                   <div>
                     <div className="flex justify-between items-center mb-1">
                       <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">Select Supplier / Vendor *</label>
-                      <button 
-                        type="button" 
+                      <button
+                        type="button"
                         onClick={() => setQuickVendorModalOpen(true)}
                         className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline font-bold flex items-center gap-1 active:scale-95 cursor-pointer"
                       >
@@ -2197,17 +2192,17 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                     </div>
 
                     <div className="relative">
-                      <input 
-                        type="text" 
+                      <input
+                        type="text"
                         className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 font-bold uppercase focus:border-blue-600 focus:outline-none pr-8"
-                        value={vendorSearchQuery || selectedSup?.supplier_name || ''} 
+                        value={vendorSearchQuery || selectedSup?.supplier_name || ''}
                         onFocus={() => setVendorDropdownOpen(true)}
                         onChange={(e) => {
                           const val = e.target.value;
                           setVendorSearchQuery(val);
                           setVendorDropdownOpen(true);
                           if (!val.trim()) setSupplierId('');
-                        }} 
+                        }}
                         placeholder="🔍 Type or select vendor name (e.g. RAS TRADERS)..."
                       />
                       {(supplierId || vendorSearchQuery) && (
@@ -2230,7 +2225,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                           {filteredSuppliersForBill.length === 0 ? (
                             <div className="p-3 text-center text-xs space-y-2">
                               <p className="text-slate-500 dark:text-slate-400 font-medium">No vendors found matching "{vendorSearchQuery}".</p>
-                              <button 
+                              <button
                                 type="button"
                                 onClick={() => {
                                   setQuickVendorFormData(prev => ({ ...prev, supplier_name: vendorSearchQuery.toUpperCase() }));
@@ -2244,7 +2239,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                             </div>
                           ) : (
                             filteredSuppliersForBill.map((s) => (
-                              <div 
+                              <div
                                 key={s.id}
                                 onClick={() => {
                                   setSupplierId(s.id);
@@ -2270,9 +2265,9 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                   <div className="pt-3 border-t border-slate-200 dark:border-slate-700">
                     <div className="flex justify-between items-center flex-wrap gap-2 pb-2">
                       <label className="flex items-center gap-2 cursor-pointer font-bold text-xs uppercase text-slate-900 dark:text-slate-100 select-none">
-                        <input 
-                          type="checkbox" 
-                          checked={hasBillDetails} 
+                        <input
+                          type="checkbox"
+                          checked={hasBillDetails}
                           onChange={(e) => setHasBillDetails(e.target.checked)}
                           className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
                         />
@@ -2325,12 +2320,12 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                   // Collapsed View Card
                   if (item.isCollapsed) {
                     return (
-                      <div 
+                      <div
                         key={item.id || index}
                         id={`product-item-card-${index}`}
                         className="bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700/80 hover:border-blue-500/60 rounded-2xl p-4 shadow-sm transition-all flex items-center justify-between gap-3 animate-fade-in"
                       >
-                        <div 
+                        <div
                           className="flex items-center gap-3.5 cursor-pointer flex-1 min-w-0"
                           onClick={() => handleToggleCollapse(index)}
                         >
@@ -2357,18 +2352,18 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                         </div>
 
                         <div className="flex items-center gap-2 shrink-0">
-                          <button 
-                            type="button" 
-                            onClick={() => handleToggleCollapse(index)} 
+                          <button
+                            type="button"
+                            onClick={() => handleToggleCollapse(index)}
                             className="px-3 py-1.5 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 font-bold text-xs rounded-xl transition flex items-center gap-1.5 cursor-pointer"
                           >
                             <i className="fa-solid fa-pen text-[10px]"></i>
                             <span>Edit</span>
                           </button>
                           {productItems.length > 1 && (
-                            <button 
-                              type="button" 
-                              onClick={() => handleRemoveProductItem(index)} 
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveProductItem(index)}
                               className="px-2.5 py-1.5 bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800 font-bold text-xs rounded-xl transition cursor-pointer"
                               title="Remove item from bill"
                             >
@@ -2383,7 +2378,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                   // Full Expanded Form View
                   return (
                     <div key={item.id || index} id={`product-item-card-${index}`} className="space-y-4 border border-slate-200 dark:border-slate-800 p-4 sm:p-5 rounded-2xl bg-slate-50/60 dark:bg-slate-900/50 shadow-xs">
-                      
+
                       {/* Item Section Header (for multi-product tracking) */}
                       {productItems.length > 1 && (
                         <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2.5 mb-2">
@@ -2418,7 +2413,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
 
                       {/* UNITS & STOCK CONFIGURATION CARD */}
                       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-sm">
-                        <div 
+                        <div
                           className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 cursor-pointer select-none"
                           onClick={() => updateProductItem(index, { isUnitConversionExpanded: !item.isUnitConversionExpanded })}
                         >
@@ -2429,144 +2424,144 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                             <div>
                               <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wide flex items-center gap-2 flex-wrap">
                                 <span>Units & Dual-Unit Conversion</span>
-                                 <span className="text-[10px] font-extrabold text-blue-600 bg-blue-50 dark:bg-blue-950 px-2 py-0.5 rounded border border-blue-200 dark:border-blue-800">
-                                   1 {item.p_unit} = {item.pieces_per_pack ?? 0} {item.unit}
-                                 </span>
-                               </h4>
-                               <p className="text-[11px] text-slate-500 dark:text-slate-400">Configure purchase, selling, and inventory base unit conversions</p>
-                             </div>
-                           </div>
+                                <span className="text-[10px] font-extrabold text-blue-600 bg-blue-50 dark:bg-blue-950 px-2 py-0.5 rounded border border-blue-200 dark:border-blue-800">
+                                  1 {item.p_unit} = {item.pieces_per_pack ?? 0} {item.unit}
+                                </span>
+                              </h4>
+                              <p className="text-[11px] text-slate-500 dark:text-slate-400">Configure purchase, selling, and inventory base unit conversions</p>
+                            </div>
+                          </div>
 
-                           <button
-                             type="button"
-                             className="text-xs font-bold text-blue-600 hover:text-blue-700 bg-blue-50 dark:bg-blue-950/60 px-3 py-1.5 rounded-lg border border-blue-200 dark:border-blue-800 transition flex items-center gap-1.5 cursor-pointer shrink-0"
-                           >
-                             <span>{item.isUnitConversionExpanded ? 'Hide Advanced Rules' : '⚙️ Expand Rules'}</span>
-                             <i className={`fa-solid ${item.isUnitConversionExpanded ? 'fa-chevron-up' : 'fa-chevron-down'}`}></i>
-                           </button>
-                         </div>
+                          <button
+                            type="button"
+                            className="text-xs font-bold text-blue-600 hover:text-blue-700 bg-blue-50 dark:bg-blue-950/60 px-3 py-1.5 rounded-lg border border-blue-200 dark:border-blue-800 transition flex items-center gap-1.5 cursor-pointer shrink-0"
+                          >
+                            <span>{item.isUnitConversionExpanded ? 'Hide Advanced Rules' : '⚙️ Expand Rules'}</span>
+                            <i className={`fa-solid ${item.isUnitConversionExpanded ? 'fa-chevron-up' : 'fa-chevron-down'}`}></i>
+                          </button>
+                        </div>
 
-                         {/* Unit Dropdowns */}
-                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                           <div>
-                             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
-                               Purchase Unit <span className="text-rose-500 font-bold">*</span>
-                             </label>
-                             <select
-                               className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-xs text-slate-900 dark:text-slate-100 font-semibold focus:outline-none focus:border-blue-600 cursor-pointer"
-                               value={item.p_unit}
-                               onChange={(e) => handleUnitDropdownChange(index, 'p_unit', e.target.value)}
-                             >
-                               {allUnits.map(u => (
-                                 <option key={u} value={u}>{u}</option>
-                               ))}
-                               <option value="__ADD_CUSTOM__" className="font-bold text-blue-600">+ Add Custom Unit</option>
-                             </select>
-                           </div>
+                        {/* Unit Dropdowns */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
+                              Purchase Unit <span className="text-rose-500 font-bold">*</span>
+                            </label>
+                            <select
+                              className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-xs text-slate-900 dark:text-slate-100 font-semibold focus:outline-none focus:border-blue-600 cursor-pointer"
+                              value={item.p_unit}
+                              onChange={(e) => handleUnitDropdownChange(index, 'p_unit', e.target.value)}
+                            >
+                              {allUnits.map(u => (
+                                <option key={u} value={u}>{u}</option>
+                              ))}
+                              <option value="__ADD_CUSTOM__" className="font-bold text-blue-600">+ Add Custom Unit</option>
+                            </select>
+                          </div>
 
-                           <div>
-                             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
-                               Selling Unit <span className="text-rose-500 font-bold">*</span>
-                             </label>
-                             <select
-                               className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-xs text-slate-900 dark:text-slate-100 font-semibold focus:outline-none focus:border-blue-600 cursor-pointer"
-                               value={item.s_unit}
-                               onChange={(e) => handleUnitDropdownChange(index, 's_unit', e.target.value)}
-                             >
-                               {allUnits.map(u => (
-                                 <option key={u} value={u}>{u}</option>
-                               ))}
-                               <option value="__ADD_CUSTOM__" className="font-bold text-blue-600">+ Add Custom Unit</option>
-                             </select>
-                           </div>
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
+                              Selling Unit <span className="text-rose-500 font-bold">*</span>
+                            </label>
+                            <select
+                              className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-xs text-slate-900 dark:text-slate-100 font-semibold focus:outline-none focus:border-blue-600 cursor-pointer"
+                              value={item.s_unit}
+                              onChange={(e) => handleUnitDropdownChange(index, 's_unit', e.target.value)}
+                            >
+                              {allUnits.map(u => (
+                                <option key={u} value={u}>{u}</option>
+                              ))}
+                              <option value="__ADD_CUSTOM__" className="font-bold text-blue-600">+ Add Custom Unit</option>
+                            </select>
+                          </div>
 
-                           <div>
-                             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
-                               Base Stock Unit <span className="text-rose-500 font-bold">*</span>
-                             </label>
-                             <select
-                               className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-xs text-slate-900 dark:text-slate-100 font-semibold focus:outline-none focus:border-blue-600 cursor-pointer"
-                               value={item.unit}
-                               onChange={(e) => handleUnitDropdownChange(index, 'unit', e.target.value)}
-                             >
-                               {allUnits.map(u => (
-                                 <option key={u} value={u}>{u}</option>
-                               ))}
-                               <option value="__ADD_CUSTOM__" className="font-bold text-blue-600">+ Add Custom Unit</option>
-                             </select>
-                           </div>
-                         </div>
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
+                              Base Stock Unit <span className="text-rose-500 font-bold">*</span>
+                            </label>
+                            <select
+                              className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-xs text-slate-900 dark:text-slate-100 font-semibold focus:outline-none focus:border-blue-600 cursor-pointer"
+                              value={item.unit}
+                              onChange={(e) => handleUnitDropdownChange(index, 'unit', e.target.value)}
+                            >
+                              {allUnits.map(u => (
+                                <option key={u} value={u}>{u}</option>
+                              ))}
+                              <option value="__ADD_CUSTOM__" className="font-bold text-blue-600">+ Add Custom Unit</option>
+                            </select>
+                          </div>
+                        </div>
 
-                         {/* Collapsible Conversion Factor Section */}
-                         {item.isUnitConversionExpanded && (
-                           <div className="space-y-4 animate-fade-in pt-2 border-t border-slate-100 dark:border-slate-800">
-                             <div className="bg-gradient-to-br from-blue-50/90 via-slate-50 to-indigo-50/80 dark:from-slate-800/90 dark:via-slate-800/50 dark:to-blue-950/40 border-2 border-blue-200 dark:border-blue-800/80 rounded-2xl p-4 sm:p-5 space-y-4 shadow-xs">
-                               <div className="flex justify-between items-center flex-wrap gap-2">
-                                 <span className="text-xs font-extrabold text-blue-900 dark:text-blue-300 uppercase tracking-wider flex items-center gap-1.5">
-                                   <i className="fa-solid fa-calculator text-blue-600"></i> Conversion Factor
-                                 </span>
-                                 <span className="text-[11px] font-bold text-blue-600 bg-blue-100 dark:bg-blue-950 px-2.5 py-0.5 rounded-full border border-blue-300 dark:border-blue-700">
-                                   Live Auto-Conversion
-                                 </span>
-                               </div>
+                        {/* Collapsible Conversion Factor Section */}
+                        {item.isUnitConversionExpanded && (
+                          <div className="space-y-4 animate-fade-in pt-2 border-t border-slate-100 dark:border-slate-800">
+                            <div className="bg-gradient-to-br from-blue-50/90 via-slate-50 to-indigo-50/80 dark:from-slate-800/90 dark:via-slate-800/50 dark:to-blue-950/40 border-2 border-blue-200 dark:border-blue-800/80 rounded-2xl p-4 sm:p-5 space-y-4 shadow-xs">
+                              <div className="flex justify-between items-center flex-wrap gap-2">
+                                <span className="text-xs font-extrabold text-blue-900 dark:text-blue-300 uppercase tracking-wider flex items-center gap-1.5">
+                                  <i className="fa-solid fa-calculator text-blue-600"></i> Conversion Factor
+                                </span>
+                                <span className="text-[11px] font-bold text-blue-600 bg-blue-100 dark:bg-blue-950 px-2.5 py-0.5 rounded-full border border-blue-300 dark:border-blue-700">
+                                  Live Auto-Conversion
+                                </span>
+                              </div>
 
-                               <div className="bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-800 rounded-xl p-3.5 flex flex-wrap items-center justify-center gap-3 shadow-sm">
-                                 <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700">
-                                   <span className="font-black text-sm text-slate-900 dark:text-slate-100 font-mono">1</span>
-                                   <select
-                                     className="bg-transparent text-xs font-bold text-blue-600 dark:text-blue-400 focus:outline-none cursor-pointer"
-                                     value={item.p_unit}
-                                     onChange={(e) => handleUnitDropdownChange(index, 'p_unit', e.target.value)}
-                                   >
-                                     {allUnits.map(u => (
-                                       <option key={u} value={u}>{u}</option>
-                                     ))}
-                                   </select>
-                                 </div>
+                              <div className="bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-800 rounded-xl p-3.5 flex flex-wrap items-center justify-center gap-3 shadow-sm">
+                                <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700">
+                                  <span className="font-black text-sm text-slate-900 dark:text-slate-100 font-mono">1</span>
+                                  <select
+                                    className="bg-transparent text-xs font-bold text-blue-600 dark:text-blue-400 focus:outline-none cursor-pointer"
+                                    value={item.p_unit}
+                                    onChange={(e) => handleUnitDropdownChange(index, 'p_unit', e.target.value)}
+                                  >
+                                    {allUnits.map(u => (
+                                      <option key={u} value={u}>{u}</option>
+                                    ))}
+                                  </select>
+                                </div>
 
-                                 <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm shadow-md shrink-0">
-                                   =
-                                 </div>
+                                <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm shadow-md shrink-0">
+                                  =
+                                </div>
 
-                                 <div className="flex items-center gap-2">
-                                   <input
-                                     type="number"
-                                     step="any"
-                                     min="0"
-                                     className="w-28 bg-blue-50/80 dark:bg-slate-800 border-2 border-blue-600 rounded-xl p-2 text-center text-base font-black text-blue-700 dark:text-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-600/30 shadow-inner font-mono"
-                                     value={item.pieces_per_pack === 0 ? 0 : (item.pieces_per_pack ?? '')}
-                                     onChange={(e) => {
-                                       const val = e.target.value;
-                                       if (val === '') {
-                                         updateProductItem(index, { pieces_per_pack: '' });
-                                       } else {
-                                         const num = Number(val);
-                                         updateProductItem(index, { pieces_per_pack: isNaN(num) ? '' : num });
-                                       }
-                                     }}
-                                     placeholder="1"
-                                   />
-                                   <select
-                                     className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-slate-200 p-2.5 rounded-lg focus:outline-none cursor-pointer"
-                                     value={item.unit}
-                                     onChange={(e) => handleUnitDropdownChange(index, 'unit', e.target.value)}
-                                   >
-                                     {allUnits.map(u => (
-                                       <option key={u} value={u}>{u}</option>
-                                     ))}
-                                   </select>
-                                 </div>
-                               </div>
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="number"
+                                    step="any"
+                                    min="0"
+                                    className="w-28 bg-blue-50/80 dark:bg-slate-800 border-2 border-blue-600 rounded-xl p-2 text-center text-base font-black text-blue-700 dark:text-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-600/30 shadow-inner font-mono"
+                                    value={item.pieces_per_pack === 0 ? 0 : (item.pieces_per_pack ?? '')}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      if (val === '') {
+                                        updateProductItem(index, { pieces_per_pack: '' });
+                                      } else {
+                                        const num = Number(val);
+                                        updateProductItem(index, { pieces_per_pack: isNaN(num) ? '' : num });
+                                      }
+                                    }}
+                                    placeholder="1"
+                                  />
+                                  <select
+                                    className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-slate-200 p-2.5 rounded-lg focus:outline-none cursor-pointer"
+                                    value={item.unit}
+                                    onChange={(e) => handleUnitDropdownChange(index, 'unit', e.target.value)}
+                                  >
+                                    {allUnits.map(u => (
+                                      <option key={u} value={u}>{u}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                              </div>
 
-                               <div className="bg-blue-600 text-white text-center py-2 px-4 rounded-xl text-xs font-extrabold shadow-sm flex items-center justify-center gap-2">
-                                 <i className="fa-solid fa-eye text-blue-200"></i>
-                                 <span>Live Conversion Preview:</span>
-                                 <span className="font-mono text-amber-300 font-black text-sm">
-                                   1 {item.p_unit} = {item.pieces_per_pack ?? 0} {item.unit}
-                                 </span>
-                               </div>
-                             </div>
-                           </div>
+                              <div className="bg-blue-600 text-white text-center py-2 px-4 rounded-xl text-xs font-extrabold shadow-sm flex items-center justify-center gap-2">
+                                <i className="fa-solid fa-eye text-blue-200"></i>
+                                <span>Live Conversion Preview:</span>
+                                <span className="font-mono text-amber-300 font-black text-sm">
+                                  1 {item.p_unit} = {item.pieces_per_pack ?? 0} {item.unit}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
                         )}
                       </div>
 
@@ -2574,17 +2569,17 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="col-span-1 sm:col-span-2 relative">
                           <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Product Name *</label>
-                          <input 
-                            type="text" 
-                            className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 font-semibold focus:outline-none focus:border-blue-600 uppercase shadow-xs" 
+                          <input
+                            type="text"
+                            className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 font-semibold focus:outline-none focus:border-blue-600 uppercase shadow-xs"
                             required
-                            value={item.product_name} 
+                            value={item.product_name}
                             onFocus={() => setActiveSearchDropdownIndex(index)}
                             onBlur={() => setTimeout(() => setActiveSearchDropdownIndex(null), 200)}
                             onChange={(e) => {
                               updateProductItem(index, { product_name: e.target.value });
                               setActiveSearchDropdownIndex(index);
-                            }} 
+                            }}
                             placeholder="e.g. 2*6 SCREW"
                           />
 
@@ -2642,20 +2637,20 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
 
                         <div>
                           <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">SKU Code</label>
-                          <input 
-                            type="text" 
+                          <input
+                            type="text"
                             className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-600 shadow-xs"
-                            value={item.sku} 
-                            onChange={(e) => updateProductItem(index, { sku: e.target.value })} 
+                            value={item.sku}
+                            onChange={(e) => updateProductItem(index, { sku: e.target.value })}
                           />
                         </div>
                         <div>
                           <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Barcode</label>
-                          <input 
-                            type="text" 
+                          <input
+                            type="text"
                             className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-600 shadow-xs"
-                            value={item.barcode} 
-                            onChange={(e) => updateProductItem(index, { barcode: e.target.value })} 
+                            value={item.barcode}
+                            onChange={(e) => updateProductItem(index, { barcode: e.target.value })}
                           />
                         </div>
                         <div>
@@ -2663,15 +2658,15 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                             <span>Cost (Purchase Price) *</span>
                             <span className="text-[10px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-950 px-1.5 py-0.5 rounded border border-blue-200 dark:border-blue-800">per {item.p_unit || 'Unit'}</span>
                           </label>
-                          <input 
-                            type="number" 
-                            step="any" 
-                            className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 font-bold focus:outline-none focus:border-blue-600 shadow-xs" 
+                          <input
+                            type="number"
+                            step="any"
+                            className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 font-bold focus:outline-none focus:border-blue-600 shadow-xs"
                             required
-                            value={item.purchase_price === 0 ? '' : item.purchase_price} 
+                            value={item.purchase_price === 0 ? '' : item.purchase_price}
                             placeholder="0"
                             onFocus={(e) => e.target.select()}
-                            onChange={(e) => updateProductItem(index, { purchase_price: e.target.value === '' ? 0 : Number(e.target.value) })} 
+                            onChange={(e) => updateProductItem(index, { purchase_price: e.target.value === '' ? 0 : Number(e.target.value) })}
                           />
                         </div>
                         <div>
@@ -2679,29 +2674,28 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                             <span>Selling Price *</span>
                             <span className="text-[10px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-950 px-1.5 py-0.5 rounded border border-blue-200 dark:border-blue-800">per {item.s_unit || 'Unit'}</span>
                           </label>
-                          <input 
-                            type="number" 
-                            step="any" 
-                            className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 font-bold focus:outline-none focus:border-blue-600 shadow-xs" 
+                          <input
+                            type="number"
+                            step="any"
+                            className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 font-bold focus:outline-none focus:border-blue-600 shadow-xs"
                             required
-                            value={item.selling_price === 0 ? '' : item.selling_price} 
+                            value={item.selling_price === 0 ? '' : item.selling_price}
                             placeholder="0"
                             onFocus={(e) => e.target.select()}
-                            onChange={(e) => updateProductItem(index, { selling_price: e.target.value === '' ? 0 : Number(e.target.value) })} 
+                            onChange={(e) => updateProductItem(index, { selling_price: e.target.value === '' ? 0 : Number(e.target.value) })}
                           />
                         </div>
-                        
+
                         {/* RULE 8: Live Step-by-Step Unit Conversion & Margin Calculation Card */}
                         <div className="col-span-1 sm:col-span-2 bg-gradient-to-r from-blue-50/90 via-slate-50 to-emerald-50/90 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 p-4 rounded-2xl border-2 border-blue-200 dark:border-blue-800 text-xs space-y-2.5 shadow-xs">
                           <div className="flex justify-between items-center flex-wrap gap-2 border-b border-blue-200 dark:border-blue-800 pb-2">
                             <span className="font-extrabold text-blue-900 dark:text-blue-300 flex items-center gap-1.5 uppercase tracking-wide">
                               <i className="fa-solid fa-calculator text-blue-600"></i> Rule 8 Live Conversion & Profit Engine
                             </span>
-                            <span className={`font-mono font-black text-xs px-2.5 py-0.5 rounded-md border ${
-                              marginPercent >= 0 
-                                ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700' 
+                            <span className={`font-mono font-black text-xs px-2.5 py-0.5 rounded-md border ${marginPercent >= 0
+                                ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700'
                                 : 'bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300 border-rose-300 dark:border-rose-700'
-                            }`}>
+                              }`}>
                               Margin: {marginPercent >= 0 ? '+' : ''}{marginPercent.toFixed(1)}%
                             </span>
                           </div>
@@ -2746,24 +2740,23 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                                   onClick={() => setIsEditingBaseStock(!isEditingBaseStock)}
                                   className="text-[10px] font-extrabold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer"
                                 >
-                                  <i className={`fa-solid ${isEditingBaseStock ? 'fa-lock' : 'fa-pen-to-square'}`}></i> 
+                                  <i className={`fa-solid ${isEditingBaseStock ? 'fa-lock' : 'fa-pen-to-square'}`}></i>
                                   {isEditingBaseStock ? 'Lock Field' : '✏️ Audit Base Stock Correction'}
                                 </button>
                               </div>
                               <div className="relative">
-                                <input 
-                                  type="number" 
+                                <input
+                                  type="number"
                                   step="any"
                                   disabled={!isEditingBaseStock}
-                                  className={`w-full border rounded-xl p-2.5 font-mono font-bold transition text-xs pr-14 ${
-                                    isEditingBaseStock 
-                                      ? 'bg-white dark:bg-slate-900 border-blue-600 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-600/20' 
+                                  className={`w-full border rounded-xl p-2.5 font-mono font-bold transition text-xs pr-14 ${isEditingBaseStock
+                                      ? 'bg-white dark:bg-slate-900 border-blue-600 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-600/20'
                                       : 'bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-500 cursor-not-allowed opacity-80'
-                                  }`}
-                                  value={item.current_stock === 0 ? '' : item.current_stock} 
+                                    }`}
+                                  value={item.current_stock === 0 ? '' : item.current_stock}
                                   placeholder="0"
                                   onFocus={(e) => e.target.select()}
-                                  onChange={(e) => updateProductItem(index, { current_stock: e.target.value === '' ? 0 : Number(e.target.value) })} 
+                                  onChange={(e) => updateProductItem(index, { current_stock: e.target.value === '' ? 0 : Number(e.target.value) })}
                                 />
                                 <span className="absolute right-3 top-2.5 text-xs font-bold text-slate-400 font-mono uppercase">
                                   {item.unit || 'Pcs'}
@@ -2779,15 +2772,15 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                                 </span>
                               </label>
                               <div className="relative">
-                                <input 
-                                  type="number" 
-                                  step="any" 
-                                  min="0" 
+                                <input
+                                  type="number"
+                                  step="any"
+                                  min="0"
                                   className="w-full bg-white dark:bg-slate-900 border-2 border-blue-500 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none font-mono font-extrabold shadow-xs pr-16"
                                   placeholder={`Enter qty in ${item.p_unit || 'Box'} (e.g. 1)...`}
-                                  value={item.additional_stock === 0 ? '' : item.additional_stock} 
+                                  value={item.additional_stock === 0 ? '' : item.additional_stock}
                                   onFocus={(e) => e.target.select()}
-                                  onChange={(e) => updateProductItem(index, { additional_stock: e.target.value === '' ? 0 : Number(e.target.value) })} 
+                                  onChange={(e) => updateProductItem(index, { additional_stock: e.target.value === '' ? 0 : Number(e.target.value) })}
                                 />
                                 <span className="absolute right-3 top-2.5 text-xs font-black text-blue-600 dark:text-blue-400 font-mono uppercase">
                                   {item.p_unit || 'Box'}
@@ -2848,19 +2841,19 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                                 </span>
                               </label>
                               <div className="relative">
-                                <input 
-                                  type="number" 
+                                <input
+                                  type="number"
                                   step="any"
                                   min="0"
-                                  className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none font-mono font-bold shadow-xs pr-16" 
+                                  className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none font-mono font-bold shadow-xs pr-16"
                                   required
-                                  value={item.additional_stock || item.current_stock || ''} 
+                                  value={item.additional_stock || item.current_stock || ''}
                                   placeholder={`Enter opening qty in ${item.p_unit || 'Box'}...`}
                                   onFocus={(e) => e.target.select()}
                                   onChange={(e) => {
                                     const val = e.target.value === '' ? 0 : Number(e.target.value);
                                     updateProductItem(index, { additional_stock: val, current_stock: val });
-                                  }} 
+                                  }}
                                 />
                                 <span className="absolute right-3 top-2.5 text-xs font-bold text-slate-500 font-mono uppercase">
                                   {item.p_unit || 'Box'}
@@ -2905,24 +2898,24 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                             <span>Min Stock Warning *</span>
                             <span className="text-[10px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-950 px-1.5 py-0.5 rounded border border-blue-200 dark:border-blue-800">in {item.unit || 'Base Unit'}</span>
                           </label>
-                          <input 
-                            type="number" 
-                            className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none font-mono font-bold shadow-xs" 
+                          <input
+                            type="number"
+                            className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none font-mono font-bold shadow-xs"
                             required
-                            value={item.min_stock_level === 0 ? '' : item.min_stock_level} 
+                            value={item.min_stock_level === 0 ? '' : item.min_stock_level}
                             placeholder="0"
                             onFocus={(e) => e.target.select()}
-                            onChange={(e) => updateProductItem(index, { min_stock_level: e.target.value === '' ? 0 : Number(e.target.value) })} 
+                            onChange={(e) => updateProductItem(index, { min_stock_level: e.target.value === '' ? 0 : Number(e.target.value) })}
                           />
                         </div>
                         <div>
                           <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">HSN Code of Product</label>
-                          <input 
-                            type="text" 
+                          <input
+                            type="text"
                             className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none font-mono shadow-xs"
-                            value={item.hsn} 
-                            onChange={(e) => updateProductItem(index, { hsn: e.target.value })} 
-                            placeholder="e.g. 7214" 
+                            value={item.hsn}
+                            onChange={(e) => updateProductItem(index, { hsn: e.target.value })}
+                            placeholder="e.g. 7214"
                           />
                         </div>
                         <div>
@@ -2944,24 +2937,22 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                                   updateProductItem(index, { gst: 0 });
                                 }
                               }}
-                              className={`text-[10px] font-extrabold px-2 py-0.5 rounded-lg border transition flex items-center gap-1 cursor-pointer active:scale-95 ${
-                                isEditingTax
+                              className={`text-[10px] font-extrabold px-2 py-0.5 rounded-lg border transition flex items-center gap-1 cursor-pointer active:scale-95 ${isEditingTax
                                   ? 'bg-rose-500/10 text-rose-500 border-rose-500/30 hover:bg-rose-500 hover:text-white'
                                   : 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30 hover:bg-blue-600 hover:text-white'
-                              }`}
+                                }`}
                             >
                               <i className={`fa-solid ${isEditingTax ? 'fa-lock' : 'fa-lock-open'}`}></i>
                               {isEditingTax ? 'Freeze / Turn Off GST' : '✏️ Enable GST Tax'}
                             </button>
                           </div>
-                          <select 
-                            disabled={!isEditingTax} 
-                            className={`w-full border rounded-xl p-2.5 text-xs font-semibold transition ${
-                              isEditingTax 
-                                ? 'bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none' 
+                          <select
+                            disabled={!isEditingTax}
+                            className={`w-full border rounded-xl p-2.5 text-xs font-semibold transition ${isEditingTax
+                                ? 'bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none'
                                 : 'bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-400 cursor-not-allowed opacity-75'
-                            }`}
-                            value={item.gst || 0} 
+                              }`}
+                            value={item.gst || 0}
                             onChange={(e) => updateProductItem(index, { gst: Number(e.target.value) })}
                           >
                             <option value={0}>0% (GST Disabled / Frozen)</option>
@@ -2973,32 +2964,32 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                         </div>
                         <div>
                           <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Product Size</label>
-                          <input 
-                            type="text" 
+                          <input
+                            type="text"
                             className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none shadow-xs"
-                            value={item.size} 
-                            onChange={(e) => updateProductItem(index, { size: e.target.value })} 
-                            placeholder="e.g. 10mm, 2 Inch" 
+                            value={item.size}
+                            onChange={(e) => updateProductItem(index, { size: e.target.value })}
+                            placeholder="e.g. 10mm, 2 Inch"
                           />
                         </div>
                         <div>
                           <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Product Weight</label>
-                          <input 
-                            type="text" 
+                          <input
+                            type="text"
                             className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none shadow-xs"
-                            value={item.weight} 
-                            onChange={(e) => updateProductItem(index, { weight: e.target.value })} 
-                            placeholder="e.g. 1.2kg, 500g" 
+                            value={item.weight}
+                            onChange={(e) => updateProductItem(index, { weight: e.target.value })}
+                            placeholder="e.g. 1.2kg, 500g"
                           />
                         </div>
                         <div className="col-span-1 sm:col-span-2">
                           <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Product Description</label>
-                          <textarea 
-                            className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none shadow-xs" 
+                          <textarea
+                            className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none shadow-xs"
                             rows={2}
-                            value={item.description} 
-                            onChange={(e) => updateProductItem(index, { description: e.target.value })} 
-                            placeholder="Enter detailed specifications..." 
+                            value={item.description}
+                            onChange={(e) => updateProductItem(index, { description: e.target.value })}
+                            placeholder="Enter detailed specifications..."
                           />
                         </div>
                       </div>
@@ -3009,32 +3000,32 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                           <div>
                             <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">Godown (Warehouse)</label>
-                            <input 
-                              type="text" 
-                              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2 text-xs text-slate-900 dark:text-slate-100 focus:outline-none font-medium" 
+                            <input
+                              type="text"
+                              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2 text-xs text-slate-900 dark:text-slate-100 focus:outline-none font-medium"
                               placeholder="e.g. Main Godown A"
-                              value={item.godown} 
-                              onChange={(e) => updateProductItem(index, { godown: e.target.value })} 
+                              value={item.godown}
+                              onChange={(e) => updateProductItem(index, { godown: e.target.value })}
                             />
                           </div>
                           <div>
                             <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">Rack Number</label>
-                            <input 
-                              type="text" 
-                              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2 text-xs text-slate-900 dark:text-slate-100 focus:outline-none font-medium" 
+                            <input
+                              type="text"
+                              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2 text-xs text-slate-900 dark:text-slate-100 focus:outline-none font-medium"
                               placeholder="e.g. Rack R-12"
-                              value={item.rack_number} 
-                              onChange={(e) => updateProductItem(index, { rack_number: e.target.value })} 
+                              value={item.rack_number}
+                              onChange={(e) => updateProductItem(index, { rack_number: e.target.value })}
                             />
                           </div>
                           <div>
                             <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">Shelf Number</label>
-                            <input 
-                              type="text" 
-                              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2 text-xs text-slate-900 dark:text-slate-100 focus:outline-none font-medium" 
+                            <input
+                              type="text"
+                              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2 text-xs text-slate-900 dark:text-slate-100 focus:outline-none font-medium"
                               placeholder="e.g. Shelf S-3"
-                              value={item.shelf_number} 
-                              onChange={(e) => updateProductItem(index, { shelf_number: e.target.value })} 
+                              value={item.shelf_number}
+                              onChange={(e) => updateProductItem(index, { shelf_number: e.target.value })}
                             />
                           </div>
                         </div>
@@ -3085,7 +3076,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                           <i className="fa-solid fa-receipt text-blue-400"></i> Transaction ID / UTR / Reference No.
                         </span>
                       </label>
-                      <input 
+                      <input
                         type="text"
                         className="w-full bg-slate-900 border border-blue-400/50 rounded-lg p-2.5 text-xs text-slate-100 font-mono font-bold focus:border-blue-400 focus:outline-none uppercase"
                         value={transactionId}
@@ -3102,11 +3093,10 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                       <button
                         type="button"
                         onClick={() => { setPaymentStatus('paid'); setCustomPaidAmount(''); }}
-                        className={`py-2.5 px-3 rounded-xl font-extrabold text-xs transition border flex flex-col items-center justify-center gap-0.5 cursor-pointer ${
-                          paymentStatus === 'paid'
+                        className={`py-2.5 px-3 rounded-xl font-extrabold text-xs transition border flex flex-col items-center justify-center gap-0.5 cursor-pointer ${paymentStatus === 'paid'
                             ? 'bg-emerald-600 text-white border-emerald-400 shadow-md scale-102 ring-2 ring-emerald-500/30'
                             : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-700'
-                        }`}
+                          }`}
                       >
                         <span className="flex items-center gap-1.5">
                           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
@@ -3118,11 +3108,10 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                       <button
                         type="button"
                         onClick={() => { setPaymentStatus('partial'); if (customPaidAmount === '') setCustomPaidAmount(Math.round(calculatedTotalBillCost / 2)); }}
-                        className={`py-2.5 px-3 rounded-xl font-extrabold text-xs transition border flex flex-col items-center justify-center gap-0.5 cursor-pointer ${
-                          paymentStatus === 'partial'
+                        className={`py-2.5 px-3 rounded-xl font-extrabold text-xs transition border flex flex-col items-center justify-center gap-0.5 cursor-pointer ${paymentStatus === 'partial'
                             ? 'bg-amber-600 text-white border-amber-400 shadow-md scale-102 ring-2 ring-amber-500/30'
                             : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-700'
-                        }`}
+                          }`}
                       >
                         <span className="flex items-center gap-1.5">
                           <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
@@ -3134,11 +3123,10 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                       <button
                         type="button"
                         onClick={() => { setPaymentStatus('credit'); setCustomPaidAmount(0); }}
-                        className={`py-2.5 px-3 rounded-xl font-extrabold text-xs transition border flex flex-col items-center justify-center gap-0.5 cursor-pointer ${
-                          paymentStatus === 'credit'
+                        className={`py-2.5 px-3 rounded-xl font-extrabold text-xs transition border flex flex-col items-center justify-center gap-0.5 cursor-pointer ${paymentStatus === 'credit'
                             ? 'bg-rose-600 text-white border-rose-400 shadow-md scale-102 ring-2 ring-rose-500/30'
                             : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-700'
-                        }`}
+                          }`}
                       >
                         <span className="flex items-center gap-1.5">
                           <span className="w-2 h-2 rounded-full bg-rose-400 animate-pulse"></span>
@@ -3170,18 +3158,17 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                   )}
 
                   {/* DUES BREAKDOWN BANNER */}
-                  <div className={`p-3.5 rounded-xl border font-mono text-xs flex justify-between items-center ${
-                    effectiveDueAmount > 0 
-                      ? 'bg-rose-950/80 border-rose-500/60 text-rose-200' 
+                  <div className={`p-3.5 rounded-xl border font-mono text-xs flex justify-between items-center ${effectiveDueAmount > 0
+                      ? 'bg-rose-950/80 border-rose-500/60 text-rose-200'
                       : 'bg-emerald-950/80 border-emerald-500/60 text-emerald-200'
-                  }`}>
+                    }`}>
                     <div className="space-y-0.5">
                       <div className="font-extrabold flex items-center gap-1.5 text-xs">
                         <i className={`fa-solid ${effectiveDueAmount > 0 ? 'fa-circle-exclamation text-rose-400' : 'fa-circle-check text-emerald-400'}`}></i>
                         <span>{effectiveDueAmount > 0 ? 'Vendor Outstanding Pending Dues:' : 'Bill Fully Settled:'}</span>
                       </div>
                       <div className="text-[10.5px] font-sans opacity-85">
-                        {effectiveDueAmount > 0 
+                        {effectiveDueAmount > 0
                           ? `₹${effectiveDueAmount.toFixed(2)} pending amount will be added to ${vendorSearchQuery || 'Vendor'}'s Outstanding Balance ledger.`
                           : 'No pending dues will be added for this supplier.'
                         }
@@ -3198,8 +3185,8 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
               {/* Sticky Action Footer */}
               <div className="shrink-0 flex gap-3 justify-end pt-3 border-t border-border mt-4">
                 <button type="button" className="px-5 py-2.5 border border-border text-textSecondary rounded-lg text-xs font-bold hover:bg-background transition cursor-pointer" onClick={() => { setEditingProduct(null); setModalOpen(false); }}>Cancel</button>
-                <button 
-                  type="submit" 
+                <button
+                  type="submit"
                   disabled={isSavingProduct}
                   className={`px-5 py-2.5 font-bold rounded-lg text-xs transition shadow-md cursor-pointer flex items-center gap-2 ${isSavingProduct ? 'bg-primary/60 text-white cursor-not-allowed' : 'bg-primary hover:bg-primary/90 text-white'}`}
                 >
@@ -3300,11 +3287,10 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                 <button
                   type="button"
                   onClick={() => setHistoryTab('purchases')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition cursor-pointer flex items-center gap-1.5 ${
-                    historyTab === 'purchases'
+                  className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition cursor-pointer flex items-center gap-1.5 ${historyTab === 'purchases'
                       ? 'bg-primary text-white shadow-xs'
                       : 'bg-background text-textSecondary hover:text-foreground border border-border'
-                  }`}
+                    }`}
                 >
                   <i className="fa-solid fa-truck-ramp-box text-xs"></i>
                   <span>Supplier Purchase Inflows ({prodPurchaseHistory.length})</span>
@@ -3312,11 +3298,10 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                 <button
                   type="button"
                   onClick={() => setHistoryTab('sales')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition cursor-pointer flex items-center gap-1.5 ${
-                    historyTab === 'sales'
+                  className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition cursor-pointer flex items-center gap-1.5 ${historyTab === 'sales'
                       ? 'bg-primary text-white shadow-xs'
                       : 'bg-background text-textSecondary hover:text-foreground border border-border'
-                  }`}
+                    }`}
                 >
                   <i className="fa-solid fa-cart-shopping text-xs"></i>
                   <span>Sales Outflows ({prodSalesHistory.length})</span>
@@ -3448,9 +3433,9 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
               <h3 className="text-base font-black text-foreground uppercase tracking-tight flex items-center gap-2">
                 <i className="fa-solid fa-truck-ramp-box text-primary"></i> Quick Register Vendor / Supplier
               </h3>
-              <button 
-                type="button" 
-                onClick={() => setQuickVendorModalOpen(false)} 
+              <button
+                type="button"
+                onClick={() => setQuickVendorModalOpen(false)}
                 className="text-textMuted hover:text-foreground text-sm font-bold cursor-pointer"
               >
                 ✕
@@ -3460,21 +3445,21 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
             <form onSubmit={handleQuickCreateVendor} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-textSecondary mb-1">Vendor / Firm Name *</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   className="w-full bg-background border border-border rounded-lg p-2.5 text-xs text-foreground font-extrabold uppercase focus:border-primary focus:outline-none"
                   value={quickVendorFormData.supplier_name}
                   onChange={(e) => setQuickVendorFormData(prev => ({ ...prev, supplier_name: e.target.value }))}
                   placeholder="e.g. AMBICA STEEL TRADERS"
-                  required 
+                  required
                   autoFocus
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-textSecondary mb-1">Phone / Mobile Number</label>
-                <input 
-                  type="tel" 
+                <input
+                  type="tel"
                   className="w-full bg-background border border-border rounded-lg p-2.5 text-xs text-foreground font-mono"
                   value={quickVendorFormData.phone}
                   onChange={(e) => setQuickVendorFormData(prev => ({ ...prev, phone: e.target.value }))}
@@ -3484,7 +3469,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
 
               <div>
                 <label className="block text-xs font-semibold text-textSecondary mb-1">Supplier City / Address</label>
-                <textarea 
+                <textarea
                   rows={2}
                   className="w-full bg-background border border-border rounded-lg p-2.5 text-xs text-foreground"
                   value={quickVendorFormData.address}
@@ -3494,14 +3479,14 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
               </div>
 
               <div className="flex justify-end gap-2 pt-2 border-t border-border">
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   onClick={() => setQuickVendorModalOpen(false)}
                   className="px-4 py-2 bg-background text-foreground font-bold text-xs rounded-xl border border-border hover:bg-slate-200 dark:hover:bg-slate-800 transition"
                 >
                   Cancel
                 </button>
-                <button 
+                <button
                   type="submit"
                   className="px-5 py-2 bg-primary text-white font-extrabold text-xs rounded-xl shadow-md hover:bg-primary/90 transition active:scale-95 cursor-pointer"
                 >
