@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useMemo, lazy, Suspense, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from './hooks/useAuth';
 import { ErpDataProvider, useErpContext } from './context/ErpContext';
@@ -178,31 +178,43 @@ function App() {
 
   const udharDueCustomers = useMemo(() => {
     if (!Array.isArray(customersList)) return [];
-    return customersList.filter((c: any) => Number(c.outstanding || 0) > 0);
-  }, [customersList]);
+    
+    return customersList.filter((c: any) => {
+      const outstanding = Number(c.outstanding || 0);
+      if (outstanding <= 0) return false;
 
-  // Native Browser & Mobile Device Web Notifications for Udhar Dues Due Today
-  useEffect(() => {
-    if (udharDueCustomers.length > 0 && Boolean(user)) {
-      if ('Notification' in window) {
-        if (Notification.permission === 'granted') {
-          const totalDues = udharDueCustomers.reduce((acc: number, c: any) => acc + Number(c.outstanding || 0), 0);
-          const names = udharDueCustomers.map((c: any) => c.customer_name).slice(0, 3).join(', ');
-          try {
-            new Notification('⚠️ Udhar Payment Due Alert - LK Smart ERP', {
-              body: `Active Udhar Dues: ${udharDueCustomers.length} Customer(s) (${names}) have ₹${totalDues.toLocaleString('en-IN')} pending payments due today!`,
-              icon: '/logo.png',
-              tag: 'udhar-due-notification'
-            });
-          } catch (e) {
-            console.warn('Browser notification error:', e);
-          }
-        } else if (Notification.permission !== 'denied') {
-          Notification.requestPermission();
+      let lastPurchDate: string | null = null;
+      if (sales && sales.length > 0) {
+        const custInvoices = sales.filter((s: any) => s.customer_id === c.id);
+        if (custInvoices.length > 0) {
+           const sortedInvs = [...custInvoices].sort((a, b) =>
+             new Date(b.sale_date || b.created_at || 0).getTime() - new Date(a.sale_date || a.created_at || 0).getTime()
+           );
+           lastPurchDate = sortedInvs[0].sale_date || sortedInvs[0].created_at || null;
         }
       }
-    }
-  }, [udharDueCustomers.length, user]);
+
+      let computedDueDate: string | null = c.due_date || null;
+      if (!computedDueDate && lastPurchDate) {
+        const d = new Date(lastPurchDate);
+        d.setDate(d.getDate() + 15);
+        computedDueDate = d.toISOString().slice(0, 10);
+      } else if (!computedDueDate) {
+        const d = new Date(c.created_at || Date.now());
+        d.setDate(d.getDate() + 15);
+        computedDueDate = d.toISOString().slice(0, 10);
+      }
+
+      if (!computedDueDate) return false;
+
+      const today = new Date();
+      const dueDate = new Date(computedDueDate);
+      
+      return dueDate.getDate() === today.getDate() && 
+             dueDate.getMonth() === today.getMonth() && 
+             dueDate.getFullYear() === today.getFullYear();
+    });
+  }, [customersList, sales]);
 
 
   const toggleTheme = () => {
@@ -285,6 +297,71 @@ function App() {
 
     return list;
   }, [customersList, suppliersList]);
+
+  const lowStockCount = productsList.filter((p: any) => {
+    const piecesPerPack = Number(p.pieces_per_pack || 1);
+    const baseStockQty = Number(p.current_stock || 0);
+    const purchasePackQty = piecesPerPack > 1 ? (baseStockQty / piecesPerPack) : baseStockQty;
+    const minStockPacks = Number(p.min_stock_level || 10);
+    return purchasePackQty <= minStockPacks;
+  }).length;
+
+  const notifiedRef = useRef(new Set<string>());
+
+  // Native Browser & Mobile Device Web Notifications for Important Alerts
+  useEffect(() => {
+    if (!Boolean(user)) return;
+    if (!('Notification' in window)) return;
+    
+    const notify = (title: string, body: string, tag: string) => {
+      if (notifiedRef.current.has(tag)) return;
+      if (Notification.permission === 'granted') {
+        try {
+          new Notification(title, { body, icon: '/logo.png', tag });
+          notifiedRef.current.add(tag);
+        } catch (e) {
+          console.warn('Browser notification error:', e);
+        }
+      } else if (Notification.permission !== 'denied') {
+        Notification.requestPermission();
+      }
+    };
+
+    if (udharDueCustomers.length > 0) {
+      const totalDues = udharDueCustomers.reduce((acc: number, c: any) => acc + Number(c.outstanding || 0), 0);
+      const names = udharDueCustomers.map((c: any) => c.customer_name).slice(0, 3).join(', ');
+      notify(
+        '⚠️ Udhar Payment Due Alert',
+        `Active Udhar Dues: ${udharDueCustomers.length} Customer(s) (${names}) have ₹${totalDues.toLocaleString('en-IN')} pending payments due today!`,
+        `udhar-due-${udharDueCustomers.length}`
+      );
+    }
+    
+    if (highDemandAlerts && highDemandAlerts.length > 0) {
+      notify(
+        '🚨 High Customer Demand Alert',
+        `${highDemandAlerts.length} unstocked item(s) reached target threshold. Consider restocking!`,
+        `high-demand-${highDemandAlerts.length}`
+      );
+    }
+    
+    if (lowStockCount > 0) {
+      notify(
+        '📦 Low Stock Warning',
+        `${lowStockCount} items require restocking. Check your inventory!`,
+        `low-stock-${lowStockCount}`
+      );
+    }
+    
+    if (todaysBirthdays && todaysBirthdays.length > 0) {
+      notify(
+        '🎉 Today\'s Birthdays / Establishments',
+        `${todaysBirthdays.length} customer(s)/vendor(s) have a special day today!`,
+        `birthdays-${todaysBirthdays.length}`
+      );
+    }
+
+  }, [udharDueCustomers.length, highDemandAlerts?.length, lowStockCount, todaysBirthdays?.length, user]);
 
   if (loading) {
     return (
@@ -390,13 +467,7 @@ function App() {
     );
   }
 
-  const lowStockCount = productsList.filter((p: any) => {
-    const piecesPerPack = Number(p.pieces_per_pack || 1);
-    const baseStockQty = Number(p.current_stock || 0);
-    const purchasePackQty = piecesPerPack > 1 ? (baseStockQty / piecesPerPack) : baseStockQty;
-    const minStockPacks = Number(p.min_stock_level || 10);
-    return purchasePackQty <= minStockPacks;
-  }).length;
+
   
   const getCustomerDues = () => {
     try {
@@ -455,6 +526,8 @@ function App() {
       ]
     }
   ];
+
+
 
   return (
     <div data-lang={lang} className="min-h-screen bg-background flex text-foreground transition-all duration-300">

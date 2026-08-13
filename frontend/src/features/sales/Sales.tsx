@@ -102,6 +102,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
     dob: '',
     credit_limit: 50000
   });
+  const [quickCustPhoneError, setQuickCustPhoneError] = useState<string | null>(null);
 
   // Combined list of registered customers + non-registered customers from past sales invoices
   const allSearchableCustomers = useMemo(() => {
@@ -387,7 +388,8 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
         repayUdharAmount: repayNum,
         paymentMode,
         transactionId: transactionId.trim(),
-        discountAmount: manualDiscount
+        discountAmount: manualDiscount,
+        dueDate: (isUdharEnabled || paymentMode === 'Credit') ? creditDueDate : undefined
       });
       setBillingModal(false);
       setRepayUdharInput('');
@@ -472,13 +474,14 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
         <table className="w-full text-left text-sm text-slate-700 dark:text-slate-200 border-collapse">
           <thead>
             <tr className="border-b-2 border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/90 text-slate-700 dark:text-slate-200 font-extrabold uppercase tracking-wider text-[11px] divide-x divide-slate-200 dark:divide-slate-700 whitespace-nowrap">
-              <th className="py-2.5 px-3 text-center whitespace-nowrap">HSN Code</th>
-              <th className="py-2.5 px-3 text-center whitespace-nowrap">Product Name</th>
-              <th className="py-2.5 px-3 text-center whitespace-nowrap">Customer Billed To</th>
               <th className="py-2.5 px-3 text-center whitespace-nowrap">Date & Time</th>
+              <th className="py-2.5 px-3 text-center whitespace-nowrap">Product Name</th>
+              <th className="py-2.5 px-3 text-center whitespace-nowrap">HSN Code</th>
               <th className="py-2.5 px-3 text-center whitespace-nowrap">Qty (Units)</th>
               <th className="py-2.5 px-3 text-center whitespace-nowrap">Unit Price (₹)</th>
               <th className="py-2.5 px-3 text-center whitespace-nowrap">Total Amount (₹)</th>
+              <th className="py-2.5 px-3 text-center whitespace-nowrap">Customer Billed To</th>
+              <th className="py-2.5 px-3 text-center whitespace-nowrap">Status</th>
               <th className="py-2.5 px-3 text-center whitespace-nowrap">Actions</th>
             </tr>
           </thead>
@@ -492,25 +495,30 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
               </tr>
             ) : filteredSaleLines.map((line, idx) => (
               <tr key={idx} className="odd:bg-white dark:odd:bg-slate-900 even:bg-slate-50/70 dark:even:bg-slate-800/30 hover:bg-blue-50/60 dark:hover:bg-slate-800/70 transition-colors divide-x divide-slate-200 dark:divide-slate-800">
-                <td className="py-2.5 px-3 text-center font-mono text-xs">
-                  <span className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded font-bold">
-                    {line.hsn}
+                <td className="py-2.5 px-3 text-center text-xs">
+                  <span className="font-mono text-slate-900 dark:text-slate-100 font-semibold">{new Date(line.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                  <span className="text-[10px] font-mono text-slate-400 ml-1.5 block sm:inline">
+                    {new Date(line.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </td>
                 <td className="py-2.5 px-3 text-center text-xs font-bold text-slate-900 dark:text-slate-100 uppercase">{line.product_name}</td>
-                <td className="py-2.5 px-3 text-center text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase">
-                  {line.customer_name}
-                </td>
-                <td className="py-2.5 px-3 text-center text-xs">
-                  <span className="font-mono text-slate-900 dark:text-slate-100 font-semibold">{new Date(line.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
-                  <span className="text-[10px] font-mono text-slate-400 ml-1.5">
-                    {new Date(line.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                <td className="py-2.5 px-3 text-center font-mono text-xs">
+                  <span className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded font-bold">
+                    {line.hsn}
                   </span>
                 </td>
                 <td className="py-2.5 px-3 text-center text-xs font-mono font-bold text-slate-900 dark:text-slate-100">{line.qty}</td>
                 <td className="py-2.5 px-3 text-center text-xs font-mono text-slate-900 dark:text-slate-100">₹{line.price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                 <td className="py-2.5 px-3 text-center text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">
                   ₹{line.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </td>
+                <td className="py-2.5 px-3 text-center text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase">
+                  {line.customer_name}
+                </td>
+                <td className="py-2.5 px-3 text-center text-xs font-bold uppercase">
+                  <span className={`px-2 py-0.5 rounded text-[10px] shadow-sm ${line.rawSaleObj?.payment_status?.toLowerCase() === 'paid' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800' : line.rawSaleObj?.payment_status?.toLowerCase() === 'credit' ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400 border border-rose-200 dark:border-rose-800' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border border-amber-200 dark:border-amber-800'}`}>
+                    {line.rawSaleObj?.payment_status || line.rawSaleObj?.status || 'Completed'}
+                  </span>
                 </td>
                 <td className="py-2.5 px-3 text-center flex items-center justify-center gap-1.5">
                   <button className="text-xs bg-primary/10 hover:bg-primary hover:text-white border border-primary/20 text-primary px-2.5 py-1 rounded-lg font-bold transition-all active:scale-95 cursor-pointer inline-flex items-center gap-1"

@@ -113,7 +113,7 @@ export function useBilling(tenantId: string) {
     setCart(cart.filter(i => !(i.product.id === productId && i.isLoose === isLoose)));
   };
 
-  const processCheckout = async (options?: { amountCollected?: number; repayUdharAmount?: number; paymentMode?: string; transactionId?: string; discountAmount?: number }) => {
+  const processCheckout = async (options?: { amountCollected?: number; repayUdharAmount?: number; paymentMode?: string; transactionId?: string; discountAmount?: number; dueDate?: string }) => {
     const activeCart = cart.filter(i => i.qty > 0);
     if (activeCart.length === 0) throw new Error('Cart is empty or has 0 quantity items.');
 
@@ -206,6 +206,11 @@ export function useBilling(tenantId: string) {
 
       // Auto-register customer in database if they don't have a valid UUID yet
       if (customerName.trim() && customerName.trim().toUpperCase() !== 'CASH CUSTOMER') {
+        const updatePayload: any = { outstanding: newOutstanding };
+        if (options?.dueDate) {
+          updatePayload.due_date = options.dueDate;
+        }
+
         if (!matchedCustomer || !isValidUUID(matchedCustomer.id)) {
           try {
             const createRes = await CustomerService.createCustomer({
@@ -213,13 +218,13 @@ export function useBilling(tenantId: string) {
               customer_name: customerName.trim().toUpperCase(),
               phone: customerPhone.trim(),
               credit_limit: 50000,
-              outstanding: newOutstanding
+              ...updatePayload
             });
             if (createRes.data) matchedCustomer = createRes.data;
           } catch (e) {}
         } else {
           try {
-            await CustomerService.updateCustomer(matchedCustomer.id, { outstanding: newOutstanding });
+            await CustomerService.updateCustomer(matchedCustomer.id, updatePayload);
           } catch (e) {}
         }
       }

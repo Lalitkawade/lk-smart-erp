@@ -133,6 +133,11 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
   const [vendorDropdownOpen, setVendorDropdownOpen] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState<'paid' | 'partial' | 'credit'>('paid');
   const [customPaidAmount, setCustomPaidAmount] = useState<number | ''>('');
+  const [dueDate, setDueDate] = useState<string>(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 15);
+    return d.toISOString().split('T')[0];
+  });
 
   // Quick Vendor Registration State
   const [quickVendorModalOpen, setQuickVendorModalOpen] = useState(false);
@@ -1275,8 +1280,10 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
         if (!matchesSearch) return false;
         if (mode === 'stock') {
           const currentStock = Number(p?.current_stock || 0);
+          const piecesPerPack = Number(p?.pieces_per_pack || 1);
+          const purchasePackQty = piecesPerPack > 1 ? (currentStock / piecesPerPack) : currentStock;
           const minStock = Number(p?.min_stock_level || 10);
-          if (stockFilterTab === 'low') return currentStock <= minStock;
+          if (stockFilterTab === 'low') return purchasePackQty <= minStock;
         }
         return true;
       })
@@ -1664,8 +1671,8 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
               <thead className="bg-muted/80 border-b border-border text-textSecondary font-extrabold uppercase tracking-wider text-[11px] whitespace-nowrap">
                 <tr>
                   <th className="py-3 px-3.5 text-center whitespace-nowrap">Date & Time</th>
-                  <th className="py-3 px-3.5 text-center whitespace-nowrap">HSN Code</th>
                   <th className="py-3 px-3.5 text-center whitespace-nowrap">{mode === 'stock' ? 'Product Item & Location' : 'Product Name'}</th>
+                  <th className="py-3 px-3.5 text-center whitespace-nowrap">HSN Code</th>
                   {mode === 'stock' ? (
                     <>
                       <th className="py-3 px-3.5 text-center whitespace-nowrap">Safety Min</th>
@@ -1708,7 +1715,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                   const baseStockQty = Number(p?.current_stock || 0);
                   const purchasePackQty = piecesPerPack > 0 ? (baseStockQty / piecesPerPack) : baseStockQty;
                   const minStockPacks = Number(p?.min_stock_level || 10);
-                  const isLowStock = baseStockQty <= minStockPacks;
+                  const isLowStock = purchasePackQty <= minStockPacks;
                   const costValuation = baseStockQty * costPerPiece;
                   const retailValuation = baseStockQty * piecePrice;
 
@@ -1746,11 +1753,6 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                         <div className="font-extrabold text-foreground text-xs">{formattedProdDate}</div>
                         <div className="text-[11px] text-textMuted font-medium mt-0.5">{formattedProdTime}</div>
                       </td>
-                      <td className="py-3.5 px-4 text-center font-mono text-xs">
-                        <span className="bg-muted border border-border text-foreground px-2 py-0.5 rounded font-bold">
-                          {p.hsn || '-'}
-                        </span>
-                      </td>
                       <td className="py-3.5 px-4 text-center font-bold uppercase cursor-pointer"
                         onClick={() => handleShowHistory(p)}
                         title="Click to view transaction ledger details">
@@ -1765,6 +1767,11 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                             </span>
                           )}
                         </div>
+                      </td>
+                      <td className="py-3.5 px-4 text-center font-mono text-xs">
+                        <span className="bg-muted border border-border text-foreground px-2 py-0.5 rounded font-bold">
+                          {p.hsn || '-'}
+                        </span>
                       </td>
 
                       {mode === 'stock' ? (
@@ -3251,6 +3258,26 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                         value={customPaidAmount}
                         onChange={(e) => setCustomPaidAmount(e.target.value === '' ? '' : Number(e.target.value))}
                         placeholder="Enter amount paid today..."
+                      />
+                    </div>
+                  )}
+
+                  {/* Conditional Credit Due Date Input when Partial/Credit Mode is Active */}
+                  {(paymentStatus === 'partial' || paymentStatus === 'credit') && (
+                    <div className="animate-fade-in bg-amber-50/90 dark:bg-amber-950/40 p-3.5 rounded-xl border border-amber-200 dark:border-amber-800 space-y-1.5 mt-2">
+                      <div className="flex justify-between items-center">
+                        <label className="block text-xs font-black text-amber-900 dark:text-amber-300 uppercase tracking-wide flex items-center gap-1.5">
+                          <i className="fa-solid fa-calendar-day text-amber-600"></i> Credit Due Date (Udhar Promise Date)
+                        </label>
+                        <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400">
+                          Select date when promising repayment
+                        </span>
+                      </div>
+                      <input 
+                        type="date"
+                        className="w-full bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 font-mono font-bold focus:border-amber-600 focus:outline-none"
+                        value={dueDate}
+                        onChange={(e) => setDueDate(e.target.value)}
                       />
                     </div>
                   )}

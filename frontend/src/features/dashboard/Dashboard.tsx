@@ -163,8 +163,7 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
     const grossProfit = totalSales - cogs;
     const netProfit = totalSales > 0 ? (grossProfit - totalExpenses) : (0 - totalExpenses);
 
-    const supplierDues = suppliers.reduce((acc, s) => acc + Number(s.outstanding || (s as any).due_amount || (s as any).balance || 0), 0);
-    const purchaseDues = filteredData.purchases.reduce((acc, p) => acc + Number(p.due_amount || (p as any).pending_amount || 0), 0);
+    // unused variables removed to fix yellow lines
     
     // Calculate total vendor pending dues matching Vendors Desk (Suppliers.tsx) logic
     const allPurchasesList = (purchases && purchases.length > 0) ? purchases : (contextPurchases || []);
@@ -238,7 +237,12 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
   // 4. Identify Low Stock items and link them with Supplier Contact info
   const lowStockAlerts = useMemo(() => {
     return products
-      .filter(p => (p.current_stock || 0) <= (p.min_stock_level || 10))
+      .filter(p => {
+        const piecesPerPack = Math.max(1, Number(p.pieces_per_pack || 1));
+        const baseStockQty = Number(p.current_stock || 0);
+        const purchasePackQty = piecesPerPack > 1 ? (baseStockQty / piecesPerPack) : baseStockQty;
+        return purchasePackQty <= (p.min_stock_level || 10);
+      })
       .map(p => {
         let phone = p.supplier_phone || '';
         let vendorName = p.supplier_name || 'Vendor N/A';
@@ -304,9 +308,16 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
       });
     });
 
-    return Object.values(map)
+    const allItems = Object.values(map);
+    const grandTotalAmt = allItems.reduce((acc, curr) => acc + curr.total, 0);
+
+    return allItems
       .sort((a, b) => b.qty - a.qty || b.total - a.total)
-      .slice(0, 100);
+      .slice(0, 100)
+      .map(item => ({
+        ...item,
+        contributionAmt: grandTotalAmt > 0 ? (item.total / grandTotalAmt) * 100 : 0
+      }));
   }, [products, sales]);
 
   const barChartData = useMemo(() => {
@@ -1150,7 +1161,18 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
               <div key={idx} className="flex justify-between items-center p-2 bg-background border border-border/80 rounded-lg hover:border-primary/40 transition">
                 <div className="truncate pr-2">
                   <div className="font-bold text-foreground truncate uppercase text-xs">{idx + 1}. {p.name}</div>
-                  <div className="text-[9px] text-textMuted font-mono">HSN: {p.hsn}</div>
+                  <div className="text-[9px] text-textMuted font-mono flex items-center gap-1.5 mt-0.5">
+                    <span>HSN: {p.hsn}</span>
+                    {p.contributionAmt > 0 && (
+                      <>
+                        <span className="text-border mx-0.5">|</span>
+                        <span className="text-white font-black bg-slate-900 dark:bg-slate-950 px-2.5 py-0.5 rounded border border-slate-700 dark:border-slate-800 shadow-md tracking-wider flex items-center gap-1.5">
+                          <i className="fa-solid fa-chart-pie text-[9px] text-emerald-400"></i>
+                          {p.contributionAmt.toFixed(1)}% Rev
+                        </span>
+                      </>
+                    )}
+                  </div>
                 </div>
                 <div className="text-right shrink-0">
                   <span className={`font-extrabold block text-xs ${p.qty > 0 ? 'text-primary' : 'text-textMuted'}`}>{p.qty} sold</span>
