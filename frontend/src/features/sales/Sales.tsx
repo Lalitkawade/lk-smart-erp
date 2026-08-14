@@ -445,11 +445,13 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
   const [searchQuery, setSearchQuery] = useState('');
   const filteredSaleLines = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
-    return saleLines.filter(line => 
-      line.product_name.toLowerCase().includes(q) || 
-      line.hsn.includes(q) ||
-      (line.customer_name && line.customer_name.toLowerCase().includes(q))
-    );
+    return saleLines.filter(line => {
+      const invNum = (line.rawSaleObj?.invoice_number || line.rawSaleObj?.id || '').toLowerCase();
+      return line.product_name.toLowerCase().includes(q) || 
+        line.hsn.includes(q) ||
+        (line.customer_name && line.customer_name.toLowerCase().includes(q)) ||
+        invNum.includes(q);
+    });
   }, [saleLines, searchQuery]);
 
   return (
@@ -474,6 +476,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
         <table className="w-full text-left text-sm text-slate-700 dark:text-slate-200 border-collapse">
           <thead>
             <tr className="border-b-2 border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/90 text-slate-700 dark:text-slate-200 font-extrabold uppercase tracking-wider text-[11px] divide-x divide-slate-200 dark:divide-slate-700 whitespace-nowrap">
+              <th className="py-2.5 px-3 text-center whitespace-nowrap">Invoice ID</th>
               <th className="py-2.5 px-3 text-center whitespace-nowrap">Date & Time</th>
               <th className="py-2.5 px-3 text-center whitespace-nowrap">Product Name</th>
               <th className="py-2.5 px-3 text-center whitespace-nowrap">HSN Code</th>
@@ -488,13 +491,16 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
           <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
             {filteredSaleLines.length === 0 ? (
               <tr>
-                <td colSpan={8} className="py-8 text-center text-slate-400 text-xs font-medium">
+                <td colSpan={9} className="py-8 text-center text-slate-400 text-xs font-medium">
                   <i className="fa-solid fa-file-invoice-dollar text-2xl text-slate-400 mb-2 block"></i>
                   No sales invoices recorded yet matching "{searchQuery}". Click 'New Invoice Billing' to check out.
                 </td>
               </tr>
             ) : filteredSaleLines.map((line, idx) => (
               <tr key={idx} className="odd:bg-white dark:odd:bg-slate-900 even:bg-slate-50/70 dark:even:bg-slate-800/30 hover:bg-blue-50/60 dark:hover:bg-slate-800/70 transition-colors divide-x divide-slate-200 dark:divide-slate-800">
+                <td className="py-2.5 px-3 text-center text-xs font-mono font-bold text-slate-600 dark:text-slate-400">
+                  {line.rawSaleObj?.invoice_number || line.rawSaleObj?.id || '-'}
+                </td>
                 <td className="py-2.5 px-3 text-center text-xs">
                   <span className="font-mono text-slate-900 dark:text-slate-100 font-semibold">{new Date(line.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
                   <span className="text-[10px] font-mono text-slate-400 ml-1.5 block sm:inline">
@@ -521,12 +527,14 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                   </span>
                 </td>
                 <td className="py-2.5 px-3 text-center flex items-center justify-center gap-1.5">
-                  <button className="text-xs bg-primary/10 hover:bg-primary hover:text-white border border-primary/20 text-primary px-2.5 py-1 rounded-lg font-bold transition-all active:scale-95 cursor-pointer inline-flex items-center gap-1"
+                  <button className="w-7 h-7 flex items-center justify-center bg-primary/10 hover:bg-primary hover:text-white border border-primary/20 text-primary rounded-lg transition-all active:scale-95 cursor-pointer"
+                    title="Print Invoice"
                     onClick={() => setPrintInvoice(line.rawSaleObj)}>
-                    <i className="fa-solid fa-print text-[10px]"></i> Print
+                    <i className="fa-solid fa-print"></i>
                   </button>
                   <button 
-                    className="text-xs bg-rose-500/10 hover:bg-rose-500 hover:text-white border border-rose-500/30 text-rose-500 px-2.5 py-1 rounded-lg font-bold transition-all active:scale-95 cursor-pointer inline-flex items-center gap-1"
+                    className="w-7 h-7 flex items-center justify-center bg-rose-500/10 hover:bg-rose-500 hover:text-white border border-rose-500/30 text-rose-500 rounded-lg transition-all active:scale-95 cursor-pointer"
+                    title="Delete Invoice"
                     onClick={async (e) => {
                       e.stopPropagation();
                       const invNum = line.rawSaleObj?.invoice_number || line.rawSaleObj?.id;
@@ -539,7 +547,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                       }
                     }}
                   >
-                    <i className="fa-solid fa-trash-can text-[10px]"></i> Delete
+                    <i className="fa-solid fa-trash-can"></i>
                   </button>
                 </td>
               </tr>

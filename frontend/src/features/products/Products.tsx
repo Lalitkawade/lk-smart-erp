@@ -35,12 +35,12 @@ const resolveBillProcuredItems = (b: any, productsList: any[]) => {
       const name = it.product_name || matchedProd?.product_name || 'Procured Product Item';
       const qty = Number(it.qty || 1);
       const rate = Number(it.rate || matchedProd?.purchase_price || 0);
-      const amount = Number(it.amount || (qty * rate));
       return {
+        product_id: it.product_id,
         product_name: name,
         qty: qty,
         rate: rate,
-        amount: amount
+        amount: Number(it.amount || qty * rate)
       };
     });
   }
@@ -54,6 +54,7 @@ const resolveBillProcuredItems = (b: any, productsList: any[]) => {
         const parsed = JSON.parse(cachedStr);
         if (Array.isArray(parsed) && parsed.length > 0) {
           return parsed.map((it: any) => ({
+            product_id: it.product_id,
             product_name: it.product_name || 'Procured Product Item',
             qty: Number(it.qty || 1),
             rate: Number(it.rate || 0),
@@ -1061,7 +1062,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
 
         const addedStockInflowBaseUnits = purchaseQtyInput > 0
           ? baseUnitsAdded
-          : (editingProduct ? Math.max(0, finalStock - currentBaseStockInDb) : (isMergeOperation ? newProductBaseStockAdded : finalStock));
+          : (editingProduct ? (finalStock - currentBaseStockInDb) : (isMergeOperation ? newProductBaseStockAdded : finalStock));
 
         const purchasePacksAdded = conversionFactor > 0 ? (addedStockInflowBaseUnits / conversionFactor) : addedStockInflowBaseUnits;
         const itemLineCost = purchasePacksAdded * pPrice;
@@ -1108,7 +1109,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
         const savedProd = await saveProduct(productPayload as any);
         const effectiveProdId = savedProd?.id || targetProductId;
 
-        if (effectiveProdId && addedStockInflowBaseUnits > 0 && !hasBillDetails) {
+        if (effectiveProdId && addedStockInflowBaseUnits !== 0 && !hasBillDetails) {
           try {
             const storageKey = 'lk_prod_stock_logs_' + effectiveProdId;
             const existingLogsRaw = localStorage.getItem(storageKey);
@@ -2869,29 +2870,31 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                               </div>
                             </div>
 
-                            <div>
-                              <label className="block text-xs font-extrabold text-blue-600 dark:text-blue-400 mb-1 flex items-center justify-between">
-                                <span>➕ Purchase Quantity (Stock Inward)</span>
-                                <span className="text-[10px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-950 px-1.5 py-0.5 rounded border border-blue-200 dark:border-blue-800 uppercase">
-                                  in {item.p_unit || 'Box'}
-                                </span>
-                              </label>
-                              <div className="relative">
-                                <input
-                                  type="number"
-                                  step="any"
-                                  min="0"
-                                  className="w-full bg-white dark:bg-slate-900 border-2 border-blue-500 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none font-mono font-extrabold shadow-xs pr-16"
-                                  placeholder={`Enter qty in ${item.p_unit || 'Box'} (e.g. 1)...`}
-                                  value={item.additional_stock === 0 ? '' : item.additional_stock}
-                                  onFocus={(e) => e.target.select()}
-                                  onChange={(e) => updateProductItem(index, { additional_stock: e.target.value === '' ? 0 : Number(e.target.value) })}
-                                />
-                                <span className="absolute right-3 top-2.5 text-xs font-black text-blue-600 dark:text-blue-400 font-mono uppercase">
-                                  {item.p_unit || 'Box'}
-                                </span>
+                            {!editingProduct && (
+                              <div>
+                                <label className="block text-xs font-extrabold text-blue-600 dark:text-blue-400 mb-1 flex items-center justify-between">
+                                  <span>➕ Purchase Quantity (Stock Inward)</span>
+                                  <span className="text-[10px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-950 px-1.5 py-0.5 rounded border border-blue-200 dark:border-blue-800 uppercase">
+                                    in {item.p_unit || 'Box'}
+                                  </span>
+                                </label>
+                                <div className="relative">
+                                  <input
+                                    type="number"
+                                    step="any"
+                                    min="0"
+                                    className="w-full bg-white dark:bg-slate-900 border-2 border-blue-500 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none font-mono font-extrabold shadow-xs pr-16"
+                                    placeholder={`Enter qty in ${item.p_unit || 'Box'} (e.g. 1)...`}
+                                    value={item.additional_stock === 0 ? '' : item.additional_stock}
+                                    onFocus={(e) => e.target.select()}
+                                    onChange={(e) => updateProductItem(index, { additional_stock: e.target.value === '' ? 0 : Number(e.target.value) })}
+                                  />
+                                  <span className="absolute right-3 top-2.5 text-xs font-black text-blue-600 dark:text-blue-400 font-mono uppercase">
+                                    {item.p_unit || 'Box'}
+                                  </span>
+                                </div>
                               </div>
-                            </div>
+                            )}
 
                             {/* Live Calculation Preview Card for Editing Stock */}
                             <div className="col-span-1 sm:col-span-2 bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white border-2 border-blue-500/40 p-3.5 rounded-2xl space-y-2.5 font-mono text-xs shadow-md">
@@ -3479,9 +3482,9 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                             <td className="p-3 font-mono text-xs font-semibold whitespace-nowrap text-foreground">{formattedDateStr}</td>
                             <td className="p-3 font-extrabold uppercase text-blue-600 dark:text-blue-400">{h.supplier_name}</td>
                             <td className="p-3 font-mono text-[11px] text-textMuted">{h.bill_number}</td>
-                            <td className="p-3 font-mono font-extrabold text-primary text-center whitespace-nowrap">
-                              +{h.base_qty} {h.s_unit}
-                              {h.isDualUnit && h.pack_qty > 0 && (
+                            <td className={`p-3 font-mono font-extrabold text-center whitespace-nowrap ${h.base_qty > 0 ? 'text-primary' : 'text-rose-500'}`}>
+                              {h.base_qty > 0 ? '+' : ''}{h.base_qty} {h.s_unit}
+                              {h.isDualUnit && h.pack_qty !== 0 && (
                                 <span className="block text-[10px] text-textMuted font-normal font-sans">
                                   ({h.pack_qty.toFixed(1).replace(/\.0$/, '')} {h.p_unit})
                                 </span>
