@@ -1117,13 +1117,14 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
 
             const pieceCost = calculatedBaseUnitCost || (conversionFactor > 1 ? pPrice / conversionFactor : pPrice);
             const currentSupName = activeSup?.supplier_name || (vendorSearchQuery.trim() ? vendorSearchQuery.trim().toUpperCase() : null) || item.supplier_name || editingProduct?.supplier_name || (item.supplier_id ? suppliers.find((s: any) => s.id === item.supplier_id)?.supplier_name : null) || (editingProduct?.supplier_id ? suppliers.find((s: any) => s.id === editingProduct.supplier_id)?.supplier_name : null);
+            const finalSupName = currentSupName || 'Direct Stock Addition / Manual Edit';
 
             existingLogs.push({
               id: 'stk-log-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4),
               product_id: effectiveProdId,
               date: new Date().toISOString(),
               bill_number: 'STOCK-EDIT',
-              supplier_name: currentSupName || 'Direct Stock Addition / Manual Edit',
+              supplier_name: finalSupName,
               payment_mode: 'Stock Adjustment',
               pack_qty: purchasePacksAdded,
               base_qty: addedStockInflowBaseUnits,
@@ -1136,6 +1137,32 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
             });
 
             localStorage.setItem(storageKey, JSON.stringify(existingLogs));
+
+            // Sync stock edit to cloud database as a purchase bill so history persists across devices
+            const isValidUUID = (id: any) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+            const billPayload = {
+              tenant_id: (tenantId && isValidUUID(tenantId)) ? tenantId : null,
+              bill_number: 'STOCK-EDIT-' + Date.now().toString().slice(-6),
+              supplier_name: finalSupName,
+              payment_mode: 'Stock Adjustment',
+              total_amount: itemLineCost || (addedStockInflowBaseUnits * pieceCost),
+              paid_amount: itemLineCost || (addedStockInflowBaseUnits * pieceCost),
+              due_amount: 0,
+              purchase_date: new Date().toISOString(),
+              status: 'Completed'
+            };
+
+            const itemsPayload = [{
+              product_id: effectiveProdId,
+              product_name: item.product_name || 'Procured Item',
+              qty: purchasePacksAdded,
+              rate: pPrice,
+              amount: itemLineCost || (addedStockInflowBaseUnits * pieceCost)
+            }];
+
+            PurchaseService.createPurchase(billPayload as any, itemsPayload as any).catch(err => {
+              console.error('Failed to sync stock edit to cloud database:', err);
+            });
           } catch (e) {
             console.error('Failed to store stock edit log:', e);
           }
