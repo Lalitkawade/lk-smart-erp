@@ -281,6 +281,63 @@ export type SalesItemUpdate = {
 }
 
 // ==========================================
+// 5a. Sales Returns Table Interfaces
+// ==========================================
+export type SalesReturnRow = {
+  id: string;
+  tenant_id: string;
+  invoice_id: string;
+  return_number: string;
+  return_date?: string;
+  total_refund_amount: number;
+  refund_mode?: string;
+  reason?: string | null;
+  created_at: string;
+}
+export type SalesReturnInsert = {
+  id?: string;
+  tenant_id: string;
+  invoice_id: string;
+  return_number: string;
+  return_date?: string;
+  total_refund_amount?: number;
+  refund_mode?: string;
+  reason?: string | null;
+  created_at?: string;
+}
+export type SalesReturnUpdate = {
+  return_number?: string;
+  return_date?: string;
+  total_refund_amount?: number;
+  refund_mode?: string;
+  reason?: string | null;
+}
+
+// ==========================================
+// 5b. Sales Return Items Table Interfaces
+// ==========================================
+export type SalesReturnItemRow = {
+  id: string;
+  return_id: string;
+  sales_item_id: string;
+  product_id: string | null;
+  return_qty: number;
+  refund_amount: number;
+}
+export type SalesReturnItemInsert = {
+  id?: string;
+  return_id: string;
+  sales_item_id: string;
+  product_id?: string | null;
+  return_qty?: number;
+  refund_amount?: number;
+}
+export type SalesReturnItemUpdate = {
+  return_qty?: number;
+  refund_amount?: number;
+}
+
+// ==========================================
 // 6. Purchase Bills Table Interfaces
 // ==========================================
 export type PurchaseBillRow = {
@@ -512,6 +569,7 @@ export type CustomerRow = {
   email: string | null;
   address: string | null;
   dob: string | null;
+  establishment_date: string | null;
   credit_limit: number;
   outstanding: number;
   created_at: string;
@@ -525,6 +583,7 @@ export type CustomerInsert = {
   email?: string | null;
   address?: string | null;
   dob?: string | null;
+  establishment_date?: string | null;
   credit_limit?: number;
   outstanding?: number;
   created_at?: string;
@@ -536,6 +595,7 @@ export type CustomerUpdate = {
   email?: string | null;
   address?: string | null;
   dob?: string | null;
+  establishment_date?: string | null;
   credit_limit?: number;
   outstanding?: number;
   updated_at?: string;
@@ -648,6 +708,7 @@ export type UnstockedDemandRow = {
   min_alert_qty?: number;
   status?: string;
   last_requested_at?: string;
+  created_at?: string;
 }
 export type UnstockedDemandInsert = {
   id?: string;
@@ -702,6 +763,18 @@ export type Database = {
         Row: SalesItemRow;
         Insert: SalesItemInsert;
         Update: SalesItemUpdate;
+        Relationships: [];
+      };
+      sales_returns: {
+        Row: SalesReturnRow;
+        Insert: SalesReturnInsert;
+        Update: SalesReturnUpdate;
+        Relationships: [];
+      };
+      sales_return_items: {
+        Row: SalesReturnItemRow;
+        Insert: SalesReturnItemInsert;
+        Update: SalesReturnItemUpdate;
         Relationships: [];
       };
       purchase_bills: {

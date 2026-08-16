@@ -4,6 +4,7 @@ import type { SalesInvoiceRow, SalesInvoiceInsert, SalesInvoiceUpdate, SalesItem
 
 export interface SalesInvoiceWithItems extends SalesInvoiceRow {
   items?: SalesItemRow[];
+  returns?: any[];
 }
 
 const isValidUUID = (id: any): boolean => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
@@ -17,31 +18,55 @@ export class SaleService {
       return handleServiceCall(
         supabase
           .from('sales_invoices')
-          .select('*, items:sales_items(*, product:products(*))')
+          .select('*, items:sales_items(*, product:products(*)), returns:sales_returns(*, items:sales_return_items(*, product:products(*)))')
           .order('sale_date', { ascending: false })
       );
     }
 
-    return handleServiceCall(
-      supabase
-        .from('sales_invoices')
-        .select('*, items:sales_items(*, product:products(*))')
-        .eq('tenant_id', tenantId)
-        .order('sale_date', { ascending: false })
-    );
+    const { data: salesData, error: salesError } = await supabase
+      .from('sales_invoices')
+      .select('*, items:sales_items(*, product:products(*))')
+      .eq('tenant_id', tenantId)
+      .order('sale_date', { ascending: false });
+
+    if (salesError) throw salesError;
+
+    const { data: returnsData } = await supabase
+      .from('sales_returns')
+      .select('*, items:sales_return_items(*)')
+      .eq('tenant_id', tenantId);
+
+    const mergedData = (salesData || []).map(sale => ({
+      ...sale,
+      returns: (returnsData || []).filter(r => r.invoice_id === sale.id)
+    }));
+
+    return handleServiceCall<SalesInvoiceWithItems[]>(Promise.resolve({ data: mergedData, error: null } as any));
   }
 
   /**
    * Get a single sales invoice by ID with line items
    */
   static async getSaleById(id: string): Promise<ServiceResponse<SalesInvoiceWithItems>> {
-    return handleServiceCall(
-      supabase
-        .from('sales_invoices')
-        .select('*, items:sales_items(*, product:products(*))')
-        .eq('id', id)
-        .single()
-    );
+    const { data: saleData, error: saleError } = await supabase
+      .from('sales_invoices')
+      .select('*, items:sales_items(*, product:products(*))')
+      .eq('id', id)
+      .single();
+
+    if (saleError) throw saleError;
+
+    const { data: returnsData } = await supabase
+      .from('sales_returns')
+      .select('*, items:sales_return_items(*)')
+      .eq('invoice_id', id);
+
+    const mergedSale = {
+      ...saleData,
+      returns: returnsData || []
+    };
+
+    return handleServiceCall<SalesInvoiceWithItems>(Promise.resolve({ data: mergedSale, error: null } as any));
   }
 
   /**

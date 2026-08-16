@@ -8,6 +8,7 @@ import { CustomerService } from '../../services/customerService';
 import type { Product } from '../../types/erp.types';
 import { t, Language } from '../../utils/i18n';
 import { getProductUnitRates } from '../../utils/formatters';
+import SalesReturnModal from './SalesReturnModal';
 
 interface SalesProps {
   tenantId: string;
@@ -55,6 +56,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
   const [posSearch, setPosSearch] = useState('');
   const { customers: registeredCustomers, customerPayments: payments, refreshAllData } = useErpContext();
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [returnModalInvoice, setReturnModalInvoice] = useState<any | null>(null);
 
   useEffect(() => {
     if (autoCustomerName) {
@@ -89,7 +91,8 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
   }, [manualDiscountInput, cartSubtotal]);
 
   const totalAmount = useMemo(() => {
-    return Math.max(0, cartSubtotal - manualDiscount);
+    // Round up the final amount to the next whole number (e.g. 1.4 -> 2)
+    return Math.ceil(Math.max(0, cartSubtotal - manualDiscount));
   }, [cartSubtotal, manualDiscount]);
   const [custSearchQuery, setCustSearchQuery] = useState<string>('');
   const [custDropdownOpen, setCustDropdownOpen] = useState<boolean>(false);
@@ -123,17 +126,28 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
       const totalInvoiceDues = custInvoices.reduce((acc: number, inv: any) => {
         const invoiceDue = inv.due_amount !== undefined
           ? Number(inv.due_amount)
-          : Math.max(0, Number(inv.total_amount || 0) - Number(inv.paid_amount || 0));
-        return acc + Math.max(0, invoiceDue);
+          : (Number(inv.total_amount || 0) - Number(inv.paid_amount || 0));
+        return acc + invoiceDue;
       }, 0);
 
       const totalPaymentsReceived = custPayments.reduce((acc: number, p: any) => acc + Number(p.amount || 0), 0);
 
+      const totalCreditReturns = custInvoices.reduce((acc: number, inv: any) => {
+        const returns = inv.returns || [];
+        const creditReturnsForInv = returns.reduce((rAcc: number, ret: any) => {
+          if ((ret.refund_mode || '').toLowerCase().includes('credit')) {
+            return rAcc + Number(ret.total_refund_amount || 0);
+          }
+          return rAcc;
+        }, 0);
+        return acc + creditReturnsForInv;
+      }, 0);
+
       let effectiveOutstanding = 0;
       if (custInvoices.length > 0) {
-        effectiveOutstanding = Math.max(0, totalInvoiceDues - totalPaymentsReceived);
+        effectiveOutstanding = totalInvoiceDues - totalPaymentsReceived - totalCreditReturns;
       } else {
-        effectiveOutstanding = Math.max(0, Number(c.outstanding || 0) - totalPaymentsReceived);
+        effectiveOutstanding = Number(c.outstanding || 0) - totalPaymentsReceived;
       }
 
       list.push({
@@ -160,12 +174,24 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
       const totalInvoiceDues = custInvoices.reduce((acc: number, inv: any) => {
         const invoiceDue = inv.due_amount !== undefined
           ? Number(inv.due_amount)
-          : Math.max(0, Number(inv.total_amount || 0) - Number(inv.paid_amount || 0));
-        return acc + Math.max(0, invoiceDue);
+          : (Number(inv.total_amount || 0) - Number(inv.paid_amount || 0));
+        return acc + invoiceDue;
       }, 0);
 
       const totalPaymentsReceived = custPayments.reduce((acc: number, p: any) => acc + Number(p.amount || 0), 0);
-      const effectiveOutstanding = Math.max(0, totalInvoiceDues - totalPaymentsReceived);
+      
+      const totalCreditReturns = custInvoices.reduce((acc: number, inv: any) => {
+        const returns = inv.returns || [];
+        const creditReturnsForInv = returns.reduce((rAcc: number, ret: any) => {
+          if ((ret.refund_mode || '').toLowerCase().includes('credit')) {
+            return rAcc + Number(ret.total_refund_amount || 0);
+          }
+          return rAcc;
+        }, 0);
+        return acc + creditReturnsForInv;
+      }, 0);
+
+      const effectiveOutstanding = totalInvoiceDues - totalPaymentsReceived - totalCreditReturns;
 
       list.push({
         customer_name: s.customer_name,
@@ -186,7 +212,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
 
     const foundSearchable = allSearchableCustomers.find(
       c => (c.customer_name && c.customer_name.trim().toUpperCase() === nameUpper) ||
-           (phoneVal && c.phone && c.phone.trim() === phoneVal)
+        (phoneVal && c.phone && c.phone.trim() === phoneVal)
     );
 
     if (foundSearchable) {
@@ -389,7 +415,8 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
         paymentMode,
         transactionId: transactionId.trim(),
         discountAmount: manualDiscount,
-        dueDate: (isUdharEnabled || paymentMode === 'Credit') ? creditDueDate : undefined
+        dueDate: (isUdharEnabled || paymentMode === 'Credit') ? creditDueDate : undefined,
+        matchedCustomer
       });
       setBillingModal(false);
       setRepayUdharInput('');
@@ -424,18 +451,38 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
       } else {
         items.forEach((item: any) => {
           const matchProd = products.find(p => p.id === (item.product_id || item.product?.id));
-          lines.push({
-            id: `${s.id}-${item.product_id || Math.random()}`,
-            hsn: item.product?.hsn || matchProd?.hsn || item.hsn || '-',
-            product_name: item.product?.product_name || matchProd?.product_name || item.product_name || 'Item',
-            customer_name: s.customer_name || 'Cash Customer',
-            date: s.sale_date || s.created_at || new Date().toISOString(),
-            stock: matchProd ? matchProd.current_stock : 0,
-            price: Number(item.rate || 0),
-            qty: Number(item.qty || 1),
-            amount: Number(item.amount || (item.qty * item.rate) || 0),
-            rawSaleObj: s
-          });
+
+          let returnedQty = 0;
+          const invoiceReturns = s.returns || s.sales_returns || [];
+          if (Array.isArray(invoiceReturns)) {
+            invoiceReturns.forEach((ret: any) => {
+              const rItems = ret.items || ret.sales_return_items || [];
+              if (Array.isArray(rItems)) {
+                rItems.forEach((ri: any) => {
+                  if (ri.sales_item_id === item.id) {
+                    returnedQty += Number(ri.return_qty || 0);
+                  }
+                });
+              }
+            });
+          }
+
+          const originalQty = Number(item.qty || 1);
+          const netQty = Math.max(0, originalQty - returnedQty);
+
+          if (netQty > 0) {
+            lines.push({
+              id: `${s.id}-${item.id || Math.random()}`,
+              product_name: matchProd?.product_name || item.product?.product_name || item.product_name || 'Unknown Product',
+              hsn: matchProd?.hsn || item.hsn || item.product?.hsn || '-',
+              date: s.sale_date,
+              price: Number(item.rate || 0),
+              qty: netQty,
+              amount: netQty * Number(item.rate || 0),
+              customer_name: s.customer_name || 'Cash Customer',
+              rawSaleObj: s
+            });
+          }
         });
       }
     });
@@ -447,7 +494,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
     const q = searchQuery.toLowerCase().trim();
     return saleLines.filter(line => {
       const invNum = (line.rawSaleObj?.invoice_number || line.rawSaleObj?.id || '').toLowerCase();
-      return line.product_name.toLowerCase().includes(q) || 
+      return line.product_name.toLowerCase().includes(q) ||
         line.hsn.includes(q) ||
         (line.customer_name && line.customer_name.toLowerCase().includes(q)) ||
         invNum.includes(q);
@@ -456,6 +503,17 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
 
   return (
     <div className="bg-secondary border border-border rounded-xl p-4 sm:p-6">
+      {returnModalInvoice && (
+        <SalesReturnModal
+          tenantId={tenantId}
+          invoice={returnModalInvoice}
+          onClose={() => setReturnModalInvoice(null)}
+          onSuccess={() => {
+            setReturnModalInvoice(null);
+            refreshAllData();
+          }}
+        />
+      )}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 mb-6">
         <div>
           <h2 className="text-xl font-bold text-foreground">Sales</h2>
@@ -522,33 +580,47 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                   {line.customer_name}
                 </td>
                 <td className="py-2.5 px-3 text-center text-xs font-bold uppercase">
-                  <span className={`px-2 py-0.5 rounded text-[10px] shadow-sm ${line.rawSaleObj?.payment_status?.toLowerCase() === 'paid' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800' : line.rawSaleObj?.payment_status?.toLowerCase() === 'credit' ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400 border border-rose-200 dark:border-rose-800' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border border-amber-200 dark:border-amber-800'}`}>
-                    {line.rawSaleObj?.payment_status || line.rawSaleObj?.status || 'Completed'}
-                  </span>
+                  <div className="flex flex-col gap-1 items-center justify-center">
+                    <span className={`px-2 py-0.5 rounded text-[10px] shadow-sm ${line.rawSaleObj?.payment_status?.toLowerCase() === 'paid' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800' : line.rawSaleObj?.payment_status?.toLowerCase() === 'credit' ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400 border border-rose-200 dark:border-rose-800' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border border-amber-200 dark:border-amber-800'}`}>
+                      {line.rawSaleObj?.payment_status || line.rawSaleObj?.status || 'Completed'}
+                    </span>
+                    {(line.rawSaleObj?.status === 'Returned' || (line.rawSaleObj?.returns && line.rawSaleObj?.returns.length > 0)) && (
+                      <span className="px-2 py-0.5 rounded text-[10px] shadow-sm bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 border border-purple-200 dark:border-purple-800">
+                        Returned
+                      </span>
+                    )}
+                  </div>
                 </td>
-                <td className="py-2.5 px-3 text-center flex items-center justify-center gap-1.5">
-                  <button className="w-7 h-7 flex items-center justify-center bg-primary/10 hover:bg-primary hover:text-white border border-primary/20 text-primary rounded-lg transition-all active:scale-95 cursor-pointer"
-                    title="Print Invoice"
-                    onClick={() => setPrintInvoice(line.rawSaleObj)}>
-                    <i className="fa-solid fa-print"></i>
-                  </button>
-                  <button 
-                    className="w-7 h-7 flex items-center justify-center bg-rose-500/10 hover:bg-rose-500 hover:text-white border border-rose-500/30 text-rose-500 rounded-lg transition-all active:scale-95 cursor-pointer"
-                    title="Delete Invoice"
-                    onClick={async (e) => {
-                      e.stopPropagation();
-                      const invNum = line.rawSaleObj?.invoice_number || line.rawSaleObj?.id;
-                      if (!window.confirm(`Are you sure you want to delete Sales Invoice ${invNum}? This action cannot be undone.`)) return;
-                      try {
-                        await deleteSale(line.rawSaleObj.id);
-                        alert('✓ Sales Invoice deleted successfully.');
-                      } catch (err: any) {
-                        alert('Failed to delete sales invoice: ' + (err.message || err));
-                      }
-                    }}
-                  >
-                    <i className="fa-solid fa-trash-can"></i>
-                  </button>
+                <td className="py-2.5 px-3 text-center">
+                  <div className="flex items-center justify-center gap-1.5">
+                    <button className="w-7 h-7 flex items-center justify-center bg-primary/10 hover:bg-primary hover:text-white border border-primary/20 text-primary rounded-lg transition-all active:scale-95 cursor-pointer"
+                      title="Print Invoice"
+                      onClick={() => setPrintInvoice(line.rawSaleObj)}>
+                      <i className="fa-solid fa-print"></i>
+                    </button>
+                    <button className="w-7 h-7 flex items-center justify-center bg-amber-500/10 hover:bg-amber-500 hover:text-white border border-amber-500/30 text-amber-500 rounded-lg transition-all active:scale-95 cursor-pointer"
+                      title="Return Items"
+                      onClick={() => setReturnModalInvoice(line.rawSaleObj)}>
+                      <i className="fa-solid fa-rotate-left"></i>
+                    </button>
+                    <button
+                      className="w-7 h-7 flex items-center justify-center bg-rose-500/10 hover:bg-rose-500 hover:text-white border border-rose-500/30 text-rose-500 rounded-lg transition-all active:scale-95 cursor-pointer"
+                      title="Delete Invoice"
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        const invNum = line.rawSaleObj?.invoice_number || line.rawSaleObj?.id;
+                        if (!window.confirm(`Are you sure you want to delete Sales Invoice ${invNum}? This action cannot be undone.`)) return;
+                        try {
+                          await deleteSale(line.rawSaleObj.id);
+                          alert('✓ Sales Invoice deleted successfully.');
+                        } catch (err: any) {
+                          alert('Failed to delete sales invoice: ' + (err.message || err));
+                        }
+                      }}
+                    >
+                      <i className="fa-solid fa-trash-can"></i>
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -560,15 +632,15 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
       {billingModal && createPortal(
         <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 z-[9999] overflow-y-auto animate-backdrop-fade">
           <div className="bg-secondary border border-border p-6 rounded-2xl w-full max-w-7xl shadow-2xl my-auto max-h-[90vh] flex flex-col gap-4 overflow-hidden">
-            
+
             {/* Header */}
             <div className="flex justify-between items-center pb-3 border-b border-border shrink-0">
               <div>
                 <span className="text-[10px] font-bold text-primary uppercase tracking-widest">POS Billing & Cash Desk</span>
                 <h3 className="text-lg font-black text-foreground uppercase mt-0.5">New Customer Sale Billing</h3>
               </div>
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={() => setBillingModal(false)}
                 className="text-textSecondary hover:text-foreground text-xs font-bold bg-background/50 hover:bg-background border border-border px-3 py-1.5 rounded-lg transition"
               >
@@ -577,14 +649,14 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
             </div>
 
             <div className="flex flex-col md:flex-row gap-6 flex-1 min-h-0 overflow-y-auto pr-2 scrollbar-thin">
-              
+
               {/* Products Selector List (Reduced to 5/12 width) */}
               <div className="w-full md:w-5/12 pr-2 border-r border-border/60">
                 <div className="flex justify-between items-center mb-3">
                   <h3 className="text-md font-bold text-foreground">Select Products</h3>
                   <span className="text-[10px] text-textMuted font-bold">Items: {filteredPOSProducts.length}</span>
                 </div>
-                
+
                 {/* Search bar / Barcode scanner input */}
                 <input type="text" className="w-full bg-background border border-border text-foreground rounded-lg p-2.5 text-xs focus:outline-none focus:border-primary mb-4 font-semibold"
                   placeholder="🔍 Search items by name, SKU, or scan barcode..."
@@ -597,8 +669,8 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                     <i className="fa-solid fa-box-open text-2xl text-textMuted/40"></i>
                     <p className="font-semibold text-textMuted">No matching products found in catalog.</p>
                     {posSearch.trim() && (
-                      <button 
-                        type="button" 
+                      <button
+                        type="button"
                         onClick={async () => {
                           await logDemand(posSearch.trim());
                           alert(`Logged customer request for "${posSearch.trim()}". High demand alerts (5+ requests) will trigger in notification bell!`);
@@ -648,8 +720,8 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                           {/* Dynamic Action Buttons */}
                           <div className="flex items-center gap-1.5 pt-1">
                             {isDualUnit && (
-                              <button 
-                                type="button" 
+                              <button
+                                type="button"
                                 className="flex-1 py-1.5 px-2.5 bg-primary hover:bg-primary/90 text-white font-extrabold rounded-lg text-[10px] uppercase transition shadow-sm active:scale-95 cursor-pointer font-mono text-center truncate"
                                 onClick={() => handleCartAdd(p, false)}
                                 title={`Add 1 ${pUnit} (${piecesPerPack} ${sUnit})`}
@@ -657,8 +729,8 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                                 + 1 {pUnit}
                               </button>
                             )}
-                            <button 
-                              type="button" 
+                            <button
+                              type="button"
                               className="flex-1 py-1.5 px-2 bg-blue-600 hover:bg-blue-500 text-white font-extrabold rounded-lg text-[10px] uppercase transition shadow-sm active:scale-95 cursor-pointer font-mono text-center truncate"
                               onClick={() => handleCartAdd(p, true)}
                               title={`Add 1 ${sUnit}`}
@@ -675,14 +747,14 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
 
               {/* Cart & Invoice Desk Panel (Expanded to 7/12 width) */}
               <form onSubmit={handleCheckoutSubmit} className="w-full md:w-7/12 flex flex-col justify-between pl-0 md:pl-2 space-y-4">
-                
+
                 {/* 1. TOP: CUSTOMER SELECTION & MOBILE NUMBER SECTION */}
                 <div className="bg-background/50 border border-border p-3.5 rounded-xl space-y-3 shadow-xs">
                   <div>
                     <div className="flex justify-between items-center mb-1">
                       <label className="block text-xs text-textSecondary font-semibold">Select / Search Customer</label>
                       <div className="flex gap-2 items-center">
-                        <button 
+                        <button
                           type="button"
                           onClick={() => {
                             const query = custSearchQuery.trim();
@@ -714,17 +786,17 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                     </div>
 
                     <div className="relative">
-                      <input 
-                        type="text" 
+                      <input
+                        type="text"
                         className="w-full bg-background border border-border rounded-lg p-2.5 text-xs text-foreground font-semibold focus:border-primary focus:outline-none uppercase pr-8"
-                        value={custSearchQuery || customerName} 
+                        value={custSearchQuery || customerName}
                         onFocus={() => setCustDropdownOpen(true)}
                         onChange={(e) => {
                           const val = e.target.value;
                           setCustSearchQuery(val);
                           setCustomerName(val);
                           setCustDropdownOpen(true);
-                        }} 
+                        }}
                         placeholder="🔍 Search existing customer by Name or Mobile Phone..."
                       />
                       {(customerName || custSearchQuery) && (
@@ -746,7 +818,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                       {/* Floating Interactive Autocomplete Dropdown */}
                       {custDropdownOpen && (
                         <div className="absolute left-0 right-0 top-full mt-1 bg-secondary border border-border rounded-xl shadow-2xl z-50 max-h-56 overflow-y-auto divide-y divide-border/40 scrollbar-thin animate-fade-in">
-                          <div 
+                          <div
                             onClick={() => {
                               setCustomerName('');
                               setCustomerPhone('');
@@ -849,7 +921,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                           {previousOutstanding > 0 ? '⚠️ Pending Dues' : '✓ No Dues'}
                         </span>
                       </div>
-                      
+
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] pt-1 border-t border-amber-500/30 font-semibold">
                         <div>
                           <span className="text-slate-700 dark:text-slate-300 block text-[10px] font-bold">Previous Outstanding:</span>
@@ -910,7 +982,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                     <span>Invoice Cart & Customer Desk</span>
                     <span className="text-xs text-textMuted font-semibold">{cart.length} item(s) selected</span>
                   </h3>
-                  
+
                   <div className="space-y-2 overflow-y-auto max-h-[35vh] pr-1 scrollbar-thin border-b border-border/60 pb-3 mb-2">
                     {cart.length === 0 ? (
                       <p className="text-xs text-textMuted text-center py-4 bg-background/20 rounded-lg border border-dashed border-border/50">No items selected yet. Click items on the left panel to add to cart.</p>
@@ -954,10 +1026,10 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                               </div>
                             </div>
 
-                            <button 
-                              type="button" 
-                              className="text-rose-500 hover:text-rose-400 text-base font-bold p-1 cursor-pointer" 
-                              onClick={() => removeFromCart(item.product.id, isLoose)} 
+                            <button
+                              type="button"
+                              className="text-rose-500 hover:text-rose-400 text-base font-bold p-1 cursor-pointer"
+                              onClick={() => removeFromCart(item.product.id, isLoose)}
                               title="Remove item"
                             >
                               &times;
@@ -967,18 +1039,18 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                           <div className="flex justify-between items-center text-xs font-mono bg-background/40 p-2 rounded-lg border border-border/50 flex-wrap gap-2">
                             <div className="flex items-center gap-1.5">
                               <span className="text-textMuted text-[10px] font-sans font-bold">Qty:</span>
-                              <input 
-                                type="number" 
+                              <input
+                                type="number"
                                 step="any"
                                 min="0"
                                 className="w-16 bg-background border border-border rounded text-center text-xs text-foreground p-1 font-mono font-black focus:outline-none focus:border-primary shadow-inner"
-                                value={item.qty === 0 ? '' : item.qty} 
+                                value={item.qty === 0 ? '' : item.qty}
                                 onFocus={(e) => e.target.select()}
                                 onChange={(e) => {
                                   const val = e.target.value === '' ? 0 : (parseFloat(e.target.value) || 0);
                                   handleQtyChange(item.product.id, Math.max(0, val), isLoose);
-                                }} 
-                                title="Quantity" 
+                                }}
+                                title="Quantity"
                               />
                               <span className="text-[10px] font-bold text-foreground uppercase">{unitName}</span>
                             </div>
@@ -1013,7 +1085,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                   {/* UDHAR / CREDIT SALE MODE TOGGLE CARD */}
                   <div className="bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 p-3 rounded-xl flex items-center justify-between gap-3 flex-wrap shadow-xs">
                     <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-800 dark:text-slate-200 select-none">
-                      <input 
+                      <input
                         type="checkbox"
                         checked={isUdharEnabled || paymentMode === 'Credit'}
                         onChange={(e) => {
@@ -1035,11 +1107,10 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                         <span>Customer asks for Udhar / Partial Payment (Credit Sale)</span>
                       </span>
                     </label>
-                    <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-md border ${
-                      (isUdharEnabled || paymentMode === 'Credit') 
-                        ? 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700' 
+                    <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-md border ${(isUdharEnabled || paymentMode === 'Credit')
+                        ? 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700'
                         : 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700'
-                    }`}>
+                      }`}>
                       {(isUdharEnabled || paymentMode === 'Credit') ? '📌 Udhar / Partial Mode Active' : '✓ Default Cash Mode (Full Paid)'}
                     </span>
                   </div>
@@ -1047,9 +1118,9 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
                       <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Payment Mode (Default: Cash)</label>
-                      <select 
+                      <select
                         className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 font-semibold focus:outline-none focus:border-blue-600 cursor-pointer"
-                        value={paymentMode} 
+                        value={paymentMode}
                         onChange={(e) => {
                           const val = e.target.value;
                           setPaymentMode(val);
@@ -1076,7 +1147,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                           </span>
                         )}
                       </div>
-                      <input 
+                      <input
                         type="number"
                         step="any"
                         min="0"
@@ -1101,7 +1172,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                             ⚡ Auto-Fill Full (₹{totalAmount.toFixed(2)})
                           </button>
                         </div>
-                        <input 
+                        <input
                           type="number"
                           step="any"
                           min="0"
@@ -1145,7 +1216,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                           Select date when customer promises repayment
                         </span>
                       </div>
-                      <input 
+                      <input
                         type="date"
                         className="w-full bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 font-mono font-bold focus:border-amber-600 focus:outline-none"
                         value={creditDueDate}
@@ -1163,7 +1234,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                         </span>
                         <span className="text-[10px] text-primary font-bold uppercase">(GPay / Card / Bank Ref)</span>
                       </label>
-                      <input 
+                      <input
                         type="text"
                         className="w-full bg-background border border-primary/60 rounded-lg p-2.5 text-xs text-foreground font-mono font-bold focus:border-primary focus:outline-none uppercase"
                         value={transactionId}
@@ -1176,8 +1247,8 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
 
                   {/* Smart Real-Time Payment Allocation Calculator Breakdown */}
                   {(() => {
-                    const currentCollected = amountCollectedInput.trim() !== '' 
-                      ? parseFloat(amountCollectedInput) || 0 
+                    const currentCollected = amountCollectedInput.trim() !== ''
+                      ? parseFloat(amountCollectedInput) || 0
                       : (paymentMode === 'Credit' ? 0 : totalAmount);
 
                     const explicitRepay = repayUdharInput.trim() !== ''
@@ -1264,8 +1335,8 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
 
                   <div className="flex gap-2.5 pt-1">
                     <button type="button" className="w-1/3 sm:flex-1 py-2.5 px-3 border border-border hover:bg-background/80 text-textSecondary font-bold rounded-xl text-xs transition active:scale-95 cursor-pointer text-center" onClick={() => setBillingModal(false)}>{t('cancel', activeLang)}</button>
-                    <button 
-                      type="submit" 
+                    <button
+                      type="submit"
                       disabled={isBillingProcessing}
                       className={`w-2/3 sm:flex-1 py-2.5 px-4 font-extrabold rounded-xl text-xs sm:text-sm transition shadow-lg active:scale-95 cursor-pointer flex items-center justify-center gap-1.5 ${isBillingProcessing ? 'bg-primary/60 text-white cursor-not-allowed' : 'bg-primary hover:bg-primary/90 text-white'}`}
                     >
@@ -1284,7 +1355,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
       {/* Branded 2-Copy A4 Printable Invoice Modal */}
       {printInvoice && createPortal(
         <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 z-[9999] overflow-y-auto print:p-0 print:bg-white animate-backdrop-fade">
-          
+
           {/* Print A4 CSS Overrides */}
           <style>{`
             @media print {
@@ -1317,7 +1388,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
           `}</style>
 
           <div className="bg-white text-black p-3 sm:p-6 rounded-2xl w-[96vw] sm:w-full max-w-4xl shadow-2xl print:p-0 print:max-w-none print:shadow-none print:bg-white my-auto max-h-[95vh] print:max-h-none overflow-y-auto print:overflow-visible">
-            
+
             {/* Action Bar (Hidden during print) */}
             <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-2.5 pb-3 mb-3 border-b border-slate-200 print:hidden">
               <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
@@ -1327,7 +1398,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                 <span className="text-[10px] sm:text-xs text-slate-500 font-bold">Customer Copy + Shop Copy</span>
               </div>
               <div className="flex items-center gap-2">
-                <button 
+                <button
                   onClick={async () => {
                     const invNum = printInvoice.invoice_number || printInvoice.id;
                     if (!window.confirm(`Are you sure you want to delete Sales Invoice ${invNum}? This action cannot be undone.`)) return;
@@ -1344,13 +1415,13 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                   <i className="fa-solid fa-trash-can text-[10px]"></i>
                   <span>Delete Invoice</span>
                 </button>
-                <button 
+                <button
                   onClick={() => setPrintInvoice(null)}
                   className="flex-1 sm:flex-none px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition text-center cursor-pointer"
                 >
                   Close
                 </button>
-                <button 
+                <button
                   onClick={() => window.print()}
                   className="flex-2 sm:flex-none px-4 py-2 bg-primary hover:bg-primary/90 text-white font-extrabold rounded-xl text-xs shadow-md transition flex items-center justify-center gap-2 cursor-pointer active:scale-95"
                 >
@@ -1363,98 +1434,140 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
             {/* Print Container Area - Smooth Mobile Scroll Wrapper */}
             <div className="w-full overflow-x-auto p-1 scrollbar-thin print:overflow-visible">
               <div id="invoice-print-area" className="min-w-[620px] sm:min-w-0 space-y-4 print:space-y-2 print:min-w-0">
-              
-              {/* Render 2 Copies: CUSTOMER COPY and SHOP COPY */}
-              {['CUSTOMER COPY', 'SHOP COPY'].map((copyType, copyIdx) => {
-                const totalAmount = Number(printInvoice.total_amount || 0);
 
-                return (
-                  <div key={copyType} className={`border border-slate-300 print:border-slate-400 p-4 rounded-lg print:rounded-none bg-white text-black print-no-break ${copyIdx > 0 ? 'mt-4 print:mt-3' : ''}`}>
-                    
-                    {/* Invoice Header Block */}
-                    <div className="flex justify-between items-start pb-3 border-b-2 border-slate-800">
-                      <div>
-                        <h1 className="text-lg font-black tracking-tight uppercase text-slate-900">{tenantName || 'LK Hardware Store'}</h1>
-                        <p className="text-[10px] text-slate-600 font-medium">Retail & Wholesale Hardware Merchant</p>
-                        <p className="text-[10px] text-slate-600 font-medium">Market Road, Pune, Maharashtra - 411001 | 📞 +91 98765 43210</p>
-                        <p className="text-[10px] font-mono font-bold text-slate-800 mt-0.5">GSTIN: 27LKSERP401Z2B5</p>
-                      </div>
+                {/* Render 2 Copies: CUSTOMER COPY and SHOP COPY */}
+                {['CUSTOMER COPY', 'SHOP COPY'].map((copyType, copyIdx) => {
+                  const totalAmount = Math.ceil(Number(printInvoice.total_amount || 0));
 
-                      <div className="text-right">
-                        <div className="inline-block border-2 border-slate-900 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider mb-1 bg-slate-100">
-                          {copyType === 'CUSTOMER COPY' ? 'ORIGINAL - CUSTOMER COPY' : 'DUPLICATE - SHOP COPY'}
+                  return (
+                    <div key={copyType} className={`border border-slate-300 print:border-slate-400 p-4 rounded-lg print:rounded-none bg-white text-black print-no-break ${copyIdx > 0 ? 'mt-4 print:mt-3' : ''}`}>
+
+                      {/* Invoice Header Block */}
+                      <div className="flex justify-between items-start pb-3 border-b-2 border-slate-800">
+                        <div>
+                          <h1 className="text-lg font-black tracking-tight uppercase text-slate-900">{tenantName || 'LK Hardware Store'}</h1>
+                          <p className="text-[10px] text-slate-600 font-medium">Retail & Wholesale Hardware Merchant</p>
+                          <p className="text-[10px] text-slate-600 font-medium">Market Road, Pune, Maharashtra - 411001 | 📞 +91 98765 43210</p>
+                          <p className="text-[10px] font-mono font-bold text-slate-800 mt-0.5">GSTIN: 27LKSERP401Z2B5</p>
                         </div>
-                        <h2 className="text-sm font-extrabold uppercase text-slate-800">INVOICE / BILL OF SALE</h2>
-                      </div>
-                    </div>
 
-                    {/* Metadata Grid (Invoice #, Date, Customer Details) */}
-                    <div className="grid grid-cols-2 gap-2 text-[11px] my-2 bg-slate-50 print:bg-white p-2 border border-slate-200">
-                      <div className="space-y-0.5">
-                        <div className="flex"><span className="w-24 text-slate-500 font-semibold">Invoice No:</span> <span className="font-mono font-black">{printInvoice.invoice_number}</span></div>
-                        <div className="flex"><span className="w-24 text-slate-500 font-semibold">Date & Time:</span> <span className="font-semibold">{new Date(printInvoice.sale_date).toLocaleString()}</span></div>
-                        <div className="flex">
-                          <span className="w-24 text-slate-500 font-semibold">Payment Mode:</span> 
-                          <span className="font-bold uppercase text-primary">
-                            {printInvoice.payment_mode || 'Cash'}
-                            {(printInvoice.transaction_id || printInvoice.ref_number) ? ` (Txn ID: ${printInvoice.transaction_id || printInvoice.ref_number})` : ''}
-                          </span>
+                        <div className="text-right">
+                          <div className="inline-block border-2 border-slate-900 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider mb-1 bg-slate-100">
+                            {copyType === 'CUSTOMER COPY' ? 'ORIGINAL - CUSTOMER COPY' : 'DUPLICATE - SHOP COPY'}
+                          </div>
+                          <h2 className="text-sm font-extrabold uppercase text-slate-800">INVOICE / BILL OF SALE</h2>
                         </div>
                       </div>
-                      <div className="space-y-0.5">
-                        <div className="flex"><span className="w-28 text-slate-500 font-semibold">Billed To:</span> <span className="font-bold uppercase">{printInvoice.customer_name || 'Cash Customer'}</span></div>
-                        <div className="flex"><span className="w-28 text-slate-500 font-semibold">Contact Phone:</span> <span>{printInvoice.customer_phone || 'N/A'}</span></div>
-                        <div className="flex"><span className="w-28 text-slate-500 font-semibold">Payment Status:</span> <span className="font-bold uppercase">{printInvoice.payment_status || 'Paid'}</span></div>
-                      </div>
-                    </div>
 
-                    {/* Itemized Products Table */}
-                    <table className="w-full text-left text-[10px] border-collapse border border-slate-300 my-2">
-                      <thead>
-                        <tr className="bg-slate-100 print:bg-slate-200 border-b border-slate-300 uppercase font-black">
-                          <th className="p-1 border-r border-slate-300 text-center w-8">S.No</th>
-                          <th className="p-1 border-r border-slate-300">Item Description</th>
-                          <th className="p-1 border-r border-slate-300 text-center w-16">HSN</th>
-                          <th className="p-1 border-r border-slate-300 text-center w-12">Qty</th>
-                          <th className="p-1 border-r border-slate-300 text-right w-16">Rate (₹)</th>
-                          <th className="p-1 text-right w-20">Amount (₹)</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(!printInvoice.items || printInvoice.items.length === 0) ? (
-                          <tr>
-                            <td colSpan={6} className="p-2 text-center text-slate-400">No items logged.</td>
+                      {/* Metadata Grid (Invoice #, Date, Customer Details) */}
+                      <div className="grid grid-cols-2 gap-2 text-[11px] my-2 bg-slate-50 print:bg-white p-2 border border-slate-200">
+                        <div className="space-y-0.5">
+                          <div className="flex"><span className="w-24 text-slate-500 font-semibold">Invoice No:</span> <span className="font-mono font-black">{printInvoice.invoice_number}</span></div>
+                          <div className="flex"><span className="w-24 text-slate-500 font-semibold">Date & Time:</span> <span className="font-semibold">{new Date(printInvoice.sale_date).toLocaleString()}</span></div>
+                          <div className="flex">
+                            <span className="w-24 text-slate-500 font-semibold">Payment Mode:</span>
+                            <span className="font-bold uppercase text-primary">
+                              {printInvoice.payment_mode || 'Cash'}
+                              {(printInvoice.transaction_id || printInvoice.ref_number) ? ` (Txn ID: ${printInvoice.transaction_id || printInvoice.ref_number})` : ''}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="space-y-0.5">
+                          <div className="flex"><span className="w-28 text-slate-500 font-semibold">Billed To:</span> <span className="font-bold uppercase">{printInvoice.customer_name || 'Cash Customer'}</span></div>
+                          <div className="flex"><span className="w-28 text-slate-500 font-semibold">Contact Phone:</span> <span>{printInvoice.customer_phone || 'N/A'}</span></div>
+                          <div className="flex"><span className="w-28 text-slate-500 font-semibold">Payment Status:</span> <span className="font-bold uppercase">{printInvoice.payment_status || 'Paid'}</span></div>
+                        </div>
+                      </div>
+
+                      {/* Itemized Products Table */}
+                      <table className="w-full text-left text-[10px] border-collapse border border-slate-300 my-2">
+                        <thead>
+                          <tr className="bg-slate-100 print:bg-slate-200 border-b border-slate-300 uppercase font-black">
+                            <th className="p-1 border-r border-slate-300 text-center w-8">S.No</th>
+                            <th className="p-1 border-r border-slate-300">Item Description</th>
+                            <th className="p-1 border-r border-slate-300 text-center w-16">HSN</th>
+                            <th className="p-1 border-r border-slate-300 text-center w-12">Qty</th>
+                            <th className="p-1 border-r border-slate-300 text-right w-16">Rate (₹)</th>
+                            <th className="p-1 text-right w-20">Amount (₹)</th>
                           </tr>
-                        ) : printInvoice.items.map((item: any, idx: number) => {
-                          const itemName = item.product?.product_name || item.product_name || 'Item';
-                          const hsn = item.product?.hsn || item.hsn || '-';
-                          const qty = Number(item.qty || 1);
-                          const rate = Number(item.rate || item.price || 0);
-                          const amt = item.amount || (qty * rate);
-
-                          return (
-                            <tr key={idx} className="border-b border-slate-200">
-                              <td className="p-1 border-r border-slate-200 text-center font-mono">{idx + 1}</td>
-                              <td className="p-1 border-r border-slate-200 font-semibold uppercase">{itemName}</td>
-                              <td className="p-1 border-r border-slate-200 text-center font-mono text-slate-600">{hsn}</td>
-                              <td className="p-1 border-r border-slate-200 text-center font-mono font-bold">{qty}</td>
-                              <td className="p-1 border-r border-slate-200 text-right font-mono">₹{rate.toFixed(2)}</td>
-                              <td className="p-1 text-right font-mono font-bold">₹{amt.toFixed(2)}</td>
+                        </thead>
+                        <tbody>
+                          {(!printInvoice.items || printInvoice.items.length === 0) ? (
+                            <tr>
+                              <td colSpan={6} className="p-2 text-center text-slate-400">No items logged.</td>
                             </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                          ) : printInvoice.items.map((item: any, idx: number) => {
+                            const matchProd = products.find(p => p.id === (item.product_id || item.product?.id));
+                            const itemName = matchProd?.product_name || item.product?.product_name || item.product_name || `Item ${idx + 1}`;
+                            const hsn = matchProd?.hsn || item.product?.hsn || item.hsn || '-';
+                            const qty = Number(item.qty || 1);
+                            const rate = Number(item.rate || item.price || 0);
+                            const amt = item.amount || (qty * rate);
+
+                            return (
+                              <tr key={idx} className="border-b border-slate-200">
+                                <td className="p-1 border-r border-slate-200 text-center font-mono">{idx + 1}</td>
+                                <td className="p-1 border-r border-slate-200 font-semibold uppercase">{itemName}</td>
+                                <td className="p-1 border-r border-slate-200 text-center font-mono text-slate-600">{hsn}</td>
+                                <td className="p-1 border-r border-slate-200 text-center font-mono font-bold">{qty}</td>
+                                <td className="p-1 border-r border-slate-200 text-right font-mono">₹{rate.toFixed(2)}</td>
+                                <td className="p-1 text-right font-mono font-bold">₹{amt.toFixed(2)}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+
+                      {/* Return History Section */}
+                      {printInvoice.returns && printInvoice.returns.length > 0 && (
+                        <div className="mt-2 mb-2 p-2 border border-slate-400 bg-slate-50 print:border-slate-400">
+                          <div className="font-black text-slate-900 uppercase text-[9px] border-b border-slate-300 pb-1 mb-1">
+                            RETURN HISTORY / CREDIT NOTE
+                          </div>
+                          <table className="w-full text-left text-[9px] border-collapse">
+                            <thead>
+                              <tr className="text-slate-600 uppercase border-b border-slate-200">
+                                <th className="py-0.5 font-bold">Return No.</th>
+                                <th className="py-0.5 font-bold">Date</th>
+                                <th className="py-0.5 font-bold">Items Returned</th>
+                                <th className="py-0.5 font-bold text-right">Refund Mode</th>
+                                <th className="py-0.5 font-bold text-right">Refund Amount (₹)</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {printInvoice.returns.map((ret: any, rIdx: number) => (
+                                <tr key={rIdx} className="border-b border-slate-100 last:border-0">
+                                  <td className="py-0.5 font-mono font-bold">{ret.return_number}</td>
+                                  <td className="py-0.5">{new Date(ret.return_date).toLocaleDateString()}</td>
+                                  <td className="py-0.5">
+                                    {ret.items && ret.items.map((ri: any) => {
+                                      const matchProd = products.find(p => p.id === (ri.product_id || ri.product?.id));
+                                      const prodName = matchProd?.product_name || ri.product?.product_name || 'Item';
+                                      return `${prodName} (x${ri.return_qty})`;
+                                    }).join(', ')}
+                                  </td>
+                                  <td className="py-0.5 text-right font-semibold">{ret.refund_mode}</td>
+                                  <td className="py-0.5 text-right font-mono font-bold text-rose-700">₹{Number(ret.total_refund_amount || 0).toFixed(2)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
 
                       {/* Financial Summary & Footer Terms */}
                       <div className="grid grid-cols-12 gap-2 text-[10px] pt-1">
-                        
+
                         {/* Terms & Amount in Words */}
                         <div className="col-span-6 space-y-1.5 border-r border-slate-200 pr-2">
                           <div>
                             <span className="text-[9px] font-bold text-slate-500 uppercase block">Amount in Words:</span>
                             <span className="font-bold text-slate-900 italic">
-                              {formatNumberToIndianWords(totalAmount)}
+                              {(() => {
+                                const totalRefund = Math.ceil(printInvoice.returns?.reduce((acc: number, ret: any) => acc + Number(ret.total_refund_amount || 0), 0) || 0);
+                                const netAmount = Math.max(0, totalAmount - totalRefund);
+                                return formatNumberToIndianWords(netAmount);
+                              })()}
                             </span>
                           </div>
                           <div className="pt-1 border-t border-slate-200">
@@ -1469,47 +1582,92 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                         {/* Financial Summary */}
                         <div className="col-span-6 space-y-1 text-right pl-1">
                           <div className="flex justify-between">
-                            <span className="text-slate-500">Current Cart Sub Total:</span>
+                            <span className="text-slate-500">Cart Sub Total:</span>
                             <span className="font-mono font-bold">₹{totalAmount.toFixed(2)}</span>
                           </div>
-                          <div className="flex justify-between border-t-2 border-slate-900 pt-1 text-xs font-black">
-                            <span>CURRENT BILL TOTAL:</span>
-                            <span className="font-mono text-primary">₹{totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                          </div>
+                          {(() => {
+                            const totalRefund = Math.ceil(printInvoice.returns?.reduce((acc: number, ret: any) => acc + Number(ret.total_refund_amount || 0), 0) || 0);
+                            if (totalRefund > 0) {
+                              return (
+                                <div className="flex justify-between text-rose-600 font-bold">
+                                  <span>Less: Returns Refund:</span>
+                                  <span className="font-mono">- ₹{totalRefund.toFixed(2)}</span>
+                                </div>
+                              );
+                            }
+                            return null;
+                          })()}
+                          {(() => {
+                            const totalRefund = Math.ceil(printInvoice.returns?.reduce((acc: number, ret: any) => acc + Number(ret.total_refund_amount || 0), 0) || 0);
+                            const netAmount = Math.max(0, totalAmount - totalRefund);
+                            return (
+                              <div className="flex justify-between border-t-2 border-slate-900 pt-1 text-xs font-black">
+                                <span>NET BILL TOTAL:</span>
+                                <span className="font-mono text-primary">₹{netAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                              </div>
+                            );
+                          })()}
 
                           {/* Customer Account Udhar & Payment Ledger Summary Box */}
                           {(() => {
                             const isNamedCustomer = printInvoice.customer_name && printInvoice.customer_name.trim().toUpperCase() !== 'CASH CUSTOMER';
                             const nameUpper = (printInvoice.customer_name || '').trim().toUpperCase();
-                            
+
                             // Look up registered customer or past sales invoices to get active account balance prior to this bill
-                            const regCust = registeredCustomers.find(c => 
+                            const regCust = registeredCustomers.find(c =>
                               c.customer_name?.toUpperCase() === nameUpper
                             );
 
-                            const pastInvoices = (sales as any[]).filter(s => 
-                              s.customer_name && s.customer_name.trim().toUpperCase() === nameUpper && s.invoice_number !== printInvoice.invoice_number
+                            const invoiceDate = new Date(printInvoice.sale_date || printInvoice.created_at).getTime();
+                            const pastInvoices = (sales as any[]).filter(s =>
+                              s.customer_name && s.customer_name.trim().toUpperCase() === nameUpper 
+                              && s.id !== printInvoice.id
+                              && new Date(s.sale_date || s.created_at).getTime() <= invoiceDate
                             );
-                            const pastUnpaidDue = pastInvoices.reduce((acc, curr) => acc + Number(curr.due_amount || 0), 0);
+                            // Adjust past invoices' unpaid amount for their returns
+                            const pastUnpaidDue = pastInvoices.reduce((acc, curr) => {
+                              const crRefunds = (curr.returns || []).reduce((retAcc: number, ret: any) => retAcc + ((ret.refund_mode || '').toLowerCase().includes('credit') ? Number(ret.total_refund_amount || 0) : 0), 0);
+                              return acc + Math.max(0, Number(curr.due_amount || 0) - crRefunds);
+                            }, 0);
+
+                            const pastPayments = payments.filter((p: any) => 
+                              (p.customer_name?.toUpperCase() === nameUpper || p.customer_id === regCust?.id)
+                              && new Date(p.payment_date || p.created_at).getTime() <= invoiceDate
+                            );
+                            const pastPaymentsSum = pastPayments.reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
+                            
+                            const calculatedPrevUdhar = pastUnpaidDue - pastPaymentsSum;
 
                             const appliedUdhar = Number(printInvoice.applied_to_udhar || printInvoice.repay_udhar_amount || 0);
 
-                            const prevUdhar = printInvoice.previous_outstanding && Number(printInvoice.previous_outstanding) > 0
+                            const prevUdhar = printInvoice.previous_outstanding !== undefined
                               ? Number(printInvoice.previous_outstanding)
-                              : (appliedUdhar > 0 ? (Number(regCust?.outstanding || 0) + appliedUdhar) : (Number(regCust?.outstanding || 0) > 0 ? Number(regCust?.outstanding) : pastUnpaidDue));
+                              : (appliedUdhar > 0 ? (calculatedPrevUdhar + appliedUdhar) : calculatedPrevUdhar);
 
-                            const unpaidBill = printInvoice.unpaid_current_bill !== undefined
+                            const totalRefund = Math.ceil(printInvoice.returns?.reduce((acc: number, ret: any) => acc + Number(ret.total_refund_amount || 0), 0) || 0);
+                            const netAmount = Math.max(0, totalAmount - totalRefund);
+
+                            // Calculate how much of the refund was applied to Udhar (Credit Note)
+                            const creditRefunds = Math.ceil(printInvoice.returns?.reduce((acc: number, ret: any) => {
+                              return acc + ((ret.refund_mode || '').toLowerCase().includes('credit') ? Number(ret.total_refund_amount || 0) : 0);
+                            }, 0) || 0);
+
+                            const originalUnpaidBill = printInvoice.unpaid_current_bill !== undefined
                               ? Number(printInvoice.unpaid_current_bill || 0)
                               : Number(printInvoice.due_amount || 0);
+
+                            // Reduce unpaid bill by credit refunds first
+                            const unpaidBill = Math.max(0, originalUnpaidBill - creditRefunds);
+                            const remainingCreditRefund = Math.max(0, creditRefunds - originalUnpaidBill);
 
                             const currentBillPaid = printInvoice.amount_collected !== undefined
                               ? Math.min(Number(printInvoice.amount_collected || 0), totalAmount)
                               : Math.min(Number(printInvoice.paid_amount || 0), totalAmount);
 
-                            // Remaining Udhar balance after this transaction
+                            // Remaining Udhar balance after this transaction (adjust for credit refunds)
                             const remUdhar = printInvoice.remaining_outstanding !== undefined
-                              ? Number(printInvoice.remaining_outstanding)
-                              : Math.max(0, prevUdhar - appliedUdhar + unpaidBill);
+                              ? (Number(printInvoice.remaining_outstanding) - creditRefunds)
+                              : (prevUdhar - appliedUdhar - remainingCreditRefund + unpaidBill);
 
                             if (!isNamedCustomer && prevUdhar <= 0 && remUdhar <= 0 && appliedUdhar <= 0 && unpaidBill <= 0) {
                               return null;
@@ -1519,28 +1677,30 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                               <div className="mt-2 pt-1 border-t-2 border-slate-400 text-[9px] bg-slate-50 p-2 rounded space-y-1 text-left shadow-sm">
                                 <div className="font-black text-slate-900 uppercase text-[9px] border-b border-slate-300 pb-1 mb-1 flex justify-between items-center">
                                   <span>CUSTOMER ACCOUNT CREDIT LEDGER</span>
-                                  <span className="text-amber-900 font-extrabold bg-amber-100 px-1.5 py-0.5 rounded border border-amber-300">
-                                    {remUdhar > 0 ? '⚠️ Udhar Pending' : '✓ Account Cleared'}
+                                  <span className={`font-extrabold px-1.5 py-0.5 rounded border ${remUdhar > 0 ? 'text-amber-900 bg-amber-100 border-amber-300' : (remUdhar < 0 ? 'text-emerald-900 bg-emerald-100 border-emerald-300' : 'text-slate-900 bg-slate-200 border-slate-300')}`}>
+                                    {remUdhar > 0 ? '⚠️ Udhar Pending' : (remUdhar < 0 ? '💸 Advance Credit' : '✓ Account Cleared')}
                                   </span>
                                 </div>
 
-                                {/* 1. Previous Outstanding */}
+                                {/* 1. Previous Outstanding / Advance */}
                                 <div className="flex justify-between text-slate-700">
-                                  <span>1. Previous Outstanding Udhar:</span>
-                                  <span className="font-mono font-bold text-amber-900">₹{prevUdhar.toFixed(2)}</span>
+                                  <span>1. Previous {prevUdhar < 0 ? 'Advance Credit' : 'Outstanding Udhar'}:</span>
+                                  <span className={`font-mono font-bold ${prevUdhar < 0 ? 'text-emerald-700' : 'text-amber-900'}`}>
+                                    ₹{Math.abs(prevUdhar).toFixed(2)} {prevUdhar < 0 ? '(ADVANCE)' : ''}
+                                  </span>
                                 </div>
 
-                                {/* 2. Paid Today From Previous Udhar */}
+                                {/* 2. Paid at Checkout From Previous Udhar */}
                                 <div className="flex justify-between text-primary font-bold">
-                                  <span>2. Paid Today From Previous Udhar:</span>
+                                  <span>2. Paid at Checkout From Previous Udhar:</span>
                                   <span className="font-mono text-primary">
                                     {appliedUdhar > 0 ? `-₹${appliedUdhar.toFixed(2)} (REPAID)` : '₹0.00'}
                                   </span>
                                 </div>
 
-                                {/* 3. Paid Today For Current Bill */}
+                                {/* 3. Paid at Checkout For Current Bill */}
                                 <div className="flex justify-between text-slate-700">
-                                  <span>3. Paid Today For Current Bill:</span>
+                                  <span>3. Paid at Checkout For Current Bill:</span>
                                   <span className="font-mono font-bold text-primary">₹{currentBillPaid.toFixed(2)}</span>
                                 </div>
 
@@ -1552,11 +1712,19 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                                   </div>
                                 )}
 
+                                {/* Credit Note Refund Applied to Previous Udhar */}
+                                {remainingCreditRefund > 0 && (
+                                  <div className="flex justify-between text-emerald-700 font-bold">
+                                    <span>• Advance Credit (Paid ₹{currentBillPaid.toFixed(2)} - Net Bill ₹{netAmount.toFixed(2)}):</span>
+                                    <span className="font-mono text-emerald-600">₹{remainingCreditRefund.toFixed(2)}</span>
+                                  </div>
+                                )}
+
                                 {/* 5. Net Remaining Outstanding */}
                                 <div className="flex justify-between font-black text-slate-900 border-t-2 border-slate-400 pt-1 mt-1 text-[9.5px]">
                                   <span>NET REMAINING OUTSTANDING UDHAR:</span>
-                                  <span className={remUdhar > 0 ? "font-mono text-rose-900 font-black text-[10px]" : "font-mono text-primary font-bold"}>
-                                    ₹{remUdhar.toFixed(2)} {remUdhar > 0 ? '(PENDING)' : '(CLEARED)'}
+                                  <span className={remUdhar > 0 ? "font-mono text-rose-900 font-black text-[10px]" : (remUdhar < 0 ? "font-mono text-emerald-700 font-black text-[10px]" : "font-mono text-primary font-bold")}>
+                                    {remUdhar > 0 ? `₹${remUdhar.toFixed(2)} (PENDING)` : (remUdhar < 0 ? `₹${Math.abs(remUdhar).toFixed(2)} (ADVANCE / OWED TO CUST.)` : `₹0.00 (CLEARED)`)}
                                   </span>
                                 </div>
                               </div>
@@ -1573,16 +1741,16 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
 
                       </div>
 
-                  </div>
-                );
-              })}
+                    </div>
+                  );
+                })}
 
-              {/* Scissor Cut Line Separator (Printed between top and bottom copy) */}
-              <div className="relative my-2 py-1 text-center text-[9px] text-slate-400 font-mono flex items-center justify-center gap-2 select-none print:my-1">
-                <div className="border-b border-dashed border-slate-400 flex-1"></div>
-                <span>✂ ---------------- Cut Along This Line ---------------- ✂</span>
-                <div className="border-b border-dashed border-slate-400 flex-1"></div>
-              </div>
+                {/* Scissor Cut Line Separator (Printed between top and bottom copy) */}
+                <div className="relative my-2 py-1 text-center text-[9px] text-slate-400 font-mono flex items-center justify-center gap-2 select-none print:my-1">
+                  <div className="border-b border-dashed border-slate-400 flex-1"></div>
+                  <span>✂ ---------------- Cut Along This Line ---------------- ✂</span>
+                  <div className="border-b border-dashed border-slate-400 flex-1"></div>
+                </div>
 
               </div>
             </div>
@@ -1596,15 +1764,15 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
       {showHistoryModal && matchedCustomer && createPortal(
         <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 z-[9999] overflow-y-auto animate-backdrop-fade">
           <div className="bg-slate-900 border border-slate-700 p-6 rounded-2xl w-full max-w-3xl shadow-2xl my-auto max-h-[85vh] flex flex-col gap-4 overflow-hidden text-slate-100">
-            
+
             {/* Modal Header */}
             <div className="flex justify-between items-center pb-3 border-b border-slate-700 shrink-0">
               <div>
                 <span className="text-[10px] font-bold text-primary uppercase tracking-widest">Customer Profile & Invoice Audit</span>
                 <h3 className="text-lg font-black text-white uppercase mt-0.5">{matchedCustomer.customer_name} — Purchase History</h3>
               </div>
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={() => setShowHistoryModal(false)}
                 className="text-slate-300 hover:text-white text-xs font-bold bg-slate-800 hover:bg-slate-700 border border-slate-600 px-3.5 py-1.5 rounded-lg transition"
               >
@@ -1637,24 +1805,23 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
               ) : (
                 matchedCustomerInvoices.map((inv: any, idx: number) => {
                   const totalAmt = Number(inv.total_amount || 0);
-                  const collectedAmt = inv.amount_collected !== undefined 
+                  const collectedAmt = inv.amount_collected !== undefined
                     ? Number(inv.amount_collected || 0)
                     : (inv.paid_amount !== undefined ? Number(inv.paid_amount || 0) : (inv.payment_status === 'Paid' ? totalAmt : 0));
 
-                  const unpaidUdharAmt = inv.unpaid_current_bill !== undefined 
+                  const unpaidUdharAmt = inv.unpaid_current_bill !== undefined
                     ? Number(inv.unpaid_current_bill || 0)
                     : (inv.due_amount !== undefined ? Number(inv.due_amount || 0) : Math.max(0, totalAmt - collectedAmt));
 
                   const isPending = unpaidUdharAmt > 0 || inv.payment_status === 'Unpaid' || inv.payment_status === 'Partial';
 
                   return (
-                    <div 
-                      key={inv.id || idx} 
-                      className={`rounded-xl p-4 space-y-3 transition shadow-sm ${
-                        isPending 
-                          ? 'bg-slate-950 border-2 border-rose-500/70' 
+                    <div
+                      key={inv.id || idx}
+                      className={`rounded-xl p-4 space-y-3 transition shadow-sm ${isPending
+                          ? 'bg-slate-950 border-2 border-rose-500/70'
                           : 'bg-slate-950 border border-slate-800'
-                      }`}
+                        }`}
                     >
                       {/* Card Header Row */}
                       <div className="flex justify-between items-start border-b border-slate-800 pb-2.5">
@@ -1756,14 +1923,14 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
       {quickCustModalOpen && createPortal(
         <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 z-[9999] overflow-y-auto animate-backdrop-fade">
           <div className="bg-secondary border border-border p-6 rounded-2xl w-full max-w-lg shadow-2xl my-auto space-y-4">
-            
+
             <div className="flex justify-between items-center pb-3 border-b border-border">
               <div>
                 <span className="text-[10px] font-bold text-primary uppercase tracking-widest">In-POS Quick Registration</span>
                 <h3 className="text-base font-black text-foreground uppercase mt-0.5">Register New Customer</h3>
               </div>
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={() => setQuickCustModalOpen(false)}
                 className="text-textSecondary hover:text-foreground text-xs font-bold bg-background/50 hover:bg-background border border-border px-2.5 py-1 rounded-lg transition"
               >
@@ -1781,30 +1948,30 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
 
               <div>
                 <label className="block text-xs font-semibold text-textSecondary mb-1">Customer Full Name *</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground uppercase font-bold focus:border-primary focus:outline-none"
-                  value={quickCustFormData.customer_name} 
-                  onChange={(e) => setQuickCustFormData({ ...quickCustFormData, customer_name: e.target.value })} 
-                  placeholder="e.g. RAMESH KUMAR" 
-                  required 
+                  value={quickCustFormData.customer_name}
+                  onChange={(e) => setQuickCustFormData({ ...quickCustFormData, customer_name: e.target.value })}
+                  placeholder="e.g. RAMESH KUMAR"
+                  required
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-textSecondary mb-1">Mobile Phone Number *</label>
-                <input 
-                  type="tel" 
+                <input
+                  type="tel"
                   maxLength={10}
                   className={`w-full bg-background border ${quickCustPhoneError ? 'border-rose-500 ring-2 ring-rose-500/20 bg-rose-500/5' : 'border-border'} rounded-lg p-2 text-xs text-foreground font-semibold focus:border-primary focus:outline-none transition`}
-                  value={quickCustFormData.phone} 
+                  value={quickCustFormData.phone}
                   onChange={(e) => {
                     const val = e.target.value.replace(/\D/g, '').slice(0, 10);
                     setQuickCustFormData({ ...quickCustFormData, phone: val });
                     if (val.length === 10 || val.length === 0) setQuickCustPhoneError(null);
-                  }} 
-                  placeholder="e.g. 9876543210" 
-                  required 
+                  }}
+                  placeholder="e.g. 9876543210"
+                  required
                 />
                 {quickCustPhoneError && (
                   <p className="mt-1 text-[11px] font-bold text-rose-500 flex items-center gap-1">
@@ -1816,47 +1983,47 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
 
               <div>
                 <label className="block text-xs font-semibold text-textSecondary mb-1">Date of Birth (Birthday)</label>
-                <input 
-                  type="date" 
+                <input
+                  type="date"
                   className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground font-mono font-semibold focus:border-primary focus:outline-none"
-                  value={quickCustFormData.dob} 
-                  onChange={(e) => setQuickCustFormData({ ...quickCustFormData, dob: e.target.value })} 
+                  value={quickCustFormData.dob}
+                  onChange={(e) => setQuickCustFormData({ ...quickCustFormData, dob: e.target.value })}
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-textSecondary mb-1">Credit Limit (₹)</label>
-                <input 
-                  type="number" 
+                <input
+                  type="number"
                   className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground font-mono font-bold"
-                  value={quickCustFormData.credit_limit === 0 ? '' : quickCustFormData.credit_limit} 
+                  value={quickCustFormData.credit_limit === 0 ? '' : quickCustFormData.credit_limit}
                   placeholder="0"
                   onFocus={(e) => e.target.select()}
-                  onChange={(e) => setQuickCustFormData({ ...quickCustFormData, credit_limit: e.target.value === '' ? 0 : (parseInt(e.target.value) || 0) })} 
+                  onChange={(e) => setQuickCustFormData({ ...quickCustFormData, credit_limit: e.target.value === '' ? 0 : (parseInt(e.target.value) || 0) })}
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-textSecondary mb-1">Billing Address</label>
-                <textarea 
-                  className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground" 
+                <textarea
+                  className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground"
                   rows={2}
-                  value={quickCustFormData.address} 
-                  onChange={(e) => setQuickCustFormData({ ...quickCustFormData, address: e.target.value })} 
-                  placeholder="Customer address..." 
+                  value={quickCustFormData.address}
+                  onChange={(e) => setQuickCustFormData({ ...quickCustFormData, address: e.target.value })}
+                  placeholder="Customer address..."
                 />
               </div>
 
               <div className="flex gap-2 justify-end pt-2 border-t border-border mt-3">
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   onClick={() => setQuickCustModalOpen(false)}
                   className="px-4 py-2 border border-border text-textSecondary rounded-lg text-xs font-semibold"
                 >
                   Cancel
                 </button>
-                <button 
-                  type="submit" 
+                <button
+                  type="submit"
                   className="px-4 py-2 bg-primary hover:bg-primary/90 text-white font-bold rounded-lg text-xs transition shadow-md cursor-pointer"
                 >
                   Save & Auto-Select

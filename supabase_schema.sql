@@ -24,6 +24,8 @@ DROP TABLE IF EXISTS job_card_parts CASCADE;
 DROP TABLE IF EXISTS job_cards CASCADE;
 DROP TABLE IF EXISTS purchase_items CASCADE;
 DROP TABLE IF EXISTS purchase_bills CASCADE;
+DROP TABLE IF EXISTS sales_return_items CASCADE;
+DROP TABLE IF EXISTS sales_returns CASCADE;
 DROP TABLE IF EXISTS sales_items CASCADE;
 DROP TABLE IF EXISTS sales_invoices CASCADE;
 DROP TABLE IF EXISTS expenses CASCADE;
@@ -191,6 +193,30 @@ CREATE TABLE sales_items (
     amount NUMERIC(12, 2) DEFAULT 0.00
 );
 
+-- 10a. SALES RETURNS TABLE
+CREATE TABLE sales_returns (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
+    invoice_id UUID REFERENCES sales_invoices(id) ON DELETE CASCADE,
+    return_number TEXT NOT NULL,
+    return_date TIMESTAMPTZ DEFAULT NOW(),
+    total_refund_amount NUMERIC(12, 2) DEFAULT 0.00,
+    refund_mode TEXT DEFAULT 'Credit', -- 'Credit' or 'Cash'
+    reason TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 10b. SALES RETURN ITEMS TABLE
+CREATE TABLE sales_return_items (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    return_id UUID REFERENCES sales_returns(id) ON DELETE CASCADE,
+    sales_item_id UUID REFERENCES sales_items(id) ON DELETE CASCADE,
+    product_id UUID REFERENCES products(id) ON DELETE RESTRICT,
+    return_qty NUMERIC(12, 2) DEFAULT 1.00,
+    refund_amount NUMERIC(12, 2) DEFAULT 0.00
+);
+
+
 -- 11. PURCHASE BILLS TABLE
 CREATE TABLE purchase_bills (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -335,6 +361,8 @@ ALTER TABLE supplier_payments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE job_cards ENABLE ROW LEVEL SECURITY;
 ALTER TABLE job_card_parts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE unstocked_item_demands ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sales_returns ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sales_return_items ENABLE ROW LEVEL SECURITY;
 
 -- Helper function to fetch tenant ID for authenticated user context
 CREATE OR REPLACE FUNCTION public.get_auth_tenant_id()
@@ -361,6 +389,8 @@ CREATE POLICY "Tenant Isolation: supplier_payments" ON supplier_payments FOR ALL
 CREATE POLICY "Tenant Isolation: job_cards" ON job_cards FOR ALL TO authenticated USING (tenant_id = public.get_auth_tenant_id() OR tenant_id IS NULL) WITH CHECK (tenant_id = public.get_auth_tenant_id());
 CREATE POLICY "Tenant Isolation: job_card_parts" ON job_card_parts FOR ALL TO authenticated USING (EXISTS (SELECT 1 FROM job_cards WHERE job_cards.id = job_card_parts.job_card_id AND (job_cards.tenant_id = public.get_auth_tenant_id() OR job_cards.tenant_id IS NULL)));
 CREATE POLICY "Tenant Isolation: unstocked_item_demands" ON unstocked_item_demands FOR ALL TO authenticated USING (tenant_id = public.get_auth_tenant_id() OR tenant_id IS NULL) WITH CHECK (tenant_id = public.get_auth_tenant_id());
+CREATE POLICY "Tenant Isolation: sales_returns" ON sales_returns FOR ALL TO authenticated USING (tenant_id = public.get_auth_tenant_id() OR tenant_id IS NULL) WITH CHECK (tenant_id = public.get_auth_tenant_id());
+CREATE POLICY "Tenant Isolation: sales_return_items" ON sales_return_items FOR ALL TO authenticated USING (EXISTS (SELECT 1 FROM sales_returns WHERE sales_returns.id = sales_return_items.return_id AND (sales_returns.tenant_id = public.get_auth_tenant_id() OR sales_returns.tenant_id IS NULL)));
 
 -- Done! Master SQL schema is ready with enterprise tenant isolation RLS for LK Smart ERP.
 

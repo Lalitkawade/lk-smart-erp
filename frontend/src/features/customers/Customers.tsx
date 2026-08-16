@@ -18,7 +18,7 @@ interface Customer {
   dob?: string | null;
   credit_limit: number;
   outstanding: number;
-  due_date?: string | null;
+  establishment_date?: string | null;
   created_at: string;
 }
 
@@ -76,11 +76,12 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
     dob: '',
     credit_limit: 50000,
     outstanding: 0,
-    due_date: ''
+    establishment_date: ''
   });
 
-  // Pay Down Outstanding Form
+  // Pay Down Outstanding / Refund Form
   const [payModalOpen, setPayModalOpen] = useState(false);
+  const [payActionType, setPayActionType] = useState<'collect' | 'refund'>('collect');
   const [payFormData, setPayFormData] = useState({
     customer_id: '',
     amount: 0,
@@ -103,7 +104,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
       dob: '',
       credit_limit: 50000,
       outstanding: 0,
-      due_date: ''
+      establishment_date: ''
     });
     setModalOpen(true);
   };
@@ -119,7 +120,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
       dob: c.dob || '',
       credit_limit: c.credit_limit,
       outstanding: c.outstanding,
-      due_date: c.due_date || ''
+      establishment_date: c.establishment_date || ''
     });
     setModalOpen(true);
   };
@@ -157,7 +158,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
       dob: formData.dob || '',
       credit_limit: Number(formData.credit_limit || 0),
       outstanding: Number(formData.outstanding || 0),
-      due_date: formData.due_date || null,
+      establishment_date: formData.establishment_date || null,
       created_at: editingCustomer?.created_at
     };
 
@@ -187,9 +188,24 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
     const stats = customerStatsMap.get(c.id);
     const currentOutstanding = stats ? stats.realtimeOutstanding : Number(c.outstanding || 0);
 
+    setPayActionType('collect');
     setPayFormData({
       customer_id: c.id,
-      amount: currentOutstanding,
+      amount: currentOutstanding > 0 ? currentOutstanding : 0,
+      payment_mode: 'Cash',
+      ref_number: ''
+    });
+    setPayModalOpen(true);
+  };
+
+  const handleOpenRefundModal = (c: Customer) => {
+    const stats = customerStatsMap.get(c.id);
+    const currentOutstanding = stats ? stats.realtimeOutstanding : Number(c.outstanding || 0);
+
+    setPayActionType('refund');
+    setPayFormData({
+      customer_id: c.id,
+      amount: currentOutstanding < 0 ? Math.abs(currentOutstanding) : 0,
       payment_mode: 'Cash',
       ref_number: ''
     });
@@ -204,8 +220,9 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
     if (!targetCustomer) return;
 
     const currentUdhar = customerStatsMap.get(targetCustomer.id)?.realtimeOutstanding ?? Number(targetCustomer.outstanding || 0);
-    const paidAmt = Number(payFormData.amount);
-    const newOutstanding = Math.max(0, currentUdhar - paidAmt);
+    const enteredAmt = Number(payFormData.amount);
+    const actualAmtRecorded = payActionType === 'refund' ? -enteredAmt : enteredAmt;
+    const newOutstanding = currentUdhar - actualAmtRecorded;
 
     const isUuid = (id: string) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
     const nowIso = new Date().toISOString();
@@ -215,7 +232,11 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
     }
 
     setPayModalOpen(false);
-    triggerToast(`✓ Collected ₹${paidAmt.toFixed(2)} payment from ${targetCustomer.customer_name}! Remaining Udhar: ₹${newOutstanding.toFixed(2)}`);
+    if (payActionType === 'refund') {
+      triggerToast(`✓ Refunded ₹${enteredAmt.toFixed(2)} to ${targetCustomer.customer_name}! Remaining Advance: ₹${Math.abs(newOutstanding).toFixed(2)}`);
+    } else {
+      triggerToast(`✓ Collected ₹${enteredAmt.toFixed(2)} payment from ${targetCustomer.customer_name}! Remaining Udhar: ₹${Math.max(0, newOutstanding).toFixed(2)}`);
+    }
 
     try {
       let custId = targetCustomer.id;
@@ -227,7 +248,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
         await PaymentService.recordCustomerPayment({
           tenant_id: isUuid(tenantId) ? tenantId : '00000000-0000-0000-0000-000000000000',
           customer_id: custId,
-          amount: paidAmt,
+          amount: actualAmtRecorded,
           payment_mode: payFormData.payment_mode,
           ref_number: payFormData.ref_number.trim() || 'DIR-REC',
           payment_date: nowIso
@@ -303,6 +324,24 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
           notes: `Paid at Checkout for ${inv.invoice_number || 'Invoice'}`
         });
       }
+
+      // Credit entry: Invoice Returns (if any)
+      const returns = inv.returns || [];
+      returns.forEach((ret: any) => {
+        const refundAmt = Number(ret.total_refund_amount || 0);
+        if (refundAmt > 0) {
+          const isCredit = (ret.refund_mode || '').toLowerCase().includes('credit');
+          ledger.push({
+            date: ret.return_date || ret.created_at || new Date().toISOString(),
+            type: 'Sales Return Refund',
+            ref: `RET-${inv.invoice_number || 'SALE'}`,
+            mode: ret.refund_mode || 'Credit Note',
+            debit: 0,
+            credit: isCredit ? refundAmt : 0, // Only Udhar/Credit Note refunds reduce the running Udhar balance
+            notes: `Return Refund (${ret.refund_mode}) for ${inv.invoice_number || 'Invoice'}`
+          });
+        }
+      });
     });
 
     // 2. Outstanding Collection Payments (Credit -)
@@ -327,7 +366,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
       accum = accum + entry.debit - entry.credit;
       return {
         ...entry,
-        runningBalance: Math.max(0, accum)
+        runningBalance: accum
       };
     });
   }, [statementCustomer, payments, rawCustomerInvoices]);
@@ -341,7 +380,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
       totalCredits += row.credit;
     });
 
-    const netOutstanding = Math.max(0, totalDebits - totalCredits);
+    const netOutstanding = totalDebits - totalCredits;
 
     return {
       totalDebits,
@@ -352,7 +391,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
 
   // Aggregate product purchasing history for customer
   const purchasedProductsHistory = useMemo(() => {
-    const map = new Map<string, { name: string; totalQty: number; totalSpent: number; lastDate: string }>();
+    const map = new Map<string, { name: string; totalQty: number; returnedQty: number; remainingQty: number; totalSpent: number; lastDate: string }>();
     rawCustomerInvoices.forEach(inv => {
       const items = inv.items || inv.sales_items || [];
       items.forEach((item: any) => {
@@ -364,13 +403,29 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
         if (map.has(name)) {
           const curr = map.get(name)!;
           curr.totalQty += qty;
+          curr.remainingQty += qty;
           curr.totalSpent += amt;
           if (new Date(date).getTime() > new Date(curr.lastDate).getTime()) {
             curr.lastDate = date;
           }
         } else {
-          map.set(name, { name, totalQty: qty, totalSpent: amt, lastDate: date });
+          map.set(name, { name, totalQty: qty, returnedQty: 0, remainingQty: qty, totalSpent: amt, lastDate: date });
         }
+      });
+
+      // Account for returns
+      const returns = inv.returns || [];
+      returns.forEach((ret: any) => {
+        const retItems = ret.items || ret.sales_return_items || [];
+        retItems.forEach((rItem: any) => {
+          const name = (rItem.product?.product_name || rItem.product_name || 'Item').toUpperCase();
+          const retQty = Number(rItem.return_qty || rItem.qty || 0);
+          if (map.has(name)) {
+            const curr = map.get(name)!;
+            curr.returnedQty += retQty;
+            curr.remainingQty -= retQty;
+          }
+        });
       });
     });
     return Array.from(map.values()).sort((a, b) => b.totalSpent - a.totalSpent);
@@ -436,14 +491,23 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
         p.customer_id === c.id || (c.customer_name && p.customer_name && p.customer_name.toUpperCase() === custNameUpper)
       );
 
-      const totalSpent = custInvoices.reduce((acc: number, curr: any) => acc + Number(curr.total_amount || 0), 0);
+      const totalSpent = custInvoices.reduce((acc: number, curr: any) => {
+        const saleTotal = Number(curr.total_amount || 0);
+        const returnsTotal = (curr.returns || []).reduce((retAcc: number, ret: any) => retAcc + Number(ret.total_refund_amount || 0), 0);
+        return acc + Math.max(0, saleTotal - returnsTotal);
+      }, 0);
 
-      // Sum of invoice dues (unpaid amount for each invoice)
+      // Sum of invoice dues (unpaid amount for each invoice), adjusted for credit returns
       const totalInvoiceDues = custInvoices.reduce((acc: number, inv: any) => {
+        const creditReturnsTotal = (inv.returns || []).reduce((retAcc: number, ret: any) => {
+          return retAcc + ((ret.refund_mode || '').toLowerCase().includes('credit') ? Number(ret.total_refund_amount || 0) : 0);
+        }, 0);
+        
         const invoiceDue = inv.due_amount !== undefined
           ? Number(inv.due_amount)
-          : Math.max(0, Number(inv.total_amount || 0) - Number(inv.paid_amount || 0));
-        return acc + Math.max(0, invoiceDue);
+          : (Number(inv.total_amount || 0) - Number(inv.paid_amount || 0));
+          
+        return acc + (invoiceDue - creditReturnsTotal);
       }, 0);
 
       // Sum of payments collected in customer_payments table
@@ -453,9 +517,9 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
       // Subtract totalPaymentsReceived from invoice dues or opening balance
       let realtimeOutstanding = 0;
       if (custInvoices.length > 0) {
-        realtimeOutstanding = Math.max(0, totalInvoiceDues - totalPaymentsReceived);
+        realtimeOutstanding = totalInvoiceDues - totalPaymentsReceived;
       } else {
-        realtimeOutstanding = Math.max(0, Number(c.outstanding || 0) - totalPaymentsReceived);
+        realtimeOutstanding = Number(c.outstanding || 0) - totalPaymentsReceived;
       }
 
       let lastPurchDate: string | null = null;
@@ -474,8 +538,8 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
         lastPayDate = sortedPays[0].payment_date || null;
       }
 
-      // Compute Udhar Due Date: custom set due_date OR last purchase date + 15 days credit window
-      let computedDueDate: string | null = c.due_date || null;
+      // Compute Udhar Due Date: last purchase date + 15 days credit window
+      let computedDueDate: string | null = null;
       if (!computedDueDate && lastPurchDate && realtimeOutstanding > 0) {
         const d = new Date(lastPurchDate);
         d.setDate(d.getDate() + 15);
@@ -547,9 +611,12 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
           onClick={() => setFilterTab('outstanding')}
           className={`w-full py-2.5 px-2 rounded-t-xl transition flex items-center justify-center gap-1.5 cursor-pointer text-center ${filterTab === 'outstanding' ? 'bg-secondary border-t-2 border-x border-primary text-primary font-extrabold shadow-2xs' : 'bg-background/50 border-t border-x border-border text-textMuted hover:text-foreground'}`}
         >
-          <span className="truncate">⚠️ Pending Outstanding</span>
+          <span className="truncate">⚠️ Balances Pending</span>
           <span className="bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold shrink-0">
-            {masterCustomersList.filter(c => (customerStatsMap.get(c.id)?.realtimeOutstanding || Number(c.outstanding || 0)) > 0).length}
+            {masterCustomersList.filter(c => {
+              const o = customerStatsMap.get(c.id)?.realtimeOutstanding;
+              return (o !== undefined ? o : Number(c.outstanding || 0)) > 0;
+            }).length}
           </span>
         </button>
       </div>
@@ -623,8 +690,8 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                     ₹{stats.totalPurchases.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                   </td>
                   <td className="py-3.5 px-4 text-center font-mono text-xs">
-                    <span className={`font-bold inline-block px-2.5 py-0.5 rounded-lg ${hasUdhar ? 'text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800' : 'text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800'}`}>
-                      ₹{stats.realtimeOutstanding.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    <span className={`font-bold inline-block px-2.5 py-0.5 rounded-lg ${stats.realtimeOutstanding > 0 ? 'text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800' : (stats.realtimeOutstanding < 0 ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800' : 'text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800')}`}>
+                      {stats.realtimeOutstanding > 0 ? `₹${stats.realtimeOutstanding.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : (stats.realtimeOutstanding < 0 ? `₹${Math.abs(stats.realtimeOutstanding).toLocaleString('en-IN', { minimumFractionDigits: 2 })} (Advance)` : '₹0.00')}
                     </span>
                     <div className="text-[10px] text-slate-400 font-mono mt-0.5">Limit: ₹{Number(c.credit_limit || 0).toLocaleString()}</div>
                     {hasUdhar && stats.udharDueDate && (
@@ -641,8 +708,8 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                     {stats.lastPaymentDate ? new Date(stats.lastPaymentDate).toLocaleDateString('en-IN') : '-'}
                   </td>
                   <td className="py-3.5 px-4 text-center">
-                    <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold border inline-block ${hasUdhar ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800' : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'}`}>
-                      {hasUdhar ? '⚠️ Pending' : '✓ Clean'}
+                    <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold border inline-block ${stats.realtimeOutstanding > 0 ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800' : (stats.realtimeOutstanding < 0 ? 'bg-sky-50 dark:bg-sky-950/60 text-sky-600 dark:text-sky-400 border-sky-200 dark:border-sky-800' : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800')}`}>
+                      {stats.realtimeOutstanding > 0 ? '⚠️ Pending' : (stats.realtimeOutstanding < 0 ? '💸 Advance' : '✓ Clean')}
                     </span>
                   </td>
                   <td className="py-3.5 px-4 text-center">
@@ -654,6 +721,14 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                           title={`Collect Udhar payment (₹${stats.realtimeOutstanding.toFixed(2)})`}
                         >
                           <i className="fa-solid fa-hand-holding-dollar"></i> Pay Udhar (₹{stats.realtimeOutstanding.toLocaleString()})
+                        </button>
+                      )}
+                      {stats.realtimeOutstanding < 0 && (
+                        <button
+                          className="w-full text-[11px] bg-rose-600 hover:bg-rose-500 text-white font-black py-1 px-2 rounded-lg transition-all active:scale-95 cursor-not-allowed flex items-center justify-center gap-1 shadow-xs"
+                          title={`Shop owes customer this amount.`}
+                        >
+                          💸 Refund Advance (₹{Math.abs(stats.realtimeOutstanding).toLocaleString()})
                         </button>
                       )}
                       <div className="flex items-center justify-center gap-2 w-full">
@@ -802,12 +877,12 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                     onChange={(e) => setFormData({ ...formData, outstanding: e.target.value === '' ? 0 : (parseInt(e.target.value) || 0) })} />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-textSecondary mb-1">Udhar Payment Due Date</label>
+                  <label className="block text-xs font-semibold text-textSecondary mb-1">Customer Establishment Date</label>
                   <input 
                     type="date" 
                     className="w-full bg-background border border-border rounded-lg p-2.5 text-xs text-foreground font-mono font-semibold"
-                    value={formData.due_date} 
-                    onChange={(e) => setFormData({ ...formData, due_date: e.target.value })} 
+                    value={formData.establishment_date} 
+                    onChange={(e) => setFormData({ ...formData, establishment_date: e.target.value })} 
                   />
                 </div>
               </div>
@@ -836,10 +911,10 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
             {/* Header */}
             <div className="flex justify-between items-center pb-3 border-b border-border shrink-0">
               <div>
-                <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest flex items-center gap-1">
-                  <i className="fa-solid fa-hand-holding-dollar"></i> Accounts Receivable Collection
+                <span className={`text-[10px] font-bold uppercase tracking-widest flex items-center gap-1 ${payActionType === 'refund' ? 'text-rose-500' : 'text-emerald-500'}`}>
+                  <i className="fa-solid fa-hand-holding-dollar"></i> {payActionType === 'refund' ? 'Advance Refund' : 'Accounts Receivable Collection'}
                 </span>
-                <h3 className="text-lg font-black text-foreground uppercase mt-0.5">Collect Customer Udhar Payment</h3>
+                <h3 className="text-lg font-black text-foreground uppercase mt-0.5">{payActionType === 'refund' ? 'Refund Customer Advance' : 'Collect Customer Udhar Payment'}</h3>
               </div>
               <button
                 type="button"
@@ -867,8 +942,12 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                       {targetCust.phone && <span className="text-xs text-textMuted font-mono block mt-0.5">📞 {targetCust.phone}</span>}
                     </div>
                     <div className="text-right">
-                      <span className="text-[10px] text-rose-500 uppercase font-bold block">Current Pending Udhar</span>
-                      <span className="font-mono text-base font-black text-rose-600 dark:text-rose-400">₹{currentOutstanding.toFixed(2)}</span>
+                      <span className={`text-[10px] uppercase font-bold block ${payActionType === 'refund' ? 'text-emerald-500' : 'text-rose-500'}`}>
+                        {payActionType === 'refund' ? 'Current Advance' : 'Current Pending Udhar'}
+                      </span>
+                      <span className={`font-mono text-base font-black ${payActionType === 'refund' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                        ₹{Math.abs(currentOutstanding).toFixed(2)}
+                      </span>
                     </div>
                   </div>
 
@@ -878,12 +957,12 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                     <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
-                        onClick={() => setPayFormData({ ...payFormData, amount: currentOutstanding })}
-                        className="px-2.5 py-1 text-[11px] font-black bg-emerald-600 hover:bg-emerald-500 text-white rounded-md transition shadow-xs cursor-pointer active:scale-95"
+                        onClick={() => setPayFormData({ ...payFormData, amount: Math.abs(currentOutstanding) })}
+                        className={`px-2.5 py-1 text-[11px] font-black text-white rounded-md transition shadow-xs cursor-pointer active:scale-95 ${payActionType === 'refund' ? 'bg-rose-600 hover:bg-rose-500' : 'bg-emerald-600 hover:bg-emerald-500'}`}
                       >
-                        ⚡ Full Udhar (₹{currentOutstanding.toFixed(2)})
+                        ⚡ Full {payActionType === 'refund' ? 'Refund' : 'Udhar'} (₹{Math.abs(currentOutstanding).toFixed(2)})
                       </button>
-                      {[500, 200, 100].filter(amt => amt < currentOutstanding).map(amt => (
+                      {[500, 200, 100].filter(amt => amt < Math.abs(currentOutstanding)).map(amt => (
                         <button
                           key={amt}
                           type="button"
@@ -903,13 +982,13 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
             <form onSubmit={handleRecordPayment} className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-4 scrollbar-thin">
               <div>
                 <label className="block text-xs font-bold text-foreground mb-1">
-                  Collection Receipt Amount (₹) *
+                  {payActionType === 'refund' ? 'Refund Amount (₹) *' : 'Collection Receipt Amount (₹) *'}
                 </label>
                 <input
                   type="number"
                   step="any"
                   min="1"
-                  className="w-full bg-background border-2 border-emerald-500 rounded-xl p-3 text-base text-foreground font-mono font-black focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                  className={`w-full bg-background border-2 rounded-xl p-3 text-base text-foreground font-mono font-black focus:outline-none focus:ring-2 ${payActionType === 'refund' ? 'border-rose-500 focus:ring-rose-500/30' : 'border-emerald-500 focus:ring-emerald-500/30'}`}
                   value={payFormData.amount === 0 ? '' : payFormData.amount}
                   placeholder="Enter payment amount (e.g. 1000)"
                   onFocus={(e) => e.target.select()}
@@ -925,22 +1004,23 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                 const stats = customerStatsMap.get(targetCust.id);
                 const currentOutstanding = stats ? stats.realtimeOutstanding : Number(targetCust.outstanding || 0);
                 const enteredAmount = Number(payFormData.amount || 0);
-                const remBalance = Math.max(0, currentOutstanding - enteredAmount);
+                const actualAmtRecorded = payActionType === 'refund' ? -enteredAmount : enteredAmount;
+                const remBalance = currentOutstanding - actualAmtRecorded;
 
                 return (
                   <div className="bg-background/80 p-3 rounded-xl border border-border text-xs space-y-1 font-semibold">
                     <div className="flex justify-between text-textMuted">
-                      <span>Current Udhar:</span>
-                      <span className="font-mono">₹{currentOutstanding.toFixed(2)}</span>
+                      <span>{currentOutstanding < 0 ? 'Current Advance:' : 'Current Udhar:'}</span>
+                      <span className="font-mono">₹{Math.abs(currentOutstanding).toFixed(2)}</span>
                     </div>
-                    <div className="flex justify-between text-emerald-500 font-bold">
-                      <span>Paying Today:</span>
+                    <div className={`flex justify-between font-bold ${payActionType === 'refund' ? 'text-rose-500' : 'text-emerald-500'}`}>
+                      <span>{payActionType === 'refund' ? 'Refunding Today:' : 'Paying Today:'}</span>
                       <span className="font-mono">-₹{enteredAmount.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between text-foreground font-extrabold border-t border-border/40 pt-1.5 mt-1 text-xs">
-                      <span>Remaining Udhar Balance:</span>
-                      <span className={remBalance === 0 ? "font-mono text-emerald-500 font-black" : "font-mono text-rose-400 font-black"}>
-                        ₹{remBalance.toFixed(2)} {remBalance === 0 ? '✓ Cleared!' : '(Pending)'}
+                      <span>{remBalance < 0 ? 'Remaining Advance Balance:' : 'Remaining Udhar Balance:'}</span>
+                      <span className={remBalance === 0 ? "font-mono text-emerald-500 font-black" : "font-mono text-amber-500 font-black"}>
+                        ₹{Math.abs(remBalance).toFixed(2)} {remBalance === 0 ? '✓ Cleared!' : '(Pending)'}
                       </span>
                     </div>
                   </div>
@@ -1060,14 +1140,22 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                         <h3 className="text-base sm:text-lg font-black text-foreground print:text-black uppercase mt-0.5">{statementCustomer.customer_name} — Account Profile</h3>
                       </div>
                       <div className="flex flex-wrap sm:flex-nowrap gap-1.5 sm:gap-2 print:hidden">
-                        {stmtDues > 0 && (
+                        {stmtDues > 0 ? (
                           <button
                             onClick={() => handleOpenPayModal(statementCustomer)}
                             className="px-2.5 sm:px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-lg text-[11px] sm:text-xs transition shadow-md flex items-center gap-1 active:scale-95 cursor-pointer whitespace-nowrap"
                           >
                             💵 Collect Udhar (₹{stmtDues.toFixed(2)})
                           </button>
-                        )}
+                        ) : stmtDues < 0 ? (
+                          <button
+                            onClick={() => handleOpenRefundModal(statementCustomer)}
+                            className="px-2.5 sm:px-3.5 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-black rounded-lg text-[11px] sm:text-xs transition shadow-md flex items-center gap-1 active:scale-95 cursor-pointer whitespace-nowrap"
+                            title="Refund this advance balance to the customer."
+                          >
+                            💸 Refund Advance (₹{Math.abs(stmtDues).toFixed(2)})
+                          </button>
+                        ) : null}
                         <button
                           onClick={() => {
                             const name = statementCustomer.customer_name;
@@ -1103,8 +1191,8 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                       </div>
                       <div>
                         <div className="text-textMuted text-[10px] uppercase font-bold">Active Udhar Dues</div>
-                        <div className={`font-mono font-black text-sm print:text-black ${stmtDues > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                          ₹{stmtDues.toFixed(2)} {stmtDues === 0 ? '✓ Cleared' : ''}
+                        <div className={`font-mono font-black text-sm print:text-black ${stmtDues > 0 ? 'text-rose-600 dark:text-rose-400' : (stmtDues < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-emerald-600 dark:text-emerald-400')}`}>
+                          {stmtDues > 0 ? `₹${stmtDues.toFixed(2)}` : (stmtDues < 0 ? `₹${Math.abs(stmtDues).toFixed(2)} (Advance)` : '₹0.00 ✓ Cleared')}
                         </div>
                         <div className="text-textMuted text-[10px]">Credit limit: ₹{Number(statementCustomer.credit_limit || 0).toLocaleString()}</div>
                       </div>
@@ -1112,7 +1200,11 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                         <div className="text-textMuted text-[10px] uppercase font-bold">Total Invoices Billed</div>
                         <div className="text-primary font-bold font-mono text-sm print:text-black">{rawCustomerInvoices.length} Bills</div>
                         <div className="text-textMuted text-[10px]">
-                          Lifetime Spent: ₹{rawCustomerInvoices.reduce((acc, curr) => acc + Number(curr.total_amount || 0), 0).toFixed(2)}
+                          Lifetime Spent: ₹{rawCustomerInvoices.reduce((acc, curr) => {
+                            const saleTotal = Number(curr.total_amount || 0);
+                            const returnsTotal = (curr.returns || []).reduce((retAcc: number, ret: any) => retAcc + Number(ret.total_refund_amount || 0), 0);
+                            return acc + Math.max(0, saleTotal - returnsTotal);
+                          }, 0).toFixed(2)}
                         </div>
                       </div>
                     </div>
@@ -1165,13 +1257,14 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                       </div>
                     </div>
 
-                    <div className={`p-3 rounded-xl border print:bg-white print:border-slate-300 ${statementSummaryStats.netOutstanding > 0 ? 'bg-amber-500/10 border-amber-500/30' : 'bg-primary/10 border-primary/30'}`}>
+                    <div className={`p-3 rounded-xl border print:bg-white print:border-slate-300 ${statementSummaryStats.netOutstanding > 0 ? 'bg-amber-500/10 border-amber-500/30' : (statementSummaryStats.netOutstanding < 0 ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-primary/10 border-primary/30')}`}>
                       <div className="text-[10px] font-bold uppercase tracking-wider text-textPrimary print:text-black flex justify-between items-center">
                         <span>🟡 Net Pending Udhar</span>
                         {statementSummaryStats.netOutstanding === 0 && <span className="text-primary font-bold">✓ Cleared</span>}
+                        {statementSummaryStats.netOutstanding < 0 && <span className="text-emerald-500 font-bold">✓ Advance</span>}
                       </div>
-                      <div className={`text-base font-black font-mono mt-0.5 print:text-black ${statementSummaryStats.netOutstanding > 0 ? 'text-amber-500 dark:text-amber-400' : 'text-primary'}`}>
-                        ₹{statementSummaryStats.netOutstanding.toFixed(2)}
+                      <div className={`text-base font-black font-mono mt-0.5 print:text-black ${statementSummaryStats.netOutstanding > 0 ? 'text-amber-500 dark:text-amber-400' : (statementSummaryStats.netOutstanding < 0 ? 'text-emerald-500' : 'text-primary')}`}>
+                        ₹{Math.abs(statementSummaryStats.netOutstanding).toFixed(2)} {statementSummaryStats.netOutstanding < 0 ? '(Cr)' : ''}
                       </div>
                     </div>
                   </div>
@@ -1237,8 +1330,12 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                                     <span className="text-amber-500 dark:text-amber-400 font-black print:text-black">
                                       ₹{bal.toFixed(2)} <span className="text-[10px] font-bold">Dr</span>
                                     </span>
+                                  ) : bal < 0 ? (
+                                    <span className="text-emerald-600 dark:text-emerald-400 font-black print:text-black">
+                                      ₹{Math.abs(bal).toFixed(2)} <span className="text-[10px] font-bold">Cr</span>
+                                    </span>
                                   ) : (
-                                    <span className="text-emerald-600 dark:text-emerald-400 font-bold text-[11px] print:text-black">
+                                    <span className="text-primary font-bold text-[11px] print:text-black">
                                       ₹0.00 (Nil)
                                     </span>
                                   )}
@@ -1260,16 +1357,26 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                     <div className="text-center py-6 text-textMuted text-xs font-semibold">No invoices recorded for this customer.</div>
                   ) : (
                     rawCustomerInvoices.map((inv: any, idx: number) => {
-                      const totalAmt = Number(inv.total_amount || 0);
+                      const invoiceTotalAmt = Number(inv.total_amount || 0);
+                      const returnsTotal = (inv.returns || []).reduce((retAcc: number, ret: any) => retAcc + Number(ret.total_refund_amount || 0), 0);
+                      
+                      // How much of the returns were credited to Udhar? (Assuming Credit Notes reduce Udhar)
+                      const creditReturnsTotal = (inv.returns || []).reduce((retAcc: number, ret: any) => {
+                        return retAcc + ((ret.refund_mode || '').toLowerCase().includes('credit') ? Number(ret.total_refund_amount || 0) : 0);
+                      }, 0);
+
                       const collectedAmt = inv.amount_collected !== undefined
                         ? Number(inv.amount_collected || 0)
-                        : (inv.paid_amount !== undefined ? Number(inv.paid_amount || 0) : (inv.payment_status === 'Paid' ? totalAmt : 0));
+                        : (inv.paid_amount !== undefined ? Number(inv.paid_amount || 0) : (inv.payment_status === 'Paid' ? invoiceTotalAmt : 0));
 
-                      const unpaidUdharAmt = inv.unpaid_current_bill !== undefined
+                      const rawUnpaid = inv.unpaid_current_bill !== undefined
                         ? Number(inv.unpaid_current_bill || 0)
-                        : (inv.due_amount !== undefined ? Number(inv.due_amount || 0) : Math.max(0, totalAmt - collectedAmt));
+                        : (inv.due_amount !== undefined ? Number(inv.due_amount || 0) : Math.max(0, invoiceTotalAmt - collectedAmt));
+                        
+                      // Actual pending udhar takes into account credit note returns
+                      const unpaidUdharAmt = Math.max(0, rawUnpaid - creditReturnsTotal);
 
-                      const isPending = unpaidUdharAmt > 0 || inv.payment_status === 'Unpaid' || inv.payment_status === 'Partial';
+                      const isPending = unpaidUdharAmt > 0 || (inv.payment_status !== 'Paid' && unpaidUdharAmt > 0);
 
                       return (
                         <div key={inv.id || idx} className={`rounded-xl p-4 space-y-3 border ${isPending ? 'bg-slate-900 border-rose-500/70' : 'bg-secondary border-border'}`}>
@@ -1286,7 +1393,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                                 </div>
                               ) : (
                                 <div className="inline-flex items-center gap-1 bg-primary/10 border border-primary/30 px-2.5 py-1 rounded-lg text-primary text-xs font-bold">
-                                  ✓ Fully Paid
+                                  ✓ Fully Settled
                                 </div>
                               )}
                               <button
@@ -1311,11 +1418,18 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                           </div>
 
                           {/* Payment Ledger Breakdown */}
-                          <div className="grid grid-cols-3 gap-2 bg-background/80 p-2.5 rounded-lg text-xs font-semibold border border-border">
+                          <div className={`grid ${returnsTotal > 0 ? 'grid-cols-4' : 'grid-cols-3'} gap-2 bg-background/80 p-2.5 rounded-lg text-xs font-semibold border border-border`}>
                             <div>
                               <span className="text-[10px] text-textMuted block uppercase font-bold">Bill Total</span>
-                              <span className="font-mono font-extrabold text-foreground">₹{totalAmt.toFixed(2)}</span>
+                              <span className={`font-mono font-extrabold ${returnsTotal > 0 ? 'line-through text-textMuted text-[10px]' : 'text-foreground'}`}>₹{invoiceTotalAmt.toFixed(2)}</span>
+                              {returnsTotal > 0 && <div className="font-mono font-extrabold text-foreground">₹{Math.max(0, invoiceTotalAmt - returnsTotal).toFixed(2)}</div>}
                             </div>
+                            {returnsTotal > 0 && (
+                              <div>
+                                <span className="text-[10px] text-rose-400 block uppercase font-bold">Returned</span>
+                                <span className="font-mono font-extrabold text-rose-400">-₹{returnsTotal.toFixed(2)}</span>
+                              </div>
+                            )}
                             <div>
                               <span className="text-[10px] text-textMuted block uppercase font-bold">Amount Paid</span>
                               <span className="font-mono font-extrabold text-primary">₹{collectedAmt.toFixed(2)}</span>
@@ -1364,7 +1478,9 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                       <thead>
                         <tr className="border-b border-border text-textPrimary text-[10px] font-extrabold uppercase">
                           <th className="pb-2">Product Name</th>
-                          <th className="pb-2 text-center">Total Qty Purchased</th>
+                          <th className="pb-2 text-center">Gross Qty Bought</th>
+                          <th className="pb-2 text-center">Returned</th>
+                          <th className="pb-2 text-center">Net Remaining</th>
                           <th className="pb-2 text-right">Total Amount Spent (₹)</th>
                           <th className="pb-2 text-right">Last Purchased</th>
                         </tr>
@@ -1372,13 +1488,15 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                       <tbody>
                         {purchasedProductsHistory.length === 0 ? (
                           <tr>
-                            <td colSpan={4} className="py-6 text-center text-textMuted">No products purchased yet.</td>
+                            <td colSpan={6} className="py-6 text-center text-textMuted">No products purchased yet.</td>
                           </tr>
                         ) : (
                           purchasedProductsHistory.map((p, idx) => (
                             <tr key={idx} className="border-b border-border hover:bg-background/40">
                               <td className="py-3 font-bold text-foreground uppercase">{p.name}</td>
                               <td className="py-3 text-center font-mono font-bold text-foreground">{p.totalQty}</td>
+                              <td className={`py-3 text-center font-mono font-bold ${p.returnedQty > 0 ? 'text-rose-500' : 'text-textMuted'}`}>{p.returnedQty > 0 ? `-${p.returnedQty}` : '-'}</td>
+                              <td className="py-3 text-center font-mono font-bold text-emerald-500">{p.remainingQty}</td>
                               <td className="py-3 text-right font-mono font-bold text-primary">₹{p.totalSpent.toFixed(2)}</td>
                               <td className="py-3 text-right font-mono text-textMuted text-[11px]">{new Date(p.lastDate).toLocaleDateString()}</td>
                             </tr>

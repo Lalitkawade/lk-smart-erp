@@ -9,7 +9,30 @@ export interface UnstockedDemand {
   min_alert_qty?: number;
   status: 'Pending' | 'Added to Stock' | 'Dismissed';
   last_requested_at: string;
+  created_at?: string;
 }
+
+export const calculateRequestsPerMonth = (demand: UnstockedDemand): number => {
+  if (!demand.created_at) return 0; // Fallback if missing
+  const createdDate = new Date(demand.created_at).getTime();
+  const now = new Date().getTime();
+  const diffDays = Math.max(1, (now - createdDate) / (1000 * 60 * 60 * 24));
+  return (demand.request_count / diffDays) * 30;
+};
+
+export const getVelocityString = (demand: UnstockedDemand): string => {
+  if (!demand.created_at) return '';
+  const createdDate = new Date(demand.created_at).getTime();
+  const now = new Date().getTime();
+  const diffDays = Math.max(1, (now - createdDate) / (1000 * 60 * 60 * 24));
+  
+  if (diffDays <= 30) {
+    return `${demand.request_count}/Mo`;
+  } else {
+    const months = Math.round(diffDays / 30);
+    return `${demand.request_count}/${months} Mo`;
+  }
+};
 
 export function useDemandTracker(tenantId?: string) {
   const [demands, setDemands] = useState<UnstockedDemand[]>([]);
@@ -126,7 +149,13 @@ export function useDemandTracker(tenantId?: string) {
 
   const highDemandAlerts = demands.filter(d => {
     const threshold = d.min_alert_qty !== undefined ? d.min_alert_qty : alertThreshold;
-    return d.request_count >= threshold && d.status === 'Pending';
+    const isCountHigh = d.request_count >= threshold;
+    const isVelocityHigh = calculateRequestsPerMonth(d) >= 2;
+    // An item is high demand if its count reaches threshold AND it gets at least 2 requests per month on average
+    // Or if it doesn't have a created_at date (legacy items), we just fallback to the count
+    const meetsVelocity = d.created_at ? isVelocityHigh : true;
+
+    return isCountHigh && meetsVelocity && d.status === 'Pending';
   });
 
   return {

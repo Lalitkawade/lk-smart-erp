@@ -113,7 +113,7 @@ export function useBilling(tenantId: string) {
     setCart(cart.filter(i => !(i.product.id === productId && i.isLoose === isLoose)));
   };
 
-  const processCheckout = async (options?: { amountCollected?: number; repayUdharAmount?: number; paymentMode?: string; transactionId?: string; discountAmount?: number; dueDate?: string }) => {
+  const processCheckout = async (options?: { amountCollected?: number; repayUdharAmount?: number; paymentMode?: string; transactionId?: string; discountAmount?: number; dueDate?: string; matchedCustomer?: any }) => {
     const activeCart = cart.filter(i => i.qty > 0);
     if (activeCart.length === 0) throw new Error('Cart is empty or has 0 quantity items.');
 
@@ -127,13 +127,13 @@ export function useBilling(tenantId: string) {
     const currentTxnId = options?.transactionId !== undefined ? options.transactionId : transactionId;
 
     try {
-      let matchedCustomer: any = null;
+      let matchedCustomer: any = options?.matchedCustomer || null;
 
       // 1. Look up matching customer profile if provided
       const trimmedName = customerName.trim();
       const trimmedPhone = customerPhone.trim();
 
-      if (trimmedName && trimmedName.toUpperCase() !== 'CASH CUSTOMER') {
+      if (!matchedCustomer && trimmedName && trimmedName.toUpperCase() !== 'CASH CUSTOMER') {
         const searchRes = await CustomerService.searchCustomers(trimmedPhone || trimmedName, tenantId);
         if (searchRes.data && searchRes.data.length > 0) {
           matchedCustomer = searchRes.data[0];
@@ -202,7 +202,7 @@ export function useBilling(tenantId: string) {
       const isValidUUID = (id: any) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
       // Always calculate new net outstanding balance
-      const newOutstanding = Math.max(0, previousOutstanding - appliedToPreviousUdhar + unpaidCurrentBill);
+      const newOutstanding = previousOutstanding - appliedToPreviousUdhar + unpaidCurrentBill;
 
       // Auto-register customer in database if they don't have a valid UUID yet
       if (customerName.trim() && customerName.trim().toUpperCase() !== 'CASH CUSTOMER') {

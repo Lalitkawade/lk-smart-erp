@@ -53,23 +53,30 @@ export const ErpDataProvider: React.FC<{ children: ReactNode }> = ({ children })
         setIsLoading(true);
       }
       try {
-        const [salesRes, purchRes, expRes, prodRes, custRes, supRes, custPayRes, supPayRes, settingsRes] = await Promise.allSettled([
-          supabase.from('sales_invoices').select('*, sales_items(*)').order('sale_date', { ascending: false }),
-          supabase.from('purchase_bills').select('*, purchase_items(*)').order('purchase_date', { ascending: false }),
+        const [salesRes, purchRes, expRes, prodRes, custRes, supRes, custPayRes, supPayRes, settingsRes, returnsRes] = await Promise.allSettled([
+          supabase.from('sales_invoices').select('*, items:sales_items(*, product:products(*))').order('sale_date', { ascending: false }),
+          supabase.from('purchase_bills').select('*, items:purchase_items(*, product:products(*))').order('purchase_date', { ascending: false }),
           supabase.from('expenses').select('*').order('expense_date', { ascending: false }),
           supabase.from('products').select('*').order('product_name', { ascending: true }),
           supabase.from('customers').select('*').order('customer_name', { ascending: true }),
           supabase.from('suppliers').select('*').order('supplier_name', { ascending: true }),
           supabase.from('customer_payments').select('*').order('payment_date', { ascending: false }),
           supabase.from('supplier_payments').select('*').order('payment_date', { ascending: false }),
-          supabase.from('settings').select('*').limit(1).maybeSingle()
+          supabase.from('settings').select('*').limit(1).maybeSingle(),
+          supabase.from('sales_returns').select('*, items:sales_return_items(*, product:products(*))')
         ]);
 
         if (salesRes.status === 'fulfilled' && !salesRes.value.error && salesRes.value.data) {
-          const cleanSales = (salesRes.value.data as any[]).map(s => ({
-            ...s,
-            items: s.items || s.sales_items || []
-          }));
+          const allReturns = (returnsRes.status === 'fulfilled' && !returnsRes.value.error) ? returnsRes.value.data as any[] : [];
+          
+          const cleanSales = (salesRes.value.data as any[]).map(s => {
+            const invoiceReturns = allReturns.filter(r => r.invoice_id === s.id);
+            return {
+              ...s,
+              items: s.items || s.sales_items || [],
+              returns: invoiceReturns
+            };
+          });
           setSalesInvoices(cleanSales as SalesInvoice[]);
           try {
             localStorage.setItem('lk_sales_invoices', JSON.stringify(cleanSales));

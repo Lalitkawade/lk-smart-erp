@@ -17,6 +17,7 @@ const DemandModal = lazy(() => import('./features/demands/DemandModal'));
 
 import { useDemandTracker } from './hooks/useDemandTracker';
 import { t, Language } from './utils/i18n';
+import { NotificationToaster, NotificationItem } from './components/NotificationToaster';
 
 // Section Loading Skeleton Fallback for Smooth Transitions
 const SectionSkeleton = () => (
@@ -362,6 +363,78 @@ function App() {
     }
 
   }, [udharDueCustomers.length, highDemandAlerts?.length, lowStockCount, todaysBirthdays?.length, user]);
+
+  const [inAppToasts, setInAppToasts] = useState<NotificationItem[]>([]);
+
+  // Collect and Dispatch In-App Push Notifications (Once per session)
+  useEffect(() => {
+    if (!Boolean(user)) return;
+    if (sessionStorage.getItem('lk_toasts_shown_v1')) return;
+    
+    // Ensure data is fully loaded before calculating
+    if (customersList.length === 0 && productsList.length === 0) return;
+
+    const items: NotificationItem[] = [];
+
+    if (udharDueCustomers.length > 0) {
+      const totalDues = udharDueCustomers.reduce((acc: number, c: any) => acc + Number(c.outstanding || 0), 0);
+      items.push({
+        id: 'toast-udhar',
+        title: '⚠️ Udhar Payments Due Today',
+        message: `${udharDueCustomers.length} Customer(s) have ₹${totalDues.toLocaleString('en-IN')} pending dues today!`,
+        type: 'warning',
+        icon: 'fa-solid fa-hand-holding-dollar text-amber-500',
+        color: 'border-amber-500',
+        actionLabel: 'View Customers',
+        onAction: () => setActiveTab('customers')
+      });
+    }
+
+    if (highDemandAlerts && highDemandAlerts.length > 0) {
+      items.push({
+        id: 'toast-demand',
+        title: '🚨 High Demand Alert',
+        message: `${highDemandAlerts.length} out-of-stock item(s) are highly requested.`,
+        type: 'alert',
+        icon: 'fa-solid fa-fire text-rose-500',
+        color: 'border-rose-500',
+        actionLabel: 'View Demand',
+        onAction: () => setShowDemandModal(true)
+      });
+    }
+
+    if (lowStockCount > 0) {
+      items.push({
+        id: 'toast-stock',
+        title: '📦 Low Stock Warning',
+        message: `${lowStockCount} item(s) require urgent restocking.`,
+        type: 'warning',
+        icon: 'fa-solid fa-boxes-stacked text-orange-500',
+        color: 'border-orange-500',
+        actionLabel: 'View Inventory',
+        onAction: () => setActiveTab('inventory-stock')
+      });
+    }
+
+    if (todaysBirthdays && todaysBirthdays.length > 0) {
+      items.push({
+        id: 'toast-birthday',
+        title: '🎉 Special Events Today!',
+        message: `${todaysBirthdays.length} customer/vendor birthday or establishment dates today.`,
+        type: 'birthday',
+        icon: 'fa-solid fa-cake-candles text-pink-500',
+        color: 'border-pink-500',
+        actionLabel: 'View Details',
+        onAction: () => setShowNotifications(true) // Open the bell dropdown
+      });
+    }
+
+    if (items.length > 0) {
+      setInAppToasts(items);
+      sessionStorage.setItem('lk_toasts_shown_v1', 'true');
+    }
+
+  }, [udharDueCustomers.length, highDemandAlerts?.length, lowStockCount, todaysBirthdays?.length, user, customersList.length, productsList.length]);
 
   if (loading) {
     return (
@@ -1319,6 +1392,9 @@ function App() {
           setActiveTab('products');
         }}
       />
+
+      {/* Push Notification Toaster */}
+      <NotificationToaster notifications={inAppToasts} />
     </div>
   );
 }

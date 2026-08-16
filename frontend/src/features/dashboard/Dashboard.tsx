@@ -238,23 +238,43 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
   const lowStockAlerts = useMemo(() => {
     return products
       .filter(p => {
-        const piecesPerPack = Math.max(1, Number(p.pieces_per_pack || 1));
         const baseStockQty = Number(p.current_stock || 0);
-        const purchasePackQty = piecesPerPack > 1 ? (baseStockQty / piecesPerPack) : baseStockQty;
-        return purchasePackQty <= (p.min_stock_level || 10);
+        return baseStockQty <= (p.min_stock_level || 10);
       })
       .map(p => {
         let phone = p.supplier_phone || '';
-        let vendorName = p.supplier_name || 'Vendor N/A';
+        let vendorName = p.supplier_name || '';
 
-        if (!phone) {
+        // 1. Try to resolve via direct supplier_id link
+        if (!vendorName && p.supplier_id) {
+          const match = suppliers.find(s => s.id === p.supplier_id);
+          if (match) {
+            vendorName = match.supplier_name;
+            phone = phone || match.phone || '';
+          }
+        }
+
+        // 2. Try to grab phone if we only have string name
+        if (vendorName && !phone) {
           const match = suppliers.find(s => s.supplier_name?.toLowerCase() === vendorName.toLowerCase());
           if (match && match.phone) phone = match.phone;
         }
 
+        // 3. Fallback to recent purchases if still empty
+        if (!vendorName || vendorName.trim() === '') {
+          // Find the latest purchase containing this product
+          const recentPurchase = contextPurchases.find((pb: any) => 
+            pb.items && pb.items.some((item: any) => item.product_id === p.id)
+          );
+          if (recentPurchase) {
+            vendorName = recentPurchase.supplier_name;
+            phone = phone || recentPurchase.supplier_phone || '';
+          }
+        }
+
         return {
           ...p,
-          vendorName,
+          vendorName: vendorName || 'Vendor N/A',
           vendorPhone: phone || 'N/A'
         };
       });

@@ -270,10 +270,12 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
   // History Modal State
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [historyTab, setHistoryTab] = useState<'purchases' | 'sales'>('purchases');
+  const [historyRateFilter, setHistoryRateFilter] = useState<'all' | 'lowest' | 'highest'>('all');
   const [selectedHistoryProduct, setSelectedHistoryProduct] = useState<Product | null>(null);
 
   const handleShowHistory = (p: Product) => {
     setSelectedHistoryProduct(p);
+    setHistoryRateFilter('all');
     setHistoryModalOpen(true);
   };
 
@@ -505,6 +507,19 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
 
     return { lowest, highest, latest, avgPieceRate };
   }, [prodPurchaseHistory]);
+
+  const filteredPurchaseHistory = useMemo(() => {
+    if (!prodPurchaseHistory) return [];
+    if (historyRateFilter === 'all') return prodPurchaseHistory;
+    
+    if (historyRateFilter === 'lowest' && purchaseStats.lowest) {
+      return prodPurchaseHistory.filter(item => item.piece_rate === purchaseStats.lowest!.piece_rate);
+    }
+    if (historyRateFilter === 'highest' && purchaseStats.highest) {
+      return prodPurchaseHistory.filter(item => item.piece_rate === purchaseStats.highest!.piece_rate);
+    }
+    return prodPurchaseHistory;
+  }, [prodPurchaseHistory, historyRateFilter, purchaseStats]);
 
   // Calculate Live Total Initial/Procured Stock Ever per product (Current Available Stock + Total Sold Quantity / Procured Qty)
   const totalStockAddedMap = useMemo(() => {
@@ -1311,7 +1326,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
           const piecesPerPack = Number(p?.pieces_per_pack || 1);
           const purchasePackQty = piecesPerPack > 1 ? (currentStock / piecesPerPack) : currentStock;
           const minStock = Number(p?.min_stock_level || 10);
-          if (stockFilterTab === 'low') return purchasePackQty <= minStock;
+          if (stockFilterTab === 'low') return currentStock <= minStock;
         }
         return true;
       })
@@ -1329,7 +1344,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
       const baseStockQty = Number(p?.current_stock || 0);
       const purchasePackQty = piecesPerPack > 1 ? (baseStockQty / piecesPerPack) : baseStockQty;
       const minStockPacks = Number(p?.min_stock_level || 10);
-      return purchasePackQty <= minStockPacks;
+      return baseStockQty <= minStockPacks;
     }).length;
   }, [products]);
 
@@ -1743,7 +1758,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                   const baseStockQty = Number(p?.current_stock || 0);
                   const purchasePackQty = piecesPerPack > 0 ? (baseStockQty / piecesPerPack) : baseStockQty;
                   const minStockPacks = Number(p?.min_stock_level || 10);
-                  const isLowStock = purchasePackQty <= minStockPacks;
+                  const isLowStock = baseStockQty <= minStockPacks;
                   const costValuation = baseStockQty * costPerPiece;
                   const retailValuation = baseStockQty * piecePrice;
 
@@ -1805,15 +1820,13 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                       {mode === 'stock' ? (
                         <>
                           <td className="py-3.5 px-4 text-center font-mono text-xs font-bold text-textSecondary">
-                            {minStockPacks} {pUnit}
+                            {minStockPacks} {sUnit}
                           </td>
                           <td className="py-3.5 px-4 text-center">
                             <div className="flex flex-col gap-1 max-w-[220px] mx-auto">
                               <div className="flex items-center justify-between gap-2">
                                 <span className={`font-mono font-black text-xs ${isLowStock ? 'text-rose-600 dark:text-rose-400' : 'text-foreground'}`}>
-                                  {isDualUnit
-                                    ? `${formattedCurrentPack} / ${formattedTotalPack} ${pUnit.toUpperCase()}`
-                                    : `${baseStockQty.toFixed(2).replace(/\.00$/, '')} / ${formattedTotalBase} ${sUnit.toUpperCase()}`}
+                                  {`${baseStockQty.toFixed(2).replace(/\.00$/, '')} / ${formattedTotalBase} ${sUnit.toUpperCase()}`}
                                 </span>
                                 {isLowStock ? (
                                   <span className="text-[9px] px-1.5 py-0.2 bg-rose-500 text-white rounded font-black uppercase tracking-wider animate-pulse">
@@ -1827,7 +1840,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                               </div>
                               {isDualUnit && piecesPerPack > 1 && (
                                 <div className="text-[10px] text-primary font-bold font-mono text-left">
-                                  ({baseStockQty.toFixed(2).replace(/\.00$/, '')} / {formattedTotalBase} {sUnit.toUpperCase()})
+                                  ({formattedCurrentPack} / {formattedTotalPack} {pUnit.toUpperCase()})
                                 </div>
                               )}
                               {/* Stock Level Progress Meter */}
@@ -3382,7 +3395,10 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
             {/* SUPPLIER RATE COMPARISON KPI SUMMARY CARDS */}
             {historyTab === 'purchases' && (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                <div className="bg-emerald-500/10 border border-emerald-500/30 p-3 rounded-xl">
+                <div 
+                  className={`p-3 rounded-xl cursor-pointer transition ${historyRateFilter === 'lowest' ? 'bg-emerald-500/20 border-2 border-emerald-500 ring-4 ring-emerald-500/20' : 'bg-emerald-500/10 border border-emerald-500/30 hover:border-emerald-500/60'}`}
+                  onClick={() => setHistoryRateFilter(prev => prev === 'lowest' ? 'all' : 'lowest')}
+                >
                   <div className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider flex items-center justify-between">
                     <span>🏆 Lowest Rate Paid</span>
                     <i className="fa-solid fa-arrow-down-long"></i>
@@ -3395,7 +3411,10 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                   </div>
                 </div>
 
-                <div className="bg-rose-500/10 border border-rose-500/30 p-3 rounded-xl">
+                <div 
+                  className={`p-3 rounded-xl cursor-pointer transition ${historyRateFilter === 'highest' ? 'bg-rose-500/20 border-2 border-rose-500 ring-4 ring-rose-500/20' : 'bg-rose-500/10 border border-rose-500/30 hover:border-rose-500/60'}`}
+                  onClick={() => setHistoryRateFilter(prev => prev === 'highest' ? 'all' : 'highest')}
+                >
                   <div className="text-[10px] font-bold text-rose-600 dark:text-rose-400 uppercase tracking-wider flex items-center justify-between">
                     <span>📈 Highest Rate Paid</span>
                     <i className="fa-solid fa-arrow-up-long"></i>
@@ -3448,7 +3467,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                     }`}
                 >
                   <i className="fa-solid fa-truck-ramp-box text-xs"></i>
-                  <span>Supplier Purchase Inflows ({prodPurchaseHistory.length})</span>
+                  <span>Supplier Purchase Inflows ({historyRateFilter === 'all' ? prodPurchaseHistory.length : `${filteredPurchaseHistory.length} Filtered`})</span>
                 </button>
                 <button
                   type="button"
@@ -3490,12 +3509,12 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                 </thead>
                 <tbody className="divide-y divide-border">
                   {historyTab === 'purchases' ? (
-                    prodPurchaseHistory.length === 0 ? (
+                    filteredPurchaseHistory.length === 0 ? (
                       <tr>
                         <td colSpan={9} className="p-8 text-center text-textMuted font-medium">No purchase inflow history logged for this product.</td>
                       </tr>
                     ) : (
-                      prodPurchaseHistory.map((h, i) => {
+                      filteredPurchaseHistory.map((h, i) => {
                         const rawD = new Date(h.date);
                         const isDateOnly = typeof h.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(h.date.trim());
                         const formattedDateStr = isNaN(rawD.getTime()) ? String(h.date || '-') : (

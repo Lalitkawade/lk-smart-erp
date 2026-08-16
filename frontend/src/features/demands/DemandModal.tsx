@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useDemandTracker, UnstockedDemand } from '../../hooks/useDemandTracker';
+import { useDemandTracker, UnstockedDemand, calculateRequestsPerMonth, getVelocityString } from '../../hooks/useDemandTracker';
 
 interface DemandModalProps {
   tenantId?: string;
@@ -60,7 +60,7 @@ export default function DemandModal({ tenantId, isOpen, onClose, onNavigateToPro
         {highDemandAlerts.length > 0 && (
           <div className="bg-rose-500/10 border-b border-rose-500/20 px-5 py-2.5 flex items-center gap-2.5 text-xs text-rose-700 dark:text-rose-300 font-semibold">
             <i className="fa-solid fa-triangle-exclamation text-sm text-rose-600 dark:text-rose-400"></i>
-            <span><strong>{highDemandAlerts.length} High Demand Item{highDemandAlerts.length > 1 ? 's' : ''}</strong> reached target request thresholds.</span>
+            <span><strong>{highDemandAlerts.length} High Demand Item{highDemandAlerts.length > 1 ? 's' : ''}</strong> reached target request thresholds and maintained a high request velocity.</span>
           </div>
         )}
 
@@ -93,7 +93,10 @@ export default function DemandModal({ tenantId, isOpen, onClose, onNavigateToPro
           ) : (
             demands.map((item: UnstockedDemand) => {
               const targetThreshold = item.min_alert_qty !== undefined ? item.min_alert_qty : alertThreshold;
-              const isHighDemand = item.request_count >= targetThreshold;
+              const requestsPerMonth = calculateRequestsPerMonth(item);
+              const isHighVelocity = item.created_at ? requestsPerMonth >= 2 : true;
+              const isCountHigh = item.request_count >= targetThreshold;
+              const isHighDemand = isCountHigh && isHighVelocity;
 
               return (
                 <div 
@@ -114,8 +117,17 @@ export default function DemandModal({ tenantId, isOpen, onClose, onNavigateToPro
                           🔥 High Demand ({item.request_count} / {targetThreshold})
                         </span>
                       ) : (
-                        <span className="text-[10px] font-bold bg-secondary text-textMuted border border-border px-2 py-0.5 rounded font-mono">
+                        <span className="text-[10px] font-bold bg-secondary text-textMuted border border-border px-2 py-0.5 rounded font-mono flex items-center gap-1">
                           {item.request_count} / {targetThreshold} Reqs
+                          {item.created_at && !isHighVelocity && isCountHigh && (
+                            <span className="text-rose-500 font-normal italic" title="Takes too long between requests to be considered high demand">📉 Slow Trend</span>
+                          )}
+                        </span>
+                      )}
+                      
+                      {item.created_at && (
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded border font-mono font-bold ${isHighVelocity ? 'text-amber-600 bg-amber-500/10 border-amber-500/20' : 'text-slate-500 bg-slate-500/10 border-slate-500/20'}`}>
+                          {getVelocityString(item)}
                         </span>
                       )}
                     </div>
