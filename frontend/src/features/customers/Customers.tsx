@@ -1379,7 +1379,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                       const isPending = unpaidUdharAmt > 0 || (inv.payment_status !== 'Paid' && unpaidUdharAmt > 0);
 
                       return (
-                        <div key={inv.id || idx} className={`rounded-xl p-4 space-y-3 border ${isPending ? 'bg-slate-900 border-rose-500/70' : 'bg-secondary border-border'}`}>
+                        <div key={inv.id || idx} className={`rounded-xl p-4 space-y-3 border transition-colors ${isPending ? 'bg-rose-50 dark:bg-rose-900/10 border-rose-500/50' : 'bg-secondary border-border'}`}>
                           <div className="flex justify-between items-center border-b border-border/80 pb-2">
                             <div>
                               <div className="font-mono font-black text-sm text-foreground uppercase">{inv.invoice_number}</div>
