@@ -210,10 +210,17 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
     const nameUpper = customerName.trim().toUpperCase();
     const phoneVal = customerPhone.trim();
 
-    const foundSearchable = allSearchableCustomers.find(
-      c => (c.customer_name && c.customer_name.trim().toUpperCase() === nameUpper) ||
-        (phoneVal && c.phone && c.phone.trim() === phoneVal)
-    );
+    const foundSearchable = allSearchableCustomers.find(c => {
+      const dbName = (c.customer_name || '').trim().toUpperCase();
+      const dbPhone = (c.phone || '').trim();
+      const nameMatch = nameUpper ? dbName === nameUpper : false;
+      const phoneMatch = phoneVal ? dbPhone === phoneVal : false;
+      
+      if (nameUpper && phoneVal) {
+        return nameMatch && phoneMatch;
+      }
+      return nameMatch || phoneMatch;
+    });
 
     if (foundSearchable) {
       return {
