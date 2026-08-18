@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { supabase } from '../../api/supabase';
 import { useInventory } from '../../hooks/useInventory';
 import { useErpContext } from '../../context/ErpContext';
 import type { SalesInvoice, PurchaseBill, Expense } from '../../types/erp.types';
@@ -235,18 +236,61 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
   }, [filteredData, products, suppliers, customers, contextPurchases, contextSales, supplierPayments, customerPayments]);
 
   // 4. Identify Low Stock items and link them with Supplier Contact info
-  const lowStockAlerts = useMemo(() => {
-    return products
-      .filter(p => {
+  const [lowStockAlerts, setLowStockAlerts] = useState<any[]>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    
+    const fetchLowStockAlerts = async () => {
+      const baseAlerts = products.filter(p => {
         const baseStockQty = Number(p.current_stock || 0);
         return baseStockQty <= (p.min_stock_level || 10);
-      })
-      .map(p => {
+      });
+
+      let globalRecentItems: any[] | null = null;
+      let globalRecentFetched = false;
+      const resolvedAlerts = [];
+
+      for (const p of baseAlerts) {
         let phone = p.supplier_phone || '';
         let vendorName = p.supplier_name || '';
 
-        // 1. Try to resolve via direct supplier_id link
-        if (!vendorName && p.supplier_id) {
+        // If the saved vendor is a generic system placeholder, try to find the real vendor from purchase history
+        if (!vendorName || vendorName.includes('Direct Stock') || vendorName.includes('Catalog') || vendorName.includes('Opening Stock') || vendorName.includes('Manual Edit')) {
+          
+          // Look through actual purchase bills for this product (already sorted newest first)
+          for (const bill of contextPurchases) {
+            const bSupName = bill.supplier_name || '';
+            const isGeneric = bSupName.includes('Direct Stock') || bSupName.includes('Catalog') || bSupName.includes('Opening Stock') || bSupName.includes('Manual Edit');
+            
+            if (!isGeneric) {
+              const hasItem = ((bill as any).items || (bill as any).purchase_items || []).some((it: any) => {
+                const pId = it.product_id || it.product?.id;
+                const pName = it.product_name || it.product?.product_name || '';
+                return (pId && String(pId) === String(p.id)) || 
+                       (pName && p.product_name && pName.toLowerCase().trim() === p.product_name.toLowerCase().trim());
+              });
+              
+              if (hasItem) {
+                vendorName = bSupName;
+                phone = bill.supplier_phone || '';
+                
+                // Try to resolve from suppliers list if we have an ID to get the best phone number
+                if (bill.supplier_id) {
+                  const supMatch = suppliers.find(s => s.id === bill.supplier_id);
+                  if (supMatch) {
+                    vendorName = supMatch.supplier_name || vendorName;
+                    phone = supMatch.phone || phone;
+                  }
+                }
+                break;
+              }
+            }
+          }
+        }
+
+        // 1. Try to resolve via direct supplier_id link if we still don't have a good name
+        if ((!vendorName || vendorName.includes('Direct Stock')) && p.supplier_id) {
           const match = suppliers.find(s => s.id === p.supplier_id);
           if (match) {
             vendorName = match.supplier_name;
@@ -255,30 +299,94 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
         }
 
         // 2. Try to grab phone if we only have string name
-        if (vendorName && !phone) {
+        if (vendorName && !phone && !vendorName.includes('Direct Stock') && !vendorName.includes('Catalog')) {
           const match = suppliers.find(s => s.supplier_name?.toLowerCase() === vendorName.toLowerCase());
           if (match && match.phone) phone = match.phone;
         }
 
-        // 3. Fallback to recent purchases if still empty
-        if (!vendorName || vendorName.trim() === '') {
-          // Find the latest purchase containing this product
-          const recentPurchase = contextPurchases.find((pb: any) => 
-            pb.items && pb.items.some((item: any) => item.product_id === p.id)
-          );
-          if (recentPurchase) {
-            vendorName = recentPurchase.supplier_name;
-            phone = phone || recentPurchase.supplier_phone || '';
+        // 3. Fallback to direct DB query for recent purchases if still empty
+        if (!vendorName || vendorName.trim() === '' || vendorName.includes('Direct Stock') || vendorName.includes('Catalog')) {
+          try {
+            // First, check by product_id WITHOUT joining purchase_bills (to avoid 400 Bad Request due to missing FK)
+            let { data: items } = await supabase
+              .from('purchase_items')
+              .select('*')
+              .eq('product_id', p.id)
+              .limit(10);
+
+            // If no match by ID, check by product_name using an anagram/word check on client
+            if (!items || items.length === 0) {
+              if (!globalRecentFetched) {
+                const { data } = await supabase.from('purchase_items').select('*').limit(500);
+                globalRecentItems = data || [];
+                globalRecentFetched = true;
+              }
+
+              if (globalRecentItems && globalRecentItems.length > 0) {
+                const s1 = (p.product_name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                const sortedS1 = s1.split('').sort().join('');
+                
+                const isDebug = p.product_name?.toLowerCase().includes('pipe');
+                if (isDebug) {
+                  console.log(`[Vendor Debug] Checking 500 recent items for "${p.product_name}". Found ${globalRecentItems.length} items total.`);
+                  console.log(`[Vendor Debug] Available item names in DB:`, globalRecentItems.map(r => r.product_name).filter(Boolean).slice(0, 20));
+                }
+
+                const matchedItem = globalRecentItems.find(it => {
+                   const s2 = (it.product_name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                   if (!s2) return false;
+                   if (s1 === s2 || s1.includes(s2) || s2.includes(s1)) {
+                     if (isDebug) console.log(`[Vendor Debug] Matched by string: ${s1} vs ${s2}`);
+                     return true;
+                   }
+                   if (s1.length === s2.length && sortedS1 === s2.split('').sort().join('')) {
+                     if (isDebug) console.log(`[Vendor Debug] Matched by anagram: ${s1} vs ${s2}`);
+                     return true;
+                   }
+                   return false;
+                });
+                if (matchedItem) items = [matchedItem];
+              }
+            }
+
+            const recentPurchaseItem = items?.[0];
+            if (recentPurchaseItem && recentPurchaseItem.bill_id) {
+              // Find the bill manually in contextPurchases since DB join fails
+              const pb = contextPurchases.find(b => b.id === recentPurchaseItem.bill_id);
+              if (pb) {
+                vendorName = pb.supplier_name || '';
+                phone = phone || pb.supplier_phone || '';
+                
+                if (!vendorName && pb.supplier_id) {
+                  const supMatch = suppliers.find(s => s.id === pb.supplier_id);
+                  if (supMatch) {
+                    vendorName = supMatch.supplier_name;
+                    phone = phone || supMatch.phone || '';
+                  }
+                }
+              }
+            }
+          } catch(err) {
+            console.warn("Error fetching recent vendor for low stock alert:", err);
           }
         }
 
-        return {
+        resolvedAlerts.push({
           ...p,
           vendorName: vendorName || 'Vendor N/A',
           vendorPhone: phone || 'N/A'
-        };
-      });
-  }, [products, suppliers]);
+        });
+      }
+
+      if (isMounted) {
+        setLowStockAlerts(resolvedAlerts);
+      }
+    };
+
+    fetchLowStockAlerts();
+
+    return () => { isMounted = false; };
+  }, [products, suppliers, contextPurchases]);
 
   // 5. Calculate Top Selling Products across ALL catalog items (Top 100)
   const topSellingProducts = useMemo(() => {
@@ -507,7 +615,7 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
     const combined: any[] = [];
     
     sales.forEach(s => {
-      combined.push({
+      const baseTx = {
         id: s.id,
         invoice_number: s.invoice_number,
         party_name: s.customer_name || 'Cash Customer',
@@ -517,11 +625,19 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
         status: s.payment_status || 'Paid',
         payment_mode: s.payment_mode || 'Cash',
         items: (s as any).items || (s as any).sales_items || []
-      });
+      };
+      const items = getTransactionLineItems(baseTx, products);
+      if (items.length === 0) {
+        combined.push({ ...baseTx, product_name: 'No Items Found', qty: 0 });
+      } else {
+        items.forEach(it => {
+          combined.push({ ...baseTx, product_name: it.product_name, qty: it.qty, amount: it.amount });
+        });
+      }
     });
 
     purchases.forEach(p => {
-      combined.push({
+      const baseTx = {
         id: p.id,
         invoice_number: p.bill_number || 'N/A',
         party_name: p.supplier_name || 'Vendor',
@@ -531,7 +647,15 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
         status: Number(p.due_amount || 0) > 0 ? 'Pending' : 'Paid',
         payment_mode: (p as any).payment_mode || 'Bank / Credit',
         items: (p as any).items || (p as any).purchase_items || []
-      });
+      };
+      const items = getTransactionLineItems(baseTx, products);
+      if (items.length === 0) {
+        combined.push({ ...baseTx, product_name: 'No Items Found', qty: 0 });
+      } else {
+        items.forEach(it => {
+          combined.push({ ...baseTx, product_name: it.product_name, qty: it.qty, amount: it.amount });
+        });
+      }
     });
 
     return combined
@@ -1101,22 +1225,23 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
 
           {/* Outer container: Clips all scrolling content at rounded borders */}
           <div className="border border-slate-200/90 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 shadow-xs overflow-hidden">
-            {/* Inner scroll container: Handles smooth vertical scrolling */}
-            <div className="max-h-[265px] overflow-y-auto scrollbar-thin">
-              <table className="w-full text-left text-xs text-slate-700 dark:text-slate-200 border-separate border-spacing-0">
+            {/* Inner scroll container: Handles smooth vertical and horizontal scrolling */}
+            <div className="max-h-[265px] overflow-auto scrollbar-thin w-full">
+              <table className="w-full min-w-[900px] table-auto text-left text-xs text-slate-700 dark:text-slate-200 border-separate border-spacing-0">
                 <thead className="sticky top-0 z-20">
                   <tr className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 uppercase font-black text-[10px] tracking-wider whitespace-nowrap">
-                    <th className="py-3 px-4 text-center bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">Transaction</th>
-                    <th className="py-3 px-4 text-left bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">Party (Customer/Vendor)</th>
-                    <th className="py-3 px-4 text-center bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">Type</th>
-                    <th className="py-3 px-4 text-center bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">Date</th>
-                    <th className="py-3 px-4 text-right bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">Amount</th>
-                    <th className="py-3 px-4 text-center bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">Status</th>
+                    <th className="py-3 px-4 text-center bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 w-24">Date</th>
+                    <th className="py-3 px-4 text-left bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">Product Name</th>
+                    <th className="py-3 px-4 text-center bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 w-16">Qty</th>
+                    <th className="py-3 px-4 text-right bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 w-28">Amount</th>
+                    <th className="py-3 px-4 text-center bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 w-24">Type</th>
+                    <th className="py-3 px-4 text-center bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 w-32">Trans ID</th>
+                    <th className="py-3 px-4 text-center bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 w-24">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
                   {recentTransactions.length === 0 ? (
-                    <tr><td colSpan={6} className="py-8 text-center text-slate-400 text-xs font-semibold">No recent transactions recorded.</td></tr>
+                    <tr><td colSpan={7} className="py-8 text-center text-slate-400 text-xs font-semibold">No recent transactions recorded.</td></tr>
                   ) : recentTransactions.map((tx, idx) => (
                     <tr 
                       key={idx} 
@@ -1124,14 +1249,18 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
                       className="hover:bg-blue-50/70 dark:hover:bg-slate-800/60 transition-all duration-150 cursor-pointer group border-b border-slate-100 dark:border-slate-800/40"
                       title="Click to view full transaction breakdown"
                     >
-                      <td className="py-3 px-4 text-center border-b border-slate-100 dark:border-slate-800/40">
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-mono text-xs font-bold group-hover:bg-blue-100 dark:group-hover:bg-blue-950/80 group-hover:text-primary transition-colors border border-slate-200/60 dark:border-slate-700/60">
-                          <i className="fa-solid fa-receipt text-[10px] text-slate-400 group-hover:text-primary"></i>
-                          {tx.invoice_number}
-                        </span>
+                      <td className="py-3 px-4 text-center font-mono text-xs text-slate-500 dark:text-slate-400 font-medium border-b border-slate-100 dark:border-slate-800/40 whitespace-nowrap">
+                        {new Date(tx.date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
                       </td>
                       <td className="py-3 px-4 text-left border-b border-slate-100 dark:border-slate-800/40">
-                        <div className="font-extrabold text-slate-900 dark:text-slate-100 uppercase text-xs truncate max-w-[170px]">{tx.party_name}</div>
+                        <div className="font-extrabold text-slate-900 dark:text-slate-100 uppercase text-xs truncate max-w-[250px]">{tx.product_name}</div>
+                        <div className="text-[9px] text-slate-500 mt-0.5 truncate max-w-[250px]">{tx.party_name}</div>
+                      </td>
+                      <td className="py-3 px-4 text-center border-b border-slate-100 dark:border-slate-800/40">
+                        <span className="font-mono text-xs font-bold text-slate-700 dark:text-slate-300">{tx.qty}</span>
+                      </td>
+                      <td className="py-3 px-4 text-right font-mono font-black text-slate-900 dark:text-slate-100 text-xs tracking-tight border-b border-slate-100 dark:border-slate-800/40">
+                        ₹{tx.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </td>
                       <td className="py-3 px-4 text-center border-b border-slate-100 dark:border-slate-800/40">
                         <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider inline-flex items-center gap-1 shadow-2xs ${
@@ -1143,11 +1272,11 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
                           {tx.type}
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-center font-mono text-xs text-slate-500 dark:text-slate-400 font-medium border-b border-slate-100 dark:border-slate-800/40">
-                        {new Date(tx.date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
-                      </td>
-                      <td className="py-3 px-4 text-right font-mono font-black text-slate-900 dark:text-slate-100 text-xs tracking-tight border-b border-slate-100 dark:border-slate-800/40">
-                        ₹{tx.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      <td className="py-3 px-4 text-center border-b border-slate-100 dark:border-slate-800/40">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-mono text-xs font-bold group-hover:bg-blue-100 dark:group-hover:bg-blue-950/80 group-hover:text-primary transition-colors border border-slate-200/60 dark:border-slate-700/60">
+                          <i className="fa-solid fa-receipt text-[10px] text-slate-400 group-hover:text-primary"></i>
+                          {tx.invoice_number}
+                        </span>
                       </td>
                       <td className="py-3 px-4 text-center border-b border-slate-100 dark:border-slate-800/40">
                         <span className={`px-2.5 py-1 rounded-full text-[9px] font-extrabold uppercase tracking-wider inline-flex items-center gap-1.5 shadow-2xs ${

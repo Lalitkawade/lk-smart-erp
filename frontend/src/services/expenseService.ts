@@ -9,7 +9,7 @@ export class ExpenseService {
    * Fetch all expenses for a tenant
    */
   static async fetchExpenses(tenantId: string): Promise<ServiceResponse<ExpenseRow[]>> {
-    if (!isValidUUID(tenantId)) {
+    if (!tenantId) {
       return handleServiceCall(
         supabase.from('expenses').select('*').order('expense_date', { ascending: false })
       );
@@ -26,9 +26,7 @@ export class ExpenseService {
   static async createExpense(payload: ExpenseInsert): Promise<ServiceResponse<ExpenseRow>> {
     const cleanPayload = {
       ...payload,
-      tenant_id: isValidUUID(payload.tenant_id)
-        ? payload.tenant_id
-        : '00000000-0000-0000-0000-000000000000'
+      tenant_id: payload.tenant_id || '00000000-0000-0000-0000-000000000000'
     };
 
     return handleServiceCall(

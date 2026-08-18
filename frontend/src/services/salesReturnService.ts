@@ -122,14 +122,14 @@ export class SalesReturnService {
    * Generate a unique return number
    */
   static async generateReturnNumber(tenantId: string): Promise<string> {
-    const query = supabase
+    let query = supabase
       .from('sales_returns')
       .select('return_number')
       .order('created_at', { ascending: false })
       .limit(1);
       
-    if (isValidUUID(tenantId)) {
-        query.eq('tenant_id', tenantId);
+    if (tenantId) {
+      query = query.eq('tenant_id', tenantId) as any;
     }
 
     const { data } = await query;

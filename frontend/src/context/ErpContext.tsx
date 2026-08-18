@@ -53,9 +53,9 @@ export const ErpDataProvider: React.FC<{ children: ReactNode }> = ({ children })
         setIsLoading(true);
       }
       try {
-        const [salesRes, purchRes, expRes, prodRes, custRes, supRes, custPayRes, supPayRes, settingsRes, returnsRes] = await Promise.allSettled([
+        const [salesRes, purchRes, expRes, prodRes, custRes, supRes, custPayRes, supPayRes, settingsRes, returnsRes, purchaseItemsRes] = await Promise.allSettled([
           supabase.from('sales_invoices').select('*, items:sales_items(*, product:products(*))').order('sale_date', { ascending: false }),
-          supabase.from('purchase_bills').select('*, items:purchase_items(*, product:products(*))').order('purchase_date', { ascending: false }),
+          supabase.from('purchase_bills').select('*, items:purchase_items(*)').order('purchase_date', { ascending: false }),
           supabase.from('expenses').select('*').order('expense_date', { ascending: false }),
           supabase.from('products').select('*').order('product_name', { ascending: true }),
           supabase.from('customers').select('*').order('customer_name', { ascending: true }),
@@ -63,9 +63,11 @@ export const ErpDataProvider: React.FC<{ children: ReactNode }> = ({ children })
           supabase.from('customer_payments').select('*').order('payment_date', { ascending: false }),
           supabase.from('supplier_payments').select('*').order('payment_date', { ascending: false }),
           supabase.from('settings').select('*').limit(1).maybeSingle(),
-          supabase.from('sales_returns').select('*, items:sales_return_items(*, product:products(*))')
+          supabase.from('sales_returns').select('*, items:sales_return_items(*, product:products(*))'),
+          supabase.from('purchase_items').select('*')
         ]);
 
+        const allPurchaseItems = (purchaseItemsRes && purchaseItemsRes.status === 'fulfilled' && !purchaseItemsRes.value.error) ? (purchaseItemsRes.value.data as any[]) : [];
         if (salesRes.status === 'fulfilled' && !salesRes.value.error && salesRes.value.data) {
           const allReturns = (returnsRes.status === 'fulfilled' && !returnsRes.value.error) ? returnsRes.value.data as any[] : [];
           
@@ -85,10 +87,27 @@ export const ErpDataProvider: React.FC<{ children: ReactNode }> = ({ children })
           console.error('❌ [ErpContext Hydration] Error fetching sales_invoices:', salesRes.value.error);
         }
         if (purchRes.status === 'fulfilled' && !purchRes.value.error && purchRes.value.data) {
-          const cleanPurchases = (purchRes.value.data as any[]).map(p => ({
-            ...p,
-            items: p.items || p.purchase_items || []
-          }));
+          const allProducts = (prodRes.status === 'fulfilled' && !prodRes.value.error) ? (prodRes.value.data as any[]) : [];
+          const cleanPurchases = (purchRes.value.data as any[]).map(p => {
+            const myItems = allPurchaseItems.filter(i => i.bill_id === p.id);
+            let rawItems = p.items || p.purchase_items || (myItems.length > 0 ? myItems : []);
+            
+            // Dynamically resolve product names from the product catalog
+            const resolvedItems = rawItems.map((item: any) => {
+               if (item.product_id) {
+                 const matchedProduct = allProducts.find(prod => prod.id === item.product_id);
+                 if (matchedProduct) {
+                   return { ...item, product_name: matchedProduct.product_name, hsn: item.hsn || matchedProduct.hsn, gst_percent: item.gst_percent ?? matchedProduct.gst };
+                 }
+               }
+               return item;
+            });
+
+            return {
+              ...p,
+              items: resolvedItems
+            };
+          });
           setPurchaseBills(cleanPurchases as PurchaseBill[]);
         } else if (purchRes.status === 'fulfilled' && purchRes.value.error) {
           console.error('❌ [ErpContext Hydration] Error fetching purchase_bills:', purchRes.value.error);

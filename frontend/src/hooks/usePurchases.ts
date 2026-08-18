@@ -18,7 +18,7 @@ export function usePurchases(tenantId: string) {
   ) => {
     setIsSaving(true);
     const existingId = (billPayload.id && isUuid(billPayload.id)) ? billPayload.id : undefined;
-    const activeTenantId = (tenantId && isUuid(tenantId)) ? tenantId : null;
+    const activeTenantId = tenantId || null;
 
     const cleanBillPayload: any = {
       ...(existingId && { id: existingId }),

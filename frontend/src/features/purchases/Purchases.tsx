@@ -1199,18 +1199,6 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
                   <tbody className="divide-y divide-border/40">
                     {(() => {
                       let lineItems = viewingBill.items || viewingBill.purchase_items || [];
-                      if (!Array.isArray(lineItems) || lineItems.length === 0) {
-                        try {
-                          const cachedKey = viewingBill.id ? `pb_items_${viewingBill.id}` : (viewingBill.bill_number ? `pb_items_${viewingBill.bill_number}` : null);
-                          if (cachedKey) {
-                            const cachedStr = localStorage.getItem(cachedKey);
-                            if (cachedStr) {
-                              const parsed = JSON.parse(cachedStr);
-                              if (Array.isArray(parsed) && parsed.length > 0) lineItems = parsed;
-                            }
-                          }
-                        } catch (e) { }
-                      }
 
                       if (!Array.isArray(lineItems) || lineItems.length === 0) {
                         const totalAmt = Number(viewingBill.total_amount || 0);

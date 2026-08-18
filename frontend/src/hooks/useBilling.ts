@@ -248,7 +248,7 @@ export function useBilling(tenantId: string) {
 
       let invoicePayload: any = {
         id: generatedInvId,
-        tenant_id: isValidUUID(tenantId) ? tenantId : '00000000-0000-0000-0000-000000000000',
+        tenant_id: tenantId || '00000000-0000-0000-0000-000000000000',
         invoice_number: 'INV-' + Date.now().toString().slice(-6),
         customer_name: customerName.trim() || 'Cash Customer',
         customer_phone: customerPhone || null,

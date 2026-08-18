@@ -83,7 +83,8 @@ export class PurchaseService {
       paid_amount: Number(billPayload.paid_amount || 0),
       due_amount: Number(billPayload.due_amount || 0),
       purchase_date: billPayload.purchase_date || new Date().toISOString(),
-      tenant_id: (billPayload.tenant_id && isValidUUID(billPayload.tenant_id)) ? billPayload.tenant_id : null
+      tenant_id: billPayload.tenant_id || null,
+      status: billPayload.status || 'Completed'
     };
 
     if (billPayload.id && isValidUUID(billPayload.id)) {
@@ -127,7 +128,6 @@ export class PurchaseService {
       const cleanItems = itemsPayload.map(item => ({
         bill_id: createdBill.id,
         product_id: (item.product_id && isValidUUID(item.product_id)) ? item.product_id : null,
-        product_name: item.product_name || 'Procured Item',
         qty: Number(item.qty || 1),
         rate: Number(item.rate || 0),
         amount: Number(item.amount || (Number(item.qty || 1) * Number(item.rate || 0)))
@@ -145,10 +145,17 @@ export class PurchaseService {
         );
       }
 
+      if (itemsRes.error) {
+        return {
+          data: null,
+          error: 'Items insert failed: ' + itemsRes.error
+        };
+      }
+
       return {
         data: {
           ...createdBill,
-          items: (itemsRes.data && itemsRes.data.length > 0) ? itemsRes.data : (cleanItems as unknown as PurchaseItemRow[])
+          items: itemsRes.data as PurchaseItemRow[]
         },
         error: null
       };
@@ -332,7 +339,6 @@ export class PurchaseService {
           const cleanItems = itemsPayload.map(item => ({
             bill_id: id,
             product_id: (item.product_id && isValidUUID(item.product_id)) ? item.product_id : null,
-            product_name: item.product_name || 'Procured Item',
             qty: Number(item.qty || 1),
             rate: Number(item.rate || 0),
             amount: Number(item.amount || (Number(item.qty || 1) * Number(item.rate || 0)))

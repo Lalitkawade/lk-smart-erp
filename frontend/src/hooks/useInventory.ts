@@ -34,7 +34,7 @@ export function useInventory(tenantId: string, _businessType?: string) {
       ? productPayload.id 
       : generateUuid();
 
-    const activeTenantId = (tenantId && isUuid(tenantId)) ? tenantId : '00000000-0000-0000-0000-000000000000';
+    const activeTenantId = tenantId || '00000000-0000-0000-0000-000000000000';
 
     const cleanPayload: any = {
       id: productId,

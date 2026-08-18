@@ -14,13 +14,8 @@ export class SaleService {
    * Fetch all sales invoices with their line items for a tenant
    */
   static async fetchSales(tenantId: string): Promise<ServiceResponse<SalesInvoiceWithItems[]>> {
-    if (!isValidUUID(tenantId)) {
-      return handleServiceCall(
-        supabase
-          .from('sales_invoices')
-          .select('*, items:sales_items(*, product:products(*)), returns:sales_returns(*, items:sales_return_items(*, product:products(*)))')
-          .order('sale_date', { ascending: false })
-      );
+    if (!tenantId) {
+      return { data: null, error: 'Tenant ID is required for fetching sales invoices.' } as any;
     }
 
     const { data: salesData, error: salesError } = await supabase
@@ -78,9 +73,7 @@ export class SaleService {
   ): Promise<ServiceResponse<SalesInvoiceWithItems>> {
     const saleInsert = {
       ...salePayload,
-      tenant_id: isValidUUID(salePayload.tenant_id)
-        ? salePayload.tenant_id
-        : '00000000-0000-0000-0000-000000000000'
+      tenant_id: salePayload.tenant_id || '00000000-0000-0000-0000-000000000000'
     };
 
     const saleRes = await handleServiceCall<SalesInvoiceRow>(
@@ -202,7 +195,7 @@ export class SaleService {
     if (excludeId) {
       query = query.neq('id', excludeId);
     }
-    if (tenantId && isValidUUID(tenantId)) {
+    if (tenantId) {
       query = query.eq('tenant_id', tenantId);
     }
 

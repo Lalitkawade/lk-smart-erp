@@ -45,27 +45,6 @@ const resolveBillProcuredItems = (b: any, productsList: any[]) => {
     });
   }
 
-  // 2. Check localStorage cache for saved items by bill id or bill number
-  try {
-    const cachedKey = b.id ? `pb_items_${b.id}` : (b.bill_number ? `pb_items_${b.bill_number}` : null);
-    if (cachedKey) {
-      const cachedStr = localStorage.getItem(cachedKey);
-      if (cachedStr) {
-        const parsed = JSON.parse(cachedStr);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map((it: any) => ({
-            product_id: it.product_id,
-            product_name: it.product_name || 'Procured Product Item',
-            qty: Number(it.qty || 1),
-            rate: Number(it.rate || 0),
-            amount: Number(it.amount || (Number(it.qty || 1) * Number(it.rate || 0)))
-          }));
-        }
-      }
-    }
-  } catch (e) {
-    console.warn('Error reading cached purchase items:', e);
-  }
 
   // 3. Smart catalog matching by vendor and purchase cost matching
   const supId = b.supplier_id;
@@ -404,38 +383,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
     const matchedPurchases: any[] = [];
     matchedPurchases.push(...actualBillPurchases);
 
-    // 2. Read all persisted individual stock edit logs for this product
-    try {
-      const storageKey = 'lk_prod_stock_logs_' + p.id;
-      const logsRaw = localStorage.getItem(storageKey);
-      if (logsRaw) {
-        const savedLogs: any[] = JSON.parse(logsRaw);
-        savedLogs.forEach((log: any) => {
-          const logSupName = (log.supplier_name && log.supplier_name !== 'Direct Stock Addition / Manual Edit')
-            ? log.supplier_name
-            : (prodSupplierName || 'Direct Stock Addition / Manual Edit');
-
-          matchedPurchases.push({
-            id: log.id || ('stk-log-' + Math.random()),
-            date: log.date || p.updated_at || new Date().toISOString(),
-            bill_number: log.bill_number || 'STOCK-EDIT',
-            supplier_name: logSupName,
-            payment_mode: log.payment_mode || 'Stock Adjustment',
-            pack_qty: Number(log.pack_qty || 0),
-            base_qty: Number(log.base_qty || 0),
-            pack_rate: Number(log.pack_rate || p.purchase_price || 0),
-            piece_rate: Number(log.piece_rate || pieceCostRate),
-            selling_price: Number(log.selling_price || pieceSellingRate),
-            amount: Number(log.amount || 0),
-            p_unit: log.p_unit || pUnit,
-            s_unit: log.s_unit || sUnit,
-            isDualUnit
-          });
-        });
-      }
-    } catch (e) {
-      console.error('Error reading stock edit logs:', e);
-    }
+    // 2. Read all persisted individual stock edit logs for this product (REMOVED - Now rely strictly on cloud purchases)
 
     // 3. Calculate sum of base stock accounted for by purchase bills and stock logs
     const totalAccountedQty = matchedPurchases.reduce((sum, item) => sum + Number(item.base_qty || 0), 0);
@@ -1003,11 +951,10 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
         const queryUpper = vendorSearchQuery.trim().toUpperCase();
         activeSup = suppliers.find(s => s.supplier_name && s.supplier_name.toUpperCase() === queryUpper);
         if (!activeSup && queryUpper !== 'GENERAL VENDOR') {
-          const isValidUUID = (id: any) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
           const createRes = await SupplierService.createSupplier({
             supplier_name: queryUpper,
             phone: null,
-            tenant_id: (tenantId && isValidUUID(tenantId)) ? tenantId : undefined,
+            tenant_id: tenantId || undefined,
             outstanding: 0
           });
           if (createRes.data) {
@@ -1126,38 +1073,14 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
 
         if (effectiveProdId && addedStockInflowBaseUnits !== 0 && !hasBillDetails) {
           try {
-            const storageKey = 'lk_prod_stock_logs_' + effectiveProdId;
-            const existingLogsRaw = localStorage.getItem(storageKey);
-            const existingLogs: any[] = existingLogsRaw ? JSON.parse(existingLogsRaw) : [];
-
             const pieceCost = calculatedBaseUnitCost || (conversionFactor > 1 ? pPrice / conversionFactor : pPrice);
             const currentSupName = activeSup?.supplier_name || (vendorSearchQuery.trim() ? vendorSearchQuery.trim().toUpperCase() : null) || item.supplier_name || editingProduct?.supplier_name || (item.supplier_id ? suppliers.find((s: any) => s.id === item.supplier_id)?.supplier_name : null) || (editingProduct?.supplier_id ? suppliers.find((s: any) => s.id === editingProduct.supplier_id)?.supplier_name : null);
             const finalSupName = currentSupName || 'Direct Stock Addition / Manual Edit';
 
-            existingLogs.push({
-              id: 'stk-log-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4),
-              product_id: effectiveProdId,
-              date: new Date().toISOString(),
-              bill_number: 'STOCK-EDIT',
-              supplier_name: finalSupName,
-              payment_mode: 'Stock Adjustment',
-              pack_qty: purchasePacksAdded,
-              base_qty: addedStockInflowBaseUnits,
-              pack_rate: pPrice,
-              piece_rate: pieceCost,
-              selling_price: sPrice,
-              amount: itemLineCost || (addedStockInflowBaseUnits * pieceCost),
-              p_unit: item.p_unit || 'Nos',
-              s_unit: item.s_unit || item.unit || 'Nos'
-            });
-
-            localStorage.setItem(storageKey, JSON.stringify(existingLogs));
-
             // Sync stock edit to cloud database as a purchase bill so history persists across devices
-            const isValidUUID = (id: any) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
             const billPayload = {
-              tenant_id: (tenantId && isValidUUID(tenantId)) ? tenantId : null,
-              bill_number: 'STOCK-EDIT-' + Date.now().toString().slice(-6),
+              tenant_id: tenantId || null,
+              bill_number: 'STOCK-EDIT-' + Math.random().toString(36).substr(2, 6).toUpperCase(),
               supplier_name: finalSupName,
               payment_mode: 'Stock Adjustment',
               total_amount: itemLineCost || (addedStockInflowBaseUnits * pieceCost),
@@ -1175,10 +1098,12 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
               amount: itemLineCost || (addedStockInflowBaseUnits * pieceCost)
             }];
 
-            PurchaseService.createPurchase(billPayload as any, itemsPayload as any).catch(err => {
-              console.error('Failed to sync stock edit to cloud database:', err);
-            });
-          } catch (e) {
+            const pRes = await PurchaseService.createPurchase(billPayload as any, itemsPayload as any);
+            if (pRes.error) {
+              console.error('Failed to sync stock edit to cloud database:', pRes.error);
+              alert('Cloud Sync Failed: ' + pRes.error + ' | Please tell the AI assistant this exact error message!');
+            }
+          } catch (e: any) {
             console.error('Failed to store stock edit log:', e);
           }
         }
@@ -1213,7 +1138,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
         const isValidUUID = (id: any) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
         const targetSupId = activeSup?.id || (isValidUUID(supplierId) ? supplierId : null);
         const billPayload = {
-          tenant_id: (tenantId && isValidUUID(tenantId)) ? tenantId : null,
+          tenant_id: tenantId || null,
           supplier_id: (targetSupId && isValidUUID(targetSupId)) ? targetSupId : null,
           bill_number: finalBillNumber,
           supplier_name: finalSupName,
@@ -3467,7 +3392,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                     }`}
                 >
                   <i className="fa-solid fa-truck-ramp-box text-xs"></i>
-                  <span>Supplier Purchase Inflows ({historyRateFilter === 'all' ? prodPurchaseHistory.length : `${filteredPurchaseHistory.length} Filtered`})</span>
+                  <span>Supplier Inflows</span>
                 </button>
                 <button
                   type="button"
