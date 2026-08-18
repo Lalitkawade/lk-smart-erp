@@ -209,11 +209,12 @@ function App() {
       if (!computedDueDate) return false;
 
       const today = new Date();
-      const dueDate = new Date(computedDueDate);
+      today.setHours(0, 0, 0, 0);
       
-      return dueDate.getDate() === today.getDate() && 
-             dueDate.getMonth() === today.getMonth() && 
-             dueDate.getFullYear() === today.getFullYear();
+      const dueDate = new Date(computedDueDate);
+      dueDate.setHours(0, 0, 0, 0);
+      
+      return dueDate <= today;
     });
   }, [customersList, sales]);
 

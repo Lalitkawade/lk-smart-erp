@@ -1,9 +1,13 @@
 import { handleServiceCall, ServiceResponse } from './baseService';
 import { supabase } from '../api/supabase';
-import type { SalesInvoiceRow, SalesInvoiceInsert, SalesInvoiceUpdate, SalesItemRow, SalesItemInsert } from '../types/database.types';
+import type { SalesInvoiceRow, SalesInvoiceInsert, SalesInvoiceUpdate, SalesItemRow, SalesItemInsert, ProductRow } from '../types/database.types';
+
+export interface SalesItemWithProduct extends SalesItemRow {
+  product?: ProductRow | null;
+}
 
 export interface SalesInvoiceWithItems extends SalesInvoiceRow {
-  items?: SalesItemRow[];
+  items?: SalesItemWithProduct[];
   returns?: any[];
 }
 

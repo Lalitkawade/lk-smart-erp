@@ -109,7 +109,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
 
   // Combined list of registered customers + non-registered customers from past sales invoices
   const allSearchableCustomers = useMemo(() => {
-    const list: Array<{ id?: string; customer_name: string; phone?: string; outstanding: number; isRegistered: boolean; invCount: number }> = [];
+    const list: Array<{ id?: string; customer_name: string; phone?: string; outstanding: number; isRegistered: boolean; invCount: number; due_date?: string | null }> = [];
     const seenNames = new Set<string>();
 
     // 1. Registered Customers
@@ -156,7 +156,8 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
         phone: c.phone || '',
         outstanding: effectiveOutstanding,
         isRegistered: true,
-        invCount: custInvoices.length
+        invCount: custInvoices.length,
+        due_date: c.due_date
       });
     });
 
@@ -230,7 +231,8 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
         email: '',
         address: '',
         credit_limit: 50000,
-        outstanding: Number(foundSearchable.outstanding || 0)
+        outstanding: Number(foundSearchable.outstanding || 0),
+        due_date: foundSearchable.due_date
       };
     }
 
@@ -245,10 +247,19 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
     );
   }, [allSearchableCustomers, custSearchQuery]);
 
-  // Auto pre-fill phone number when an existing customer is matched/selected
+  // Auto pre-fill phone number & due date when an existing customer is matched/selected
   useEffect(() => {
-    if (matchedCustomer && matchedCustomer.phone && !customerPhone) {
-      setCustomerPhone(matchedCustomer.phone);
+    if (matchedCustomer) {
+      if (matchedCustomer.phone && !customerPhone) {
+        setCustomerPhone(matchedCustomer.phone);
+      }
+      if (matchedCustomer.due_date) {
+        // Ensure it's in YYYY-MM-DD format
+        try {
+          const formatted = new Date(matchedCustomer.due_date).toISOString().split('T')[0];
+          setCreditDueDate(formatted);
+        } catch(e) {}
+      }
     }
   }, [matchedCustomer]);
 

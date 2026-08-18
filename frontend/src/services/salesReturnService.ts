@@ -11,7 +11,6 @@ export interface SalesReturnWithItems extends SalesReturnRow {
   items?: SalesReturnItemRow[];
 }
 
-const isValidUUID = (id: any): boolean => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
 export class SalesReturnService {
   /**
@@ -47,10 +46,13 @@ export class SalesReturnService {
     const newReturn = returnRes.data;
 
     // 2. Insert Sales Return Items
-    const cleanItems = itemsPayload.map(item => ({
-      ...item,
-      return_id: newReturn.id
-    }));
+    const cleanItems = itemsPayload.map(item => {
+      const { stock_return_qty, ...dbItem } = item as any;
+      return {
+        ...dbItem,
+        return_id: newReturn.id
+      };
+    });
 
     const itemsRes = await handleServiceCall<SalesReturnItemRow[]>(
       supabase.from('sales_return_items').insert(cleanItems as any).select()
@@ -61,8 +63,9 @@ export class SalesReturnService {
     }
 
     // 3. Update Product Stock
-    for (const item of cleanItems) {
-      if (item.product_id && item.return_qty && item.return_qty > 0) {
+    for (const item of itemsPayload) {
+      const stockIncrement = (item as any).stock_return_qty !== undefined ? Number((item as any).stock_return_qty) : Number(item.return_qty);
+      if (item.product_id && stockIncrement > 0) {
         // Get current stock
         const { data: productData } = await supabase
           .from('products')
@@ -71,7 +74,7 @@ export class SalesReturnService {
           .single();
 
         if (productData) {
-          const newStock = (Number(productData.current_stock) || 0) + Number(item.return_qty);
+          const newStock = (Number(productData.current_stock) || 0) + stockIncrement;
           const { error: stockErr } = await supabase
             .from('products')
             .update({ current_stock: newStock })

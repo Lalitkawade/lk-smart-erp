@@ -322,6 +322,7 @@ export type SalesReturnItemRow = {
   sales_item_id: string;
   product_id: string | null;
   return_qty: number;
+  return_unit?: string | null;
   refund_amount: number;
 }
 export type SalesReturnItemInsert = {
@@ -330,10 +331,12 @@ export type SalesReturnItemInsert = {
   sales_item_id: string;
   product_id?: string | null;
   return_qty?: number;
+  return_unit?: string | null;
   refund_amount?: number;
 }
 export type SalesReturnItemUpdate = {
   return_qty?: number;
+  return_unit?: string | null;
   refund_amount?: number;
 }
 
@@ -572,6 +575,7 @@ export type CustomerRow = {
   establishment_date: string | null;
   credit_limit: number;
   outstanding: number;
+  due_date?: string | null;
   created_at: string;
   updated_at?: string;
 }
@@ -586,6 +590,7 @@ export type CustomerInsert = {
   establishment_date?: string | null;
   credit_limit?: number;
   outstanding?: number;
+  due_date?: string | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -598,6 +603,7 @@ export type CustomerUpdate = {
   establishment_date?: string | null;
   credit_limit?: number;
   outstanding?: number;
+  due_date?: string | null;
   updated_at?: string;
 }
 
