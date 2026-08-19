@@ -19,6 +19,7 @@ interface Customer {
   credit_limit: number;
   outstanding: number;
   establishment_date?: string | null;
+  due_date?: string | null;
   created_at: string;
 }
 
@@ -539,7 +540,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
       }
 
       // Compute Udhar Due Date: last purchase date + 15 days credit window
-      let computedDueDate: string | null = null;
+      let computedDueDate: string | null = c.due_date || null;
       if (!computedDueDate && lastPurchDate && realtimeOutstanding > 0) {
         const d = new Date(lastPurchDate);
         d.setDate(d.getDate() + 15);

@@ -334,7 +334,7 @@ function App() {
       const names = udharDueCustomers.map((c: any) => c.customer_name).slice(0, 3).join(', ');
       notify(
         '⚠️ Udhar Payment Due Alert',
-        `Active Udhar Dues: ${udharDueCustomers.length} Customer(s) (${names}) have ₹${totalDues.toLocaleString('en-IN')} pending payments due today!`,
+        `Active Udhar Dues: ${udharDueCustomers.length} Customer(s) (${names}) have ₹${totalDues.toLocaleString('en-IN')} pending payments due today or crossed!`,
         `udhar-due-${udharDueCustomers.length}`
       );
     }
@@ -381,8 +381,8 @@ function App() {
       const totalDues = udharDueCustomers.reduce((acc: number, c: any) => acc + Number(c.outstanding || 0), 0);
       items.push({
         id: 'toast-udhar',
-        title: '⚠️ Udhar Payments Due Today',
-        message: `${udharDueCustomers.length} Customer(s) have ₹${totalDues.toLocaleString('en-IN')} pending dues today!`,
+        title: '⚠️ Udhar Payments Due',
+        message: `${udharDueCustomers.length} Customer(s) have ₹${totalDues.toLocaleString('en-IN')} pending dues (Today or Crossed)!`,
         type: 'warning',
         icon: 'fa-solid fa-hand-holding-dollar text-amber-500',
         color: 'border-amber-500',
@@ -941,12 +941,12 @@ function App() {
                             <i className="fa-solid fa-hand-holding-dollar text-amber-500 text-base mt-0.5 animate-bounce"></i>
                             <div>
                               <div className="font-black text-amber-600 dark:text-amber-400 uppercase tracking-wide flex items-center gap-1.5">
-                                <span>Udhar Dues Pending Today</span>
+                                <span>Udhar Dues Pending</span>
                                 <span className="bg-amber-500 text-white text-[9.5px] px-1.5 py-0.2 rounded-full font-extrabold">{udharDueCustomers.length}</span>
                               </div>
                               <div className="text-[11px] font-bold text-foreground mt-0.5 flex items-center gap-2">
                                 <span>Total Dues: <strong className="text-rose-600 dark:text-rose-400 font-mono font-black">₹{getCustomerDues().toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
-                                <span className="text-[10px] text-amber-600 dark:text-amber-400 font-mono font-extrabold bg-amber-500/10 px-1.5 py-0.2 rounded border border-amber-500/20">📅 Due Date: Today</span>
+                                <span className="text-[10px] text-amber-600 dark:text-amber-400 font-mono font-extrabold bg-amber-500/10 px-1.5 py-0.2 rounded border border-amber-500/20">📅 Due: Today or Crossed</span>
                               </div>
                               <div className="text-[10px] text-textMuted mt-0.5 line-clamp-1">
                                 Customers: {udharDueCustomers.map((c: any) => c.customer_name).join(', ')}
