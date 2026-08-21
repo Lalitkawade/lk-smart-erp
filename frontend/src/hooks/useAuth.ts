@@ -3,10 +3,27 @@ import { supabase } from '../api/supabase';
 import type { Profile, Tenant } from '../types/erp.types';
 import { authRateLimiter } from '../utils/rateLimiter';
 
+const CACHE_KEY_PROFILE = 'lk_auth_profile_v1';
+const CACHE_KEY_TENANT = 'lk_auth_tenant_v1';
+
 export function useAuth() {
   const [user, setUser] = useState<any | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [tenant, setTenant] = useState<Tenant | null>(null);
+  
+  // Lazily initialize from localStorage for instant loading
+  const [profile, setProfile] = useState<Profile | null>(() => {
+    try {
+      const cached = localStorage.getItem(CACHE_KEY_PROFILE);
+      return cached ? JSON.parse(cached) : null;
+    } catch { return null; }
+  });
+  
+  const [tenant, setTenant] = useState<Tenant | null>(() => {
+    try {
+      const cached = localStorage.getItem(CACHE_KEY_TENANT);
+      return cached ? JSON.parse(cached) : null;
+    } catch { return null; }
+  });
+  
   const [loading, setLoading] = useState(true);
   const fetchedUserIdRef = useRef<string | null>(null);
   const fetchProfilePromiseRef = useRef<Promise<void> | null>(null);
@@ -34,6 +51,13 @@ export function useAuth() {
 
         setProfile(profileData || null);
         setTenant(tenantData || null);
+        
+        // Cache to localStorage
+        if (profileData) localStorage.setItem(CACHE_KEY_PROFILE, JSON.stringify(profileData));
+        else localStorage.removeItem(CACHE_KEY_PROFILE);
+        
+        if (tenantData) localStorage.setItem(CACHE_KEY_TENANT, JSON.stringify(tenantData));
+        else localStorage.removeItem(CACHE_KEY_TENANT);
       } catch (err) {
         console.error('Error fetching profile/tenant:', err);
       } finally {
@@ -46,7 +70,25 @@ export function useAuth() {
   };
 
   useEffect(() => {
-    // Realtime Auth State Change Listener (handles INITIAL_SESSION, SIGNED_IN, TOKEN_REFRESHED, SIGNED_OUT)
+    // 1. Immediately check session to bypass slow INITIAL_SESSION event
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setUser(session.user);
+        
+        // If we have cached profile & tenant, unlock UI instantly! (0ms perceived load time)
+        const hasCachedData = localStorage.getItem(CACHE_KEY_PROFILE) && localStorage.getItem(CACHE_KEY_TENANT);
+        if (hasCachedData) {
+          setLoading(false);
+        }
+        
+        // Fetch in background (stale-while-revalidate)
+        fetchProfileAndTenant(session.user).finally(() => setLoading(false));
+      } else {
+        setLoading(false);
+      }
+    });
+
+    // 2. Realtime Auth State Change Listener (handles INITIAL_SESSION, SIGNED_IN, TOKEN_REFRESHED, SIGNED_OUT)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_OUT' || !session?.user) {
         fetchedUserIdRef.current = null;
@@ -54,13 +96,23 @@ export function useAuth() {
         setUser(null);
         setProfile(null);
         setTenant(null);
+        localStorage.removeItem(CACHE_KEY_PROFILE);
+        localStorage.removeItem(CACHE_KEY_TENANT);
         setLoading(false);
         return;
       }
 
       setUser(session.user);
-      await fetchProfileAndTenant(session.user);
-      setLoading(false);
+      
+      if (event === 'SIGNED_IN') {
+        // Block UI on initial login to fetch tenant safely
+        setLoading(true);
+        await fetchProfileAndTenant(session.user);
+        setLoading(false);
+      } else {
+        // Background refresh for other events (INITIAL_SESSION, TOKEN_REFRESHED)
+        fetchProfileAndTenant(session.user).finally(() => setLoading(false));
+      }
     });
 
     return () => subscription.unsubscribe();
@@ -104,6 +156,8 @@ export function useAuth() {
     setUser(null);
     setProfile(null);
     setTenant(null);
+    localStorage.removeItem(CACHE_KEY_PROFILE);
+    localStorage.removeItem(CACHE_KEY_TENANT);
   };
 
   return {

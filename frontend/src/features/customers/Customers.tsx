@@ -59,7 +59,6 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
     }
   }, [autoOpenModal]);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
-  const [isEditingOutstanding, setIsEditingOutstanding] = useState(false);
 
   // Statement Modal
   const [statementCustomer, setStatementCustomer] = useState<Customer | null>(null);
@@ -254,7 +253,6 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
           ref_number: payFormData.ref_number.trim() || 'DIR-REC',
           payment_date: nowIso
         });
-        await CustomerService.updateCustomer(custId, { outstanding: newOutstanding });
         await refreshAllData();
       }
     } catch (err) {
@@ -361,15 +359,39 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
     // Sort chronologically ascending
     ledger.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-    // Compute dynamic running balance (Debit increases pending udhar, Credit reduces pending udhar)
-    let accum = 0;
-    return ledger.map(entry => {
+    let totalDebits = 0;
+    let totalCredits = 0;
+    ledger.forEach(entry => {
+      totalDebits += entry.debit;
+      totalCredits += entry.credit;
+    });
+
+    const currentOutstanding = Number(statementCustomer.outstanding || 0);
+    const initialBalance = currentOutstanding - (totalDebits - totalCredits);
+
+    let accum = initialBalance;
+    const finalLedger = ledger.map(entry => {
       accum = accum + entry.debit - entry.credit;
       return {
         ...entry,
         runningBalance: accum
       };
     });
+
+    if (initialBalance !== 0 || ledger.length === 0) {
+      finalLedger.unshift({
+        date: statementCustomer.created_at || new Date().toISOString(),
+        type: 'Opening Balance',
+        ref: 'OPENING',
+        mode: '-',
+        debit: initialBalance > 0 ? initialBalance : 0,
+        credit: initialBalance < 0 ? Math.abs(initialBalance) : 0,
+        notes: 'Manually set or historical opening balance',
+        runningBalance: initialBalance
+      });
+    }
+
+    return finalLedger;
   }, [statementCustomer, payments, rawCustomerInvoices]);
 
   const statementSummaryStats = useMemo(() => {
@@ -511,17 +533,10 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
         return acc + (invoiceDue - creditReturnsTotal);
       }, 0);
 
-      // Sum of payments collected in customer_payments table
-      const totalPaymentsReceived = custPayments.reduce((acc: number, p: any) => acc + Number(p.amount || 0), 0);
+      const totalStandalonePayments = custPayments.reduce((acc, p) => acc + Number(p.amount || 0), 0);
+      const totalPaymentsReceived = totalStandalonePayments;
 
-      // Compute dynamic realtime outstanding:
-      // Subtract totalPaymentsReceived from invoice dues or opening balance
-      let realtimeOutstanding = 0;
-      if (custInvoices.length > 0) {
-        realtimeOutstanding = totalInvoiceDues - totalPaymentsReceived;
-      } else {
-        realtimeOutstanding = Number(c.outstanding || 0) - totalPaymentsReceived;
-      }
+      const realtimeOutstanding = Number(c.outstanding || 0) + totalInvoiceDues - totalPaymentsReceived;
 
       let lastPurchDate: string | null = null;
       if (custInvoices.length > 0) {
@@ -843,7 +858,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                     value={formData.dob} onChange={(e) => setFormData({ ...formData, dob: e.target.value })} />
                 </div>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-textSecondary mb-1">Credit Limit (₹) *</label>
                   <input type="number" className="w-full bg-background border border-border rounded-lg p-2.5 text-xs text-foreground font-mono font-bold"
@@ -851,31 +866,6 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                     placeholder="0"
                     onFocus={(e) => e.target.select()}
                     onChange={(e) => setFormData({ ...formData, credit_limit: e.target.value === '' ? 0 : (parseInt(e.target.value) || 0) })} required />
-                </div>
-                <div>
-                  <div className="flex justify-between items-center mb-1">
-                    <label className="block text-xs font-semibold text-textSecondary">Initial Outstanding (₹)</label>
-                    {editingCustomer && (
-                      <button
-                        type="button"
-                        onClick={() => setIsEditingOutstanding(!isEditingOutstanding)}
-                        className="text-[10px] font-extrabold text-amber-500 hover:text-amber-400 underline flex items-center gap-1 cursor-pointer"
-                      >
-                        <i className={`fa-solid ${isEditingOutstanding ? 'fa-lock' : 'fa-pen-to-square'}`}></i>
-                        {isEditingOutstanding ? 'Lock' : '✏️ Correct Dues'}
-                      </button>
-                    )}
-                  </div>
-                  <input type="number"
-                    disabled={!!editingCustomer && !isEditingOutstanding}
-                    className={`w-full border rounded-lg p-2.5 text-xs font-mono font-bold transition ${!!editingCustomer && !isEditingOutstanding
-                        ? 'bg-background/50 border-border text-textMuted cursor-not-allowed opacity-80'
-                        : 'bg-background border-border text-foreground focus:outline-none'
-                      }`}
-                    value={formData.outstanding === 0 ? '' : formData.outstanding}
-                    placeholder="0"
-                    onFocus={(e) => e.target.select()}
-                    onChange={(e) => setFormData({ ...formData, outstanding: e.target.value === '' ? 0 : (parseInt(e.target.value) || 0) })} />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-textSecondary mb-1">Customer Establishment Date</label>

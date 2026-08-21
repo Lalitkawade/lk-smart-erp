@@ -143,12 +143,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
         return acc + creditReturnsForInv;
       }, 0);
 
-      let effectiveOutstanding = 0;
-      if (custInvoices.length > 0) {
-        effectiveOutstanding = totalInvoiceDues - totalPaymentsReceived - totalCreditReturns;
-      } else {
-        effectiveOutstanding = Number(c.outstanding || 0) - totalPaymentsReceived;
-      }
+      let effectiveOutstanding = Number(c.outstanding || 0);
 
       list.push({
         id: c.id,
@@ -1519,6 +1514,8 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                             const itemName = matchProd?.product_name || item.product?.product_name || item.product_name || `Item ${idx + 1}`;
                             const hsn = matchProd?.hsn || item.product?.hsn || item.hsn || '-';
                             const qty = Number(item.qty || 1);
+                            const unit = item.unitName || item.unit || (item.isLoose ? (matchProd?.s_unit || matchProd?.unit) : (matchProd?.p_unit)) || matchProd?.s_unit || matchProd?.unit || '';
+                            const displayQty = unit ? `${qty} ${unit}` : `${qty}`;
                             const rate = Number(item.rate || item.price || 0);
                             const amt = item.amount || (qty * rate);
 
@@ -1527,7 +1524,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                                 <td className="p-1 border-r border-slate-200 text-center font-mono">{idx + 1}</td>
                                 <td className="p-1 border-r border-slate-200 font-semibold uppercase">{itemName}</td>
                                 <td className="p-1 border-r border-slate-200 text-center font-mono text-slate-600">{hsn}</td>
-                                <td className="p-1 border-r border-slate-200 text-center font-mono font-bold">{qty}</td>
+                                <td className="p-1 border-r border-slate-200 text-center font-mono font-bold whitespace-nowrap">{displayQty}</td>
                                 <td className="p-1 border-r border-slate-200 text-right font-mono">₹{rate.toFixed(2)}</td>
                                 <td className="p-1 text-right font-mono font-bold">₹{amt.toFixed(2)}</td>
                               </tr>

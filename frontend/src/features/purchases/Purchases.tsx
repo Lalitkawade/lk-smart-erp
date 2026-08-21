@@ -392,11 +392,8 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
         await InventoryService.addStockForPurchase(preparedItems);
       }
 
-      // Update supplier outstanding via SupplierService
-      if (dueAmount > 0 && selectedSup?.id) {
-        await SupplierService.updateSupplier(selectedSup.id, { outstanding: Number(selectedSup.outstanding || 0) + dueAmount });
-      }
-
+      // Supplier outstanding is now calculated dynamically in Suppliers.tsx based on the Opening Balance (s.outstanding) + total purchases - total payments.
+      // We do not mutate the Opening Balance field here.
       await refreshAllData();
     } catch (err: any) {
       alert('⚠️ Purchase bill save failed: ' + (err.message || err));

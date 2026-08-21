@@ -212,7 +212,6 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
           ref_number: payFormData.ref_number.trim() || 'DIR-REC',
           payment_date: nowIso
         });
-        await SupplierService.updateSupplier(targetSupplier.id, { outstanding: newOutstanding });
         await refreshAllData();
       } catch (e) {
         console.warn('Background supplier payment note:', e);
@@ -275,6 +274,20 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
       notes: string;
     }> = [];
 
+    // Add Opening Balance!
+    const openingBalance = Number(statementSupplier.outstanding || 0);
+    if (openingBalance > 0) {
+      events.push({
+        date: statementSupplier.created_at || new Date().toISOString(),
+        type: 'Opening Balance',
+        ref: 'OPENING',
+        debit: openingBalance,
+        credit: 0,
+        mode: '-',
+        notes: 'Initial account balance'
+      });
+    }
+
     // A. Add Procurement Bills and Upfront Checkout Payments
     supplierPurchs.forEach(pb => {
       const billDate = pb.purchase_date || pb.created_at || new Date().toISOString();
@@ -328,20 +341,37 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
     events.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
     // D. Calculate Line-by-Line Running Balance
-    let currentBalance = Number(statementSupplier.initial_outstanding || 0);
     let totalBilled = 0;
     let totalPaid = 0;
-
-    const items = events.map(ev => {
+    events.forEach(ev => {
       totalBilled += ev.debit;
       totalPaid += ev.credit;
-      currentBalance = currentBalance + ev.debit - ev.credit;
+    });
 
+    const currentOutstanding = Number(statementSupplier.outstanding || 0);
+    const initialBalance = currentOutstanding - (totalBilled - totalPaid);
+
+    let currentBalance = initialBalance;
+    const items = events.map(ev => {
+      currentBalance = currentBalance + ev.debit - ev.credit;
       return {
         ...ev,
         runningBalance: Math.max(0, currentBalance)
       };
     });
+
+    if (initialBalance !== 0 || events.length === 0) {
+      items.unshift({
+        date: statementSupplier.created_at || new Date().toISOString(),
+        type: 'Opening Balance',
+        ref: 'OPENING',
+        debit: initialBalance > 0 ? initialBalance : 0,
+        credit: initialBalance < 0 ? Math.abs(initialBalance) : 0,
+        mode: '-',
+        notes: 'Manually set or historical opening balance',
+        runningBalance: initialBalance
+      });
+    }
 
     return {
       items,
@@ -381,7 +411,7 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
       const totalVoucherPaid = suppPays.reduce((acc, p) => acc + Number(p.amount || 0), 0);
       const totalPaid = totalBillPaid + totalVoucherPaid;
 
-      const realtimeOutstanding = Math.max(0, totalPurch - totalPaid);
+      const realtimeOutstanding = Number(s.outstanding || 0) + totalPurch - totalPaid;
 
       let lastPurchDate: string | null = null;
       if (suppBills.length > 0) {
