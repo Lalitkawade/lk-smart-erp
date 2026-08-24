@@ -17,6 +17,7 @@ interface Supplier {
   establishment_date?: string | null;
   outstanding: number;
   initial_outstanding?: number;
+  gst_number?: string | null;
   created_at: string;
 }
 
@@ -105,6 +106,7 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
       address: '',
       dob: '',
       establishment_date: '',
+      gst_number: '',
       outstanding: 0
     });
     setModalOpen(true);
@@ -120,6 +122,7 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
       address: s.address || '',
       dob: formatDateForInput(s.dob),
       establishment_date: formatDateForInput(s.establishment_date),
+      gst_number: s.gst_number || '',
       outstanding: s.outstanding || 0
     });
     setModalOpen(true);
@@ -157,6 +160,7 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
       address: formData.address || '',
       dob: formData.dob || '',
       establishment_date: formData.establishment_date || '',
+      gst_number: formData.gst_number || null,
       outstanding: Number(formData.outstanding || 0),
       created_at: editingSupplier?.created_at
     };
@@ -348,8 +352,7 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
       totalPaid += ev.credit;
     });
 
-    const currentOutstanding = Number(statementSupplier.outstanding || 0);
-    const initialBalance = currentOutstanding - (totalBilled - totalPaid);
+    const initialBalance = Number(statementSupplier.outstanding || 0);
 
     let currentBalance = initialBalance;
     const items = events.map(ev => {
@@ -708,10 +711,23 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
                     value={formData.dob} onChange={(e) => setFormData({ ...formData, dob: e.target.value })} />
                 </div>
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-textSecondary mb-1">Establishment Date</label>
-                <input type="date" className="w-full bg-background border border-border rounded-lg p-2.5 text-xs text-foreground font-mono font-semibold"
-                  value={formData.establishment_date} onChange={(e) => setFormData({ ...formData, establishment_date: e.target.value })} />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-textSecondary mb-1">Establishment Date</label>
+                  <input type="date" className="w-full bg-background border border-border rounded-lg p-2.5 text-xs text-foreground font-mono font-semibold"
+                    value={formData.establishment_date} onChange={(e) => setFormData({ ...formData, establishment_date: e.target.value })} />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-textSecondary mb-1">GST Number (Optional)</label>
+                  <input 
+                    type="text" 
+                    maxLength={15}
+                    className="w-full bg-background border border-border rounded-lg p-2.5 text-xs text-foreground uppercase font-semibold"
+                    value={formData.gst_number} 
+                    onChange={(e) => setFormData({ ...formData, gst_number: e.target.value.toUpperCase() })} 
+                    placeholder="22AAAAA0000A1Z5"
+                  />
+                </div>
               </div>
               <div>
                 <label className="block text-xs font-semibold text-textSecondary mb-1">Office / Godown Address</label>

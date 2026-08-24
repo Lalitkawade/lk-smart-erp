@@ -20,6 +20,7 @@ interface Customer {
   outstanding: number;
   establishment_date?: string | null;
   due_date?: string | null;
+  gst_number?: string | null;
   created_at: string;
 }
 
@@ -76,7 +77,8 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
     dob: '',
     credit_limit: 50000,
     outstanding: 0,
-    establishment_date: ''
+    establishment_date: '',
+    gst_number: ''
   });
 
   // Pay Down Outstanding / Refund Form
@@ -104,7 +106,8 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
       dob: '',
       credit_limit: 50000,
       outstanding: 0,
-      establishment_date: ''
+      establishment_date: '',
+      gst_number: ''
     });
     setModalOpen(true);
   };
@@ -120,7 +123,8 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
       dob: c.dob || '',
       credit_limit: c.credit_limit,
       outstanding: c.outstanding,
-      establishment_date: c.establishment_date || ''
+      establishment_date: c.establishment_date || '',
+      gst_number: c.gst_number || ''
     });
     setModalOpen(true);
   };
@@ -159,6 +163,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
       credit_limit: Number(formData.credit_limit || 0),
       outstanding: Number(formData.outstanding || 0),
       establishment_date: formData.establishment_date || null,
+      gst_number: formData.gst_number || null,
       created_at: editingCustomer?.created_at
     };
 
@@ -242,8 +247,23 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
       let custId = targetCustomer.id;
       if (!isUuid(custId)) {
         const { data: dbCust } = await supabase.from('customers').select('id').eq('customer_name', targetCustomer.customer_name).maybeSingle();
-        if (dbCust?.id) custId = dbCust.id;
+        if (dbCust?.id) {
+          custId = dbCust.id;
+        } else {
+          // Customer does not exist in DB yet, create them to get a valid UUID
+          const newCust = await CustomerService.createCustomer({
+            customer_name: targetCustomer.customer_name,
+            phone: targetCustomer.phone || null,
+            tenant_id: isUuid(tenantId) ? tenantId : '00000000-0000-0000-0000-000000000000',
+            credit_limit: 50000,
+            outstanding: 0
+          });
+          if (newCust.data?.id) {
+            custId = newCust.data.id;
+          }
+        }
       }
+      
       if (isUuid(custId)) {
         await PaymentService.recordCustomerPayment({
           tenant_id: isUuid(tenantId) ? tenantId : '00000000-0000-0000-0000-000000000000',
@@ -254,9 +274,12 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
           payment_date: nowIso
         });
         await refreshAllData();
+      } else {
+        triggerToast('⚠️ Error: Could not resolve valid customer ID.');
       }
     } catch (err) {
       console.warn('Payment record save exception:', err);
+      triggerToast('⚠️ Failed to record payment.');
     }
   };
 
@@ -366,8 +389,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
       totalCredits += entry.credit;
     });
 
-    const currentOutstanding = Number(statementCustomer.outstanding || 0);
-    const initialBalance = currentOutstanding - (totalDebits - totalCredits);
+    const initialBalance = Number(statementCustomer.outstanding || 0);
 
     let accum = initialBalance;
     const finalLedger = ledger.map(entry => {
@@ -477,14 +499,11 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
             email: '',
             address: '',
             credit_limit: 50000,
-            outstanding: Number(inv.due_amount || 0),
+            outstanding: 0,
             created_at: inv.sale_date || inv.created_at || new Date().toISOString()
           });
         } else {
           const existing = map.get(name)!;
-          if (Number(existing.outstanding || 0) === 0 && Number(inv.due_amount || 0) > 0) {
-            existing.outstanding = Number(inv.due_amount);
-          }
           if (!existing.phone && inv.customer_phone) {
             existing.phone = inv.customer_phone;
           }
@@ -858,7 +877,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                     value={formData.dob} onChange={(e) => setFormData({ ...formData, dob: e.target.value })} />
                 </div>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-textSecondary mb-1">Credit Limit (₹) *</label>
                   <input type="number" className="w-full bg-background border border-border rounded-lg p-2.5 text-xs text-foreground font-mono font-bold"
@@ -874,6 +893,17 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                     className="w-full bg-background border border-border rounded-lg p-2.5 text-xs text-foreground font-mono font-semibold"
                     value={formData.establishment_date} 
                     onChange={(e) => setFormData({ ...formData, establishment_date: e.target.value })} 
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-textSecondary mb-1">GST Number (Optional)</label>
+                  <input 
+                    type="text" 
+                    maxLength={15}
+                    className="w-full bg-background border border-border rounded-lg p-2.5 text-xs text-foreground uppercase font-semibold"
+                    value={formData.gst_number} 
+                    onChange={(e) => setFormData({ ...formData, gst_number: e.target.value.toUpperCase() })} 
+                    placeholder="22AAAAA0000A1Z5"
                   />
                 </div>
               </div>

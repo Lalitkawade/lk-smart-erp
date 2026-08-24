@@ -143,7 +143,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
         return acc + creditReturnsForInv;
       }, 0);
 
-      let effectiveOutstanding = Number(c.outstanding || 0);
+      let effectiveOutstanding = Number(c.outstanding || 0) + totalInvoiceDues - totalPaymentsReceived - totalCreditReturns;
 
       list.push({
         id: c.id,
@@ -700,7 +700,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                       const pUnit = p.p_unit || 'Box';
                       const sUnit = p.s_unit || p.unit || 'Pcs';
                       const baseUnit = p.unit || p.s_unit || 'Pcs';
-                      const piecesPerPack = Math.max(1, Number(p.pieces_per_pack || 1));
+                      const piecesPerPack = Math.max(0.000001, Number(p.pieces_per_pack || 1));
                       const isDualUnit = piecesPerPack > 1 || (pUnit.toLowerCase() !== sUnit.toLowerCase());
 
                       const { piecePrice, packPrice } = getProductUnitRates(p);
@@ -1005,7 +1005,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                       const pUnit = item.product.p_unit || 'Box';
                       const sUnit = item.product.s_unit || item.product.unit || 'Pcs';
                       const unitName = (item as any).unitName || (isLoose ? sUnit : pUnit);
-                      const piecesPerPack = Math.max(1, Number(item.product.pieces_per_pack || 1));
+                      const piecesPerPack = Math.max(0.000001, Number(item.product.pieces_per_pack || 1));
                       const isDualUnit = piecesPerPack > 1 || (pUnit.toLowerCase() !== sUnit.toLowerCase());
 
                       return (

@@ -93,6 +93,7 @@ CREATE TABLE suppliers (
     address TEXT,
     dob DATE,
     establishment_date DATE,
+    gst_number TEXT,
     outstanding NUMERIC(12, 2) DEFAULT 0.00,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -106,6 +107,7 @@ CREATE TABLE customers (
     email TEXT,
     address TEXT,
     dob DATE,
+    gst_number TEXT,
     credit_limit NUMERIC(12, 2) DEFAULT 0.00,
     outstanding NUMERIC(12, 2) DEFAULT 0.00,
     created_at TIMESTAMPTZ DEFAULT NOW()
@@ -143,8 +145,11 @@ CREATE TABLE products (
     description TEXT,
     p_unit TEXT DEFAULT 'Pcs',
     s_unit TEXT DEFAULT 'Pcs',
-    pieces_per_pack INTEGER DEFAULT 1,
+    pieces_per_pack NUMERIC(10, 4) DEFAULT 1.0000,
     piece_selling_price NUMERIC(12, 2) DEFAULT 0.00,
+    secondary_unit TEXT,
+    conversion_rate NUMERIC(10, 4) DEFAULT 1.0000,
+    secondary_selling_price NUMERIC(12, 2) DEFAULT 0.00,
     supplier_id UUID REFERENCES suppliers(id) ON DELETE SET NULL,
     supplier_name TEXT,
     supplier_phone TEXT,

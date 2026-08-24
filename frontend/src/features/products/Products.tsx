@@ -59,7 +59,7 @@ const resolveBillProcuredItems = (b: any, productsList: any[]) => {
   if (vendorProducts.length > 0) {
     const mapped = vendorProducts.map((p: any) => {
       const pPrice = Number(p.purchase_price || 0);
-      const piecesPerPack = Math.max(1, Number(p.pieces_per_pack || 1));
+      const piecesPerPack = Math.max(0.000001, Number(p.pieces_per_pack || 1));
       const baseStock = Number(p.current_stock || 0);
       const purchasePackQty = piecesPerPack > 1 ? Math.max(1, Math.round(baseStock / piecesPerPack)) : Math.max(1, baseStock);
       return {
@@ -324,7 +324,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
     if (!selectedHistoryProduct) return [];
     const p = selectedHistoryProduct;
     const prodSupplierName = p.supplier_name || (p.supplier_id ? suppliers.find((s: any) => s.id === p.supplier_id)?.supplier_name : '') || '';
-    const piecesPerPack = Math.max(1, Number(p.pieces_per_pack || 1));
+    const piecesPerPack = Math.max(0.000001, Number(p.pieces_per_pack || 1));
     const pUnit = p.p_unit || 'Box';
     const sUnit = p.s_unit || p.unit || 'Pcs';
     const isDualUnit = piecesPerPack > 1 || (pUnit && sUnit && pUnit.toLowerCase() !== sUnit.toLowerCase());
@@ -474,7 +474,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
     const map = new Map<string, { baseInflow: number; packInflow: number }>();
 
     (products || []).forEach(p => {
-      const piecesPerPack = Math.max(1, Number(p.pieces_per_pack || 1));
+      const piecesPerPack = Math.max(0.000001, Number(p.pieces_per_pack || 1));
       const currentBaseStock = Number(p.current_stock || 0);
 
       // 1. Stored initial stock on product
@@ -998,7 +998,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
           existingStock = Number(matchedExistingProduct.current_stock || 0);
         }
 
-        const conversionFactor = Math.max(1, Number(item.pieces_per_pack || 1));
+        const conversionFactor = Math.max(0.000001, Number(item.pieces_per_pack || 1));
         const pPrice = Number(item.purchase_price || 0); // Price per Purchase Unit (e.g. ₹300 / Box)
         const sPrice = Number(item.selling_price || 0);   // Price per Selling Unit (e.g. ₹5 / Pcs)
         const calculatedBaseUnitCost = conversionFactor > 0 ? (pPrice / conversionFactor) : pPrice;
@@ -1669,7 +1669,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                   const name = p?.product_name || 'Unnamed Product';
                   const pUnit = p.p_unit || 'Box';
                   const sUnit = p.s_unit || p.unit || 'Nos';
-                  const piecesPerPack = Math.max(1, Number(p.pieces_per_pack || 1));
+                  const piecesPerPack = Math.max(0.000001, Number(p.pieces_per_pack || 1));
 
                   const isDualUnit = piecesPerPack > 1 || (pUnit && sUnit && pUnit.toLowerCase() !== sUnit.toLowerCase());
 

@@ -60,8 +60,11 @@ CREATE TABLE IF NOT EXISTS products (
     description TEXT,
     p_unit VARCHAR(50),
     s_unit VARCHAR(50),
-    pieces_per_pack INTEGER DEFAULT 1,
+    pieces_per_pack NUMERIC(10, 4) DEFAULT 1.0000,
     piece_selling_price NUMERIC(12, 2) DEFAULT 0.00,
+    secondary_unit TEXT,
+    conversion_rate NUMERIC(10, 4) DEFAULT 1.0000,
+    secondary_selling_price NUMERIC(12, 2) DEFAULT 0.00,
     supplier_id VARCHAR(100),
     supplier_name VARCHAR(100),
     supplier_phone VARCHAR(50),
@@ -241,6 +244,7 @@ CREATE TABLE IF NOT EXISTS customers (
     email VARCHAR(100),
     address TEXT,
     dob DATE,
+    gst_number VARCHAR(15),
     credit_limit NUMERIC(12, 2) DEFAULT 50000.00,
     outstanding NUMERIC(12, 2) DEFAULT 0.00,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
@@ -267,6 +271,7 @@ CREATE TABLE IF NOT EXISTS suppliers (
     address TEXT,
     dob DATE,
     establishment_date DATE,
+    gst_number VARCHAR(15),
     outstanding NUMERIC(12, 2) DEFAULT 0.00,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );

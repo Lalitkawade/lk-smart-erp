@@ -206,7 +206,7 @@ export function useBilling(tenantId: string) {
 
       // Auto-register customer in database if they don't have a valid UUID yet
       if (customerName.trim() && customerName.trim().toUpperCase() !== 'CASH CUSTOMER') {
-        const updatePayload: any = { outstanding: newOutstanding };
+        const updatePayload: any = {};
         if (options?.dueDate) {
           updatePayload.due_date = options.dueDate;
         }

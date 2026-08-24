@@ -21,7 +21,7 @@ export default function SalesReturnModal({ tenantId, invoice, onClose, onSuccess
         invoice.items.map((item) => {
           const pUnit = item.product?.p_unit || 'Box';
           const sUnit = item.product?.s_unit || item.product?.unit || 'Pcs';
-          const piecesPerPack = Math.max(1, Number(item.product?.pieces_per_pack || 1));
+          const piecesPerPack = Math.max(0.000001, Number(item.product?.pieces_per_pack || 1));
           const isDualUnit = piecesPerPack > 1 || (pUnit.toLowerCase() !== sUnit.toLowerCase());
           
           const invoiceRate = Number(item.rate);

@@ -576,6 +576,7 @@ export type CustomerRow = {
   credit_limit: number;
   outstanding: number;
   due_date?: string | null;
+  gst_number?: string | null;
   created_at: string;
   updated_at?: string;
 }
@@ -591,6 +592,7 @@ export type CustomerInsert = {
   credit_limit?: number;
   outstanding?: number;
   due_date?: string | null;
+  gst_number?: string | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -604,6 +606,7 @@ export type CustomerUpdate = {
   credit_limit?: number;
   outstanding?: number;
   due_date?: string | null;
+  gst_number?: string | null;
   updated_at?: string;
 }
 
@@ -651,6 +654,7 @@ export type SupplierRow = {
   created_at: string;
   updated_at?: string;
   gstin?: string | null;
+  gst_number?: string | null;
 }
 export type SupplierInsert = {
   id?: string;
@@ -665,6 +669,7 @@ export type SupplierInsert = {
   created_at?: string;
   updated_at?: string;
   gstin?: string | null;
+  gst_number?: string | null;
 }
 export type SupplierUpdate = {
   supplier_name?: string;
@@ -676,6 +681,7 @@ export type SupplierUpdate = {
   outstanding?: number;
   updated_at?: string;
   gstin?: string | null;
+  gst_number?: string | null;
 }
 
 // ==========================================

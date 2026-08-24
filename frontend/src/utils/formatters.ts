@@ -35,7 +35,7 @@ export function formatCurrency(amountInput?: number | string | null): string {
 }
 
 export function getProductUnitRates(product: any) {
-  const piecesPerPack = Math.max(1, Number(product?.pieces_per_pack || 1));
+  const piecesPerPack = Math.max(0.000001, Number(product?.pieces_per_pack || 1));
   const purchasePrice = Number(product?.purchase_price || 0);
   const sellingPrice = Number(product?.selling_price || 0);
   const baseCost = piecesPerPack > 0 ? (purchasePrice / piecesPerPack) : purchasePrice;

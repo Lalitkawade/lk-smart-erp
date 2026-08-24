@@ -110,19 +110,7 @@ export class PurchaseService {
 
     const createdBill = billRes.data;
 
-    // Update supplier outstanding balance if there is a due amount and a valid supplier_id
-    const dueAmount = Number(createdBill.due_amount || 0);
-    if (dueAmount > 0 && createdBill.supplier_id && isValidUUID(createdBill.supplier_id)) {
-      const { data: sup } = await supabase
-        .from('suppliers')
-        .select('outstanding')
-        .eq('id', createdBill.supplier_id)
-        .single();
-      if (sup) {
-        const newOutstanding = Number(sup.outstanding || 0) + dueAmount;
-        await supabase.from('suppliers').update({ outstanding: newOutstanding }).eq('id', createdBill.supplier_id);
-      }
-    }
+    // Supplier outstanding balance updates are now calculated in real-time by the frontend
 
     if (itemsPayload.length > 0) {
       const cleanItems = itemsPayload.map(item => ({
@@ -203,7 +191,7 @@ export class PurchaseService {
             .select('pieces_per_pack')
             .eq('id', item.product_id)
             .single();
-          const piecesPerPack = Math.max(1, Number(prod?.pieces_per_pack || 1));
+          const piecesPerPack = Math.max(0.000001, Number(prod?.pieces_per_pack || 1));
           const baseQty = Number(item.qty || 0) * piecesPerPack;
 
           const current = productMap.get(item.product_id) || { oldBaseQty: 0, newBaseQty: 0 };
@@ -218,7 +206,7 @@ export class PurchaseService {
             .select('pieces_per_pack')
             .eq('id', item.product_id)
             .single();
-          const piecesPerPack = Math.max(1, Number(prod?.pieces_per_pack || 1));
+          const piecesPerPack = Math.max(0.000001, Number(prod?.pieces_per_pack || 1));
           const baseQty = Number(item.qty || 0) * piecesPerPack;
 
           const current = productMap.get(item.product_id) || { oldBaseQty: 0, newBaseQty: 0 };
@@ -265,40 +253,7 @@ export class PurchaseService {
         }
       }
 
-      // 3. Supplier Balance Reconciliation
-      const oldDue = Number(oldBill.due_amount || 0);
-      const newDue = Number(billUpdates.due_amount !== undefined ? billUpdates.due_amount : oldBill.due_amount || 0);
-      const oldSupId = oldBill.supplier_id;
-      const newSupId = billUpdates.supplier_id !== undefined ? billUpdates.supplier_id : oldBill.supplier_id;
-
-      const isValidUUID = (id: any) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-
-      if (oldSupId && newSupId && oldSupId === newSupId) {
-        const dueDelta = newDue - oldDue;
-        if (dueDelta !== 0 && isValidUUID(oldSupId)) {
-          const { data: sup } = await supabase.from('suppliers').select('outstanding').eq('id', oldSupId).single();
-          if (sup) {
-            const newOutstanding = Math.max(0, Number(sup.outstanding || 0) + dueDelta);
-            await supabase.from('suppliers').update({ outstanding: newOutstanding }).eq('id', oldSupId);
-          }
-        }
-      } else {
-        // Supplier changed
-        if (oldDue > 0 && oldSupId && isValidUUID(oldSupId)) {
-          const { data: oldSup } = await supabase.from('suppliers').select('outstanding').eq('id', oldSupId).single();
-          if (oldSup) {
-            const newOldOutstanding = Math.max(0, Number(oldSup.outstanding || 0) - oldDue);
-            await supabase.from('suppliers').update({ outstanding: newOldOutstanding }).eq('id', oldSupId);
-          }
-        }
-        if (newDue > 0 && newSupId && isValidUUID(newSupId)) {
-          const { data: newSup } = await supabase.from('suppliers').select('outstanding').eq('id', newSupId).single();
-          if (newSup) {
-            const newNewOutstanding = Number(newSup.outstanding || 0) + newDue;
-            await supabase.from('suppliers').update({ outstanding: newNewOutstanding }).eq('id', newSupId);
-          }
-        }
-      }
+      // Supplier Balance Reconciliation is now calculated in real-time by the frontend
 
       // 4. Update Header Row
       const cleanUpdates: any = { ...billUpdates };
@@ -399,7 +354,7 @@ export class PurchaseService {
 
         if (prod) {
           const currentStock = Number(prod.current_stock || 0);
-          const piecesPerPack = Math.max(1, Number(prod.pieces_per_pack || 1));
+          const piecesPerPack = Math.max(0.000001, Number(prod.pieces_per_pack || 1));
           const reversalBaseUnits = Number(item.qty || 0) * piecesPerPack;
 
           if (currentStock < reversalBaseUnits) {
@@ -424,7 +379,7 @@ export class PurchaseService {
 
         if (prod) {
           const currentStock = Number(prod.current_stock || 0);
-          const piecesPerPack = Math.max(1, Number(prod.pieces_per_pack || 1));
+          const piecesPerPack = Math.max(0.000001, Number(prod.pieces_per_pack || 1));
           const reversalBaseUnits = Number(item.qty || 0) * piecesPerPack;
           const newStock = Math.max(0, currentStock - reversalBaseUnits);
 
@@ -432,21 +387,7 @@ export class PurchaseService {
         }
       }
 
-      // 4. Reverse Supplier Outstanding Balance
-      const dueAmount = Number(bill.due_amount || 0);
-      if (dueAmount > 0 && bill.supplier_id && isValidUUID(bill.supplier_id)) {
-        const { data: sup } = await supabase
-          .from('suppliers')
-          .select('outstanding')
-          .eq('id', bill.supplier_id)
-          .single();
-
-        if (sup) {
-          const currentOutstanding = Number(sup.outstanding || 0);
-          const newOutstanding = Math.max(0, currentOutstanding - dueAmount);
-          await supabase.from('suppliers').update({ outstanding: newOutstanding }).eq('id', bill.supplier_id);
-        }
-      }
+      // 4. Supplier Outstanding Balance Reversal is now handled in real-time by the frontend
 
       // 5. Delete Database Rows
       await supabase.from('purchase_items').delete().eq('bill_id', id);

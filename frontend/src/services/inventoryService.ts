@@ -48,7 +48,7 @@ export class InventoryService {
       const updatePromises = cartItems.map(async (item) => {
         if (!item.product || !item.product.id || !isValidUUID(item.product.id)) return;
 
-        const piecesPerPack = Math.max(1, Number(item.product.pieces_per_pack || 1));
+        const piecesPerPack = Math.max(0.000001, Number(item.product.pieces_per_pack || 1));
         const totalDeductedBaseUnits = item.isLoose ? item.qty : item.qty * piecesPerPack;
         const currentStock = Number(item.product.current_stock ?? 0);
         const newStock = Math.max(0, currentStock - totalDeductedBaseUnits);
@@ -80,7 +80,7 @@ export class InventoryService {
           .single();
 
         const currentStock = Number(prod?.current_stock || 0);
-        const piecesPerPack = Math.max(1, Number(prod?.pieces_per_pack || 1));
+        const piecesPerPack = Math.max(0.000001, Number(prod?.pieces_per_pack || 1));
         const addedBaseUnits = Number(item.qty || 0) * piecesPerPack;
         const newStock = currentStock + addedBaseUnits;
 
