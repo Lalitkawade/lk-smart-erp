@@ -393,9 +393,9 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
     }
   };
 
-  const handleQtyChange = (productId: string, qty: number, isLoose: boolean = false) => {
+  const handleQtyChange = (productId: string, qty: number, isLoose: boolean = false, qtyText?: string) => {
     try {
-      updateCartQty(productId, Math.max(0, qty), isLoose);
+      updateCartQty(productId, Math.max(0, qty), isLoose, qtyText);
     } catch (e: any) {
       alert(e.message);
     }
@@ -1057,11 +1057,12 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                                 step="any"
                                 min="0"
                                 className="w-16 bg-background border border-border rounded text-center text-xs text-foreground p-1 font-mono font-black focus:outline-none focus:border-primary shadow-inner"
-                                value={item.qty === 0 ? '' : item.qty}
+                                value={item.qtyText !== undefined ? item.qtyText : (item.qty === 0 ? '' : item.qty)}
                                 onFocus={(e) => e.target.select()}
                                 onChange={(e) => {
-                                  const val = e.target.value === '' ? 0 : (parseFloat(e.target.value) || 0);
-                                  handleQtyChange(item.product.id, Math.max(0, val), isLoose);
+                                  const textVal = e.target.value;
+                                  const val = textVal === '' ? 0 : (parseFloat(textVal) || 0);
+                                  handleQtyChange(item.product.id, Math.max(0, val), isLoose, textVal);
                                 }}
                                 title="Quantity"
                               />

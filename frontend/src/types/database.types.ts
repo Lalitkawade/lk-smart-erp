@@ -71,6 +71,7 @@ export type ProductRow = {
   id: string;
   tenant_id: string;
   product_name: string;
+  product_code?: string | null;
   sku?: string | null;
   barcode?: string | null;
   category_name?: string;
@@ -108,11 +109,15 @@ export type ProductRow = {
   allow_decimal?: boolean | null;
   allow_purchase_unit_selling?: boolean | null;
   track_base_unit?: boolean | null;
+  purchase_units?: string[] | null;
+  selling_units?: string[] | null;
+  base_unit?: string | null;
 }
 export type ProductInsert = {
   id?: string;
   tenant_id: string;
   product_name: string;
+  product_code?: string | null;
   sku?: string | null;
   barcode?: string | null;
   category_name?: string;
@@ -150,11 +155,15 @@ export type ProductInsert = {
   allow_decimal?: boolean | null;
   allow_purchase_unit_selling?: boolean | null;
   track_base_unit?: boolean | null;
+  purchase_units?: string[] | null;
+  selling_units?: string[] | null;
+  base_unit?: string | null;
 }
 export type ProductUpdate = {
   id?: string;
   tenant_id?: string;
   product_name?: string;
+  product_code?: string | null;
   sku?: string | null;
   barcode?: string | null;
   category_name?: string;
@@ -191,6 +200,36 @@ export type ProductUpdate = {
   allow_decimal?: boolean | null;
   allow_purchase_unit_selling?: boolean | null;
   track_base_unit?: boolean | null;
+  purchase_units?: string[] | null;
+  selling_units?: string[] | null;
+  base_unit?: string | null;
+}
+
+// ==========================================
+// 3a. Product Unit Conversions Interfaces
+// ==========================================
+export type ProductUnitConversionRow = {
+  id: string;
+  tenant_id: string;
+  product_id: string;
+  unit_code: string;
+  base_unit_code: string;
+  conversion_factor: number;
+  created_at: string;
+}
+export type ProductUnitConversionInsert = {
+  id?: string;
+  tenant_id: string;
+  product_id: string;
+  unit_code: string;
+  base_unit_code: string;
+  conversion_factor?: number;
+  created_at?: string;
+}
+export type ProductUnitConversionUpdate = {
+  unit_code?: string;
+  base_unit_code?: string;
+  conversion_factor?: number;
 }
 
 // ==========================================
@@ -264,6 +303,10 @@ export type SalesItemRow = {
   qty: number;
   rate: number;
   amount: number;
+  unit?: string | null;
+  base_quantity?: number | null;
+  base_unit?: string | null;
+  conversion_factor?: number | null;
 }
 export type SalesItemInsert = {
   id?: string;
@@ -272,12 +315,20 @@ export type SalesItemInsert = {
   qty: number;
   rate: number;
   amount: number;
+  unit?: string | null;
+  base_quantity?: number | null;
+  base_unit?: string | null;
+  conversion_factor?: number | null;
 }
 export type SalesItemUpdate = {
   product_id?: string | null;
   qty?: number;
   rate?: number;
   amount?: number;
+  unit?: string | null;
+  base_quantity?: number | null;
+  base_unit?: string | null;
+  conversion_factor?: number | null;
 }
 
 // ==========================================
@@ -324,6 +375,9 @@ export type SalesReturnItemRow = {
   return_qty: number;
   return_unit?: string | null;
   refund_amount: number;
+  base_return_qty?: number | null;
+  base_unit?: string | null;
+  conversion_factor?: number | null;
 }
 export type SalesReturnItemInsert = {
   id?: string;
@@ -333,11 +387,17 @@ export type SalesReturnItemInsert = {
   return_qty?: number;
   return_unit?: string | null;
   refund_amount?: number;
+  base_return_qty?: number | null;
+  base_unit?: string | null;
+  conversion_factor?: number | null;
 }
 export type SalesReturnItemUpdate = {
   return_qty?: number;
   return_unit?: string | null;
   refund_amount?: number;
+  base_return_qty?: number | null;
+  base_unit?: string | null;
+  conversion_factor?: number | null;
 }
 
 // ==========================================
@@ -402,6 +462,10 @@ export type PurchaseItemRow = {
   qty: number;
   rate: number;
   amount: number;
+  unit?: string | null;
+  base_quantity?: number | null;
+  base_unit?: string | null;
+  conversion_factor?: number | null;
 }
 export type PurchaseItemInsert = {
   id?: string;
@@ -413,6 +477,10 @@ export type PurchaseItemInsert = {
   qty: number;
   rate: number;
   amount: number;
+  unit?: string | null;
+  base_quantity?: number | null;
+  base_unit?: string | null;
+  conversion_factor?: number | null;
 }
 export type PurchaseItemUpdate = {
   product_id?: string | null;
@@ -422,6 +490,10 @@ export type PurchaseItemUpdate = {
   qty?: number;
   rate?: number;
   amount?: number;
+  unit?: string | null;
+  base_quantity?: number | null;
+  base_unit?: string | null;
+  conversion_factor?: number | null;
 }
 
 // ==========================================
@@ -644,6 +716,7 @@ export type CustomerPaymentUpdate = {
 export type SupplierRow = {
   id: string;
   tenant_id: string;
+  supplier_code?: string | null;
   supplier_name: string;
   phone: string | null;
   email: string | null;
@@ -659,6 +732,7 @@ export type SupplierRow = {
 export type SupplierInsert = {
   id?: string;
   tenant_id: string;
+  supplier_code?: string | null;
   supplier_name: string;
   phone?: string | null;
   email?: string | null;
@@ -672,6 +746,7 @@ export type SupplierInsert = {
   gst_number?: string | null;
 }
 export type SupplierUpdate = {
+  supplier_code?: string | null;
   supplier_name?: string;
   phone?: string | null;
   email?: string | null;
@@ -763,6 +838,12 @@ export type Database = {
         Row: ProductRow;
         Insert: ProductInsert;
         Update: ProductUpdate;
+        Relationships: [];
+      };
+      product_unit_conversions: {
+        Row: ProductUnitConversionRow;
+        Insert: ProductUnitConversionInsert;
+        Update: ProductUnitConversionUpdate;
         Relationships: [];
       };
       sales_invoices: {

@@ -46,7 +46,7 @@ export function useBilling(tenantId: string) {
     }
   };
 
-  const updateCartQty = (productId: string, qty: number, isLoose: boolean = false) => {
+  const updateCartQty = (productId: string, qty: number, isLoose: boolean = false, qtyText?: string) => {
     const item = cart.find(i => i.product.id === productId && i.isLoose === isLoose);
     if (!item) return;
 
@@ -65,7 +65,7 @@ export function useBilling(tenantId: string) {
       throw new Error(`Insufficient stock. Only ${stockInBaseUnits} ${baseUnit} available in inventory.`);
     }
 
-    setCart(cart.map(i => (i.product.id === productId && i.isLoose === isLoose) ? { ...i, qty: Math.max(0, qty) } : i));
+    setCart(cart.map(i => (i.product.id === productId && i.isLoose === isLoose) ? { ...i, qty: Math.max(0, qty), qtyText } : i));
   };
 
   const updateCartRate = (productId: string, rate: number, isLoose: boolean = true) => {
@@ -266,12 +266,24 @@ export function useBilling(tenantId: string) {
 
       let invoice: any = { ...invoicePayload };
 
-      const itemsPayload = cart.map(item => ({
-        product_id: item.product.id,
-        qty: item.qty,
-        rate: item.rate,
-        amount: item.qty * item.rate
-      }));
+      const itemsPayload = cart.map(item => {
+        const piecesPerPack = Math.max(0.000001, Number(item.product.pieces_per_pack || 1));
+        const conversionFactor = item.isLoose ? 1 : piecesPerPack;
+        const transactionUnit = item.isLoose 
+          ? (item.product.s_unit || item.product.unit || 'Nos') 
+          : (item.product.p_unit || item.product.purchase_units?.[0] || 'Box');
+
+        return {
+          product_id: item.product.id,
+          qty: item.qty,
+          rate: item.rate,
+          amount: item.qty * item.rate,
+          unit: transactionUnit,
+          base_unit: item.product.base_unit || item.product.unit || 'Nos',
+          conversion_factor: conversionFactor,
+          base_quantity: item.qty * conversionFactor
+        };
+      });
 
       const res = await SaleService.createSale(invoicePayload as any, itemsPayload);
       if (res.data) {

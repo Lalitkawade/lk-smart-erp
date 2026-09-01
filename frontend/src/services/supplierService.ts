@@ -6,7 +6,7 @@ export class SupplierService {
    * Fetch all suppliers for a given tenant ordered by supplier_name
    */
   static async fetchSuppliers(tenantId?: string): Promise<ServiceResponse<Supplier[]>> {
-    let query = supabase.from('suppliers').select('*').order('supplier_name', { ascending: true });
+    let query = supabase.from('suppliers').select('*').order('created_at', { ascending: false });
     if (tenantId) {
       query = query.eq('tenant_id', tenantId);
     }
@@ -42,7 +42,7 @@ export class SupplierService {
       .from('suppliers')
       .select('*')
       .or(`supplier_name.ilike.${term},phone.ilike.${term},email.ilike.${term}`)
-      .order('supplier_name', { ascending: true });
+      .order('created_at', { ascending: false });
 
     if (tenantId) {
       query = query.eq('tenant_id', tenantId);

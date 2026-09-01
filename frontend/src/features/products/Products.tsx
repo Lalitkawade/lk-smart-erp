@@ -560,7 +560,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
     dealer_price: 0,
     mrp: 0,
     current_stock: 0,
-    min_stock_level: 10,
+    min_stock_level: 0,
     hsn: '',
     gst: 0,
     godown: '',
@@ -582,6 +582,10 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
     allow_decimal: false,
     allow_purchase_unit_selling: true,
     track_base_unit: true,
+    purchase_units: ['Nos'],
+    selling_units: ['Nos'],
+    base_unit: 'Nos',
+    conversions: [],
     isCollapsed: false,
     isUnitConversionExpanded: false
   });
@@ -650,7 +654,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
       selling_price: Number(p.selling_price || 0),
       dealer_price: Number(p.dealer_price || 0),
       mrp: Number(p.mrp || 0),
-      min_stock_level: Number(p.min_stock_level ?? 10),
+      min_stock_level: Number(p.min_stock_level ?? 0),
       hsn: p.hsn || '',
       gst: Number(p.gst || 0),
       size: p.size || '',
@@ -922,6 +926,10 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
       allow_decimal: p.allow_decimal ?? false,
       allow_purchase_unit_selling: p.allow_purchase_unit_selling ?? true,
       track_base_unit: p.track_base_unit ?? true,
+      purchase_units: p.purchase_units || [p.unit || 'Nos'],
+      selling_units: p.selling_units || [p.unit || 'Nos'],
+      base_unit: p.base_unit || p.unit || 'Nos',
+      conversions: p.conversions || [],
       isCollapsed: false,
       isUnitConversionExpanded: false
     }]);
@@ -1037,9 +1045,12 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
           barcode: item.barcode || null,
           category_name: item.category_name,
           brand_name: item.brand_name,
-          unit: item.unit || item.s_unit || 'Nos', // Base Stock Unit
-          p_unit: item.p_unit || 'Nos',             // Purchase Unit
-          s_unit: item.s_unit || item.unit || 'Nos',// Selling Unit
+          unit: item.unit || item.s_unit || 'Nos', // Legacy Unit (keep for fallback)
+          p_unit: item.p_unit || 'Nos',             // Legacy Purchase Unit
+          s_unit: item.s_unit || item.unit || 'Nos',// Legacy Selling Unit
+          base_unit: item.base_unit || item.unit || 'Nos',
+          purchase_units: item.purchase_units || [item.p_unit || 'Nos'],
+          selling_units: item.selling_units || [item.s_unit || 'Nos'],
           pieces_per_pack: conversionFactor,        // Conversion Factor (e.g. 100)
           purchase_price: pPrice,                   // Purchase Price per Purchase Unit (e.g. ₹100 / Box)
           selling_price: sPrice,                    // Selling Price per Selling Unit (e.g. ₹2 / Nos)
@@ -1070,6 +1081,22 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
 
         const savedProd = await saveProduct(productPayload as any);
         const effectiveProdId = savedProd?.id || targetProductId;
+
+        if (effectiveProdId && item.conversions && item.conversions.length > 0) {
+          try {
+            const conversionPayloads = item.conversions.map((c: any) => ({
+              tenant_id: tenantId,
+              product_id: effectiveProdId,
+              unit_code: c.unit_code,
+              base_unit_code: item.base_unit || item.unit || 'Nos',
+              conversion_factor: c.conversion_factor
+            }));
+            // @ts-ignore
+            await import('../../services/productService').then(m => m.ProductService.saveProductConversions(effectiveProdId, conversionPayloads));
+          } catch (e) {
+            console.error('Failed to save unit conversions', e);
+          }
+        }
 
         if (effectiveProdId && addedStockInflowBaseUnits !== 0 && !hasBillDetails) {
           try {
@@ -1250,8 +1277,8 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
           const currentStock = Number(p?.current_stock || 0);
           const piecesPerPack = Number(p?.pieces_per_pack || 1);
           const purchasePackQty = piecesPerPack > 1 ? (currentStock / piecesPerPack) : currentStock;
-          const minStock = Number(p?.min_stock_level || 10);
-          if (stockFilterTab === 'low') return currentStock <= minStock;
+          const minStockBase = Number(p?.min_stock_level ?? 0);
+          if (stockFilterTab === 'low') return minStockBase > 0 && currentStock <= minStockBase;
         }
         return true;
       })
@@ -1267,9 +1294,8 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
     return products.filter(p => {
       const piecesPerPack = Number(p.pieces_per_pack || 1);
       const baseStockQty = Number(p?.current_stock || 0);
-      const purchasePackQty = piecesPerPack > 1 ? (baseStockQty / piecesPerPack) : baseStockQty;
-      const minStockPacks = Number(p?.min_stock_level || 10);
-      return baseStockQty <= minStockPacks;
+      const minStockBase = Number(p?.min_stock_level ?? 0);
+      return minStockBase > 0 && baseStockQty <= minStockBase;
     }).length;
   }, [products]);
 
@@ -1639,6 +1665,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
               <thead className="bg-muted/80 border-b border-border text-textSecondary font-extrabold uppercase tracking-wider text-[11px] whitespace-nowrap">
                 <tr>
                   <th className="py-3 px-3.5 text-center whitespace-nowrap">Date & Time</th>
+                  <th className="py-3 px-3.5 text-center whitespace-nowrap">Product ID</th>
                   <th className="py-3 px-3.5 text-center whitespace-nowrap">{mode === 'stock' ? 'Product Item & Location' : 'Product Name'}</th>
                   <th className="py-3 px-3.5 text-center whitespace-nowrap">HSN Code</th>
                   {mode === 'stock' ? (
@@ -1662,9 +1689,9 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
               </thead>
               <tbody className="divide-y divide-border/40">
                 {isLoading && products.length === 0 ? (
-                  <tr><td colSpan={7} className="py-8 text-center text-textMuted text-xs font-medium">Retrieving inventory records...</td></tr>
+                  <tr><td colSpan={8} className="py-8 text-center text-textMuted text-xs font-medium">Retrieving inventory records...</td></tr>
                 ) : filtered.length === 0 ? (
-                  <tr><td colSpan={7} className="py-8 text-center text-textMuted text-xs font-medium">No matching stock items found.</td></tr>
+                  <tr><td colSpan={8} className="py-8 text-center text-textMuted text-xs font-medium">No matching stock items found.</td></tr>
                 ) : filtered.map((p) => {
                   const name = p?.product_name || 'Unnamed Product';
                   const pUnit = p.p_unit || 'Box';
@@ -1682,8 +1709,8 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                   const marginPercent = costPerPiece > 0 ? (marginPerPiece / costPerPiece) * 100 : 0;
                   const baseStockQty = Number(p?.current_stock || 0);
                   const purchasePackQty = piecesPerPack > 0 ? (baseStockQty / piecesPerPack) : baseStockQty;
-                  const minStockPacks = Number(p?.min_stock_level || 10);
-                  const isLowStock = baseStockQty <= minStockPacks;
+                  const minStockBase = Number(p?.min_stock_level ?? 0);
+                  const isLowStock = minStockBase > 0 && baseStockQty <= minStockBase;
                   const costValuation = baseStockQty * costPerPiece;
                   const retailValuation = baseStockQty * piecePrice;
 
@@ -1721,6 +1748,11 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                         <div className="font-extrabold text-foreground text-xs">{formattedProdDate}</div>
                         <div className="text-[11px] text-textMuted font-medium mt-0.5">{formattedProdTime}</div>
                       </td>
+                      <td className="py-3.5 px-4 text-center font-mono text-xs whitespace-nowrap">
+                        <span className="font-bold text-foreground bg-primary/5 px-2 py-1 rounded">
+                          {p.product_code || '-'}
+                        </span>
+                      </td>
                       <td className="py-3.5 px-4 text-center font-bold uppercase cursor-pointer"
                         onClick={() => handleShowHistory(p)}
                         title="Click to view transaction ledger details">
@@ -1745,7 +1777,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                       {mode === 'stock' ? (
                         <>
                           <td className="py-3.5 px-4 text-center font-mono text-xs font-bold text-textSecondary">
-                            {minStockPacks} {sUnit}
+                            {minStockBase} {sUnit}
                           </td>
                           <td className="py-3.5 px-4 text-center">
                             <div className="flex flex-col gap-1 max-w-[220px] mx-auto">
@@ -2975,7 +3007,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                             type="number"
                             className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none font-mono font-bold shadow-xs"
                             required
-                            value={item.min_stock_level === 0 ? '' : item.min_stock_level}
+                            value={item.min_stock_level === undefined || item.min_stock_level === null ? '' : item.min_stock_level}
                             placeholder="0"
                             onFocus={(e) => e.target.select()}
                             onChange={(e) => updateProductItem(index, { min_stock_level: e.target.value === '' ? 0 : Number(e.target.value) })}

@@ -244,7 +244,8 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
     const fetchLowStockAlerts = async () => {
       const baseAlerts = products.filter(p => {
         const baseStockQty = Number(p.current_stock || 0);
-        return baseStockQty <= (p.min_stock_level || 10);
+        const minStock = Number(p.min_stock_level ?? 0);
+        return minStock > 0 && baseStockQty <= minStock;
       });
 
       let globalRecentItems: any[] | null = null;

@@ -42,6 +42,7 @@ export type BusinessType =
 export interface CartItem {
   product: Product;
   qty: number;
+  qtyText?: string;
   rate: number;
   isLoose?: boolean;
 }

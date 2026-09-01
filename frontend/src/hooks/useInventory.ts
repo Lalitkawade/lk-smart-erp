@@ -50,7 +50,7 @@ export function useInventory(tenantId: string, _businessType?: string) {
       dealer_price: Number(productPayload.dealer_price || 0),
       mrp: Number(productPayload.mrp || 0),
       current_stock: Number(productPayload.current_stock || 0),
-      min_stock_level: Number(productPayload.min_stock_level || 10),
+      min_stock_level: Number(productPayload.min_stock_level ?? 0),
       status: 'Active',
       hsn: productPayload.hsn || null,
       size: productPayload.size || null,

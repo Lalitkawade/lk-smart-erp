@@ -179,10 +179,42 @@ export class SaleService {
    * Delete a sales invoice and its line items
    */
   static async deleteSale(id: string): Promise<ServiceResponse<null>> {
-    await supabase.from('sales_items').delete().eq('invoice_id' as any, id);
-    return handleServiceCall(
-      supabase.from('sales_invoices').delete().eq('id', id)
-    );
+    try {
+      // 1. Fetch sale with items to know what to reverse
+      const saleRes = await this.getSaleById(id);
+      if (saleRes.error || !saleRes.data) {
+        return { data: null, error: null }; // Already deleted
+      }
+
+      const items = saleRes.data.items || [];
+
+      // 2. Reverse Stock
+      for (const item of items) {
+        if (!item.product_id) continue;
+        
+        const { data: prod } = await supabase
+          .from('products')
+          .select('current_stock')
+          .eq('id', item.product_id)
+          .single();
+
+        if (prod) {
+          const currentStock = Number(prod.current_stock || 0);
+          const reversalBaseUnits = Number((item as any).base_quantity || item.qty || 0);
+          const newStock = currentStock + reversalBaseUnits; // Add back to stock
+
+          await supabase.from('products').update({ current_stock: newStock }).eq('id', item.product_id);
+        }
+      }
+
+      // 3. Delete database rows
+      await supabase.from('sales_items').delete().eq('invoice_id' as any, id);
+      return handleServiceCall(
+        supabase.from('sales_invoices').delete().eq('id', id)
+      );
+    } catch (e: any) {
+      return { data: null, error: e.message || 'Error deleting sales invoice.' };
+    }
   }
 
   /**

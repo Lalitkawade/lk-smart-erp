@@ -9,6 +9,7 @@ import { t } from '../../utils/i18n';
 
 interface Supplier {
   id: string;
+  supplier_code?: string | null;
   supplier_name: string;
   phone?: string | null;
   email?: string | null;
@@ -440,6 +441,10 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
     return map;
   }, [suppliers, contextPurchases, payments]);
 
+  const chronologicalSuppliers = useMemo(() => {
+    return [...suppliers].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  }, [suppliers]);
+
   const getVendorCode = (s: Supplier, idx?: number) => {
     if ((s as any).supplier_code) return (s as any).supplier_code;
     if (s.id && s.id.startsWith('VND-')) return s.id;
@@ -458,7 +463,8 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
 
       const name = s.supplier_name || '';
       const phone = s.phone || '';
-      const code = getVendorCode(s, idx).toLowerCase();
+      const chronologicalIdx = chronologicalSuppliers.findIndex(cs => cs.id === s.id);
+      const code = getVendorCode(s, chronologicalIdx).toLowerCase();
       return (
         name.toLowerCase().includes(search.toLowerCase()) ||
         phone.includes(search) ||
@@ -547,7 +553,8 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
                 </td>
               </tr>
             ) : filteredSuppliers.map((s, idx) => {
-              const code = getVendorCode(s, idx);
+              const chronologicalIdx = chronologicalSuppliers.findIndex(cs => cs.id === s.id);
+              const code = getVendorCode(s, chronologicalIdx);
               const stats = supplierStatsMap.get(s.id) || { totalPurchases: 0, realtimeOutstanding: Number(s.outstanding || 0), lastPurchaseDate: null, lastPaymentDate: null };
               const hasPayable = stats.realtimeOutstanding > 0;
 

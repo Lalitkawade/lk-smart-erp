@@ -1,6 +1,8 @@
 import { supabase, handleServiceCall, ServiceResponse } from './baseService';
 import type { Database } from '../types/database.types';
 
+const isValidUUID = (id: any): boolean => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
 export type PurchaseBillRow = Database['public']['Tables']['purchase_bills']['Row'];
 export type PurchaseItemRow = Database['public']['Tables']['purchase_items']['Row'];
 
@@ -68,7 +70,6 @@ export class PurchaseService {
     billPayload: Partial<PurchaseBillRow>,
     itemsPayload: Partial<PurchaseItemRow>[] = []
   ): Promise<ServiceResponse<PurchaseWithItems>> {
-    const isValidUUID = (id: any) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
     const cleanBillNumber = (billPayload.bill_number && billPayload.bill_number.trim()) ? billPayload.bill_number.trim() : 'N/A';
     const cleanSupplierName = (billPayload.supplier_name && billPayload.supplier_name.trim()) ? billPayload.supplier_name.trim() : 'GENERAL VENDOR';
 
@@ -118,7 +119,11 @@ export class PurchaseService {
         product_id: (item.product_id && isValidUUID(item.product_id)) ? item.product_id : null,
         qty: Number(item.qty || 1),
         rate: Number(item.rate || 0),
-        amount: Number(item.amount || (Number(item.qty || 1) * Number(item.rate || 0)))
+        amount: Number(item.amount || (Number(item.qty || 1) * Number(item.rate || 0))),
+        unit: item.unit || 'Nos',
+        base_quantity: Number(item.base_quantity || item.qty || 1),
+        base_unit: item.base_unit || 'Nos',
+        conversion_factor: Number(item.conversion_factor || 1)
       }));
 
       let itemsRes = await handleServiceCall<PurchaseItemRow[]>(
@@ -186,13 +191,7 @@ export class PurchaseService {
         // Process old items
         for (const item of oldItems) {
           if (!item.product_id) continue;
-          const { data: prod } = await supabase
-            .from('products')
-            .select('pieces_per_pack')
-            .eq('id', item.product_id)
-            .single();
-          const piecesPerPack = Math.max(0.000001, Number(prod?.pieces_per_pack || 1));
-          const baseQty = Number(item.qty || 0) * piecesPerPack;
+          const baseQty = Number(item.base_quantity || item.qty || 0);
 
           const current = productMap.get(item.product_id) || { oldBaseQty: 0, newBaseQty: 0 };
           productMap.set(item.product_id, { ...current, oldBaseQty: current.oldBaseQty + baseQty });
@@ -201,13 +200,7 @@ export class PurchaseService {
         // Process new items
         for (const item of itemsPayload) {
           if (!item.product_id) continue;
-          const { data: prod } = await supabase
-            .from('products')
-            .select('pieces_per_pack')
-            .eq('id', item.product_id)
-            .single();
-          const piecesPerPack = Math.max(0.000001, Number(prod?.pieces_per_pack || 1));
-          const baseQty = Number(item.qty || 0) * piecesPerPack;
+          const baseQty = Number(item.base_quantity || item.qty || 0);
 
           const current = productMap.get(item.product_id) || { oldBaseQty: 0, newBaseQty: 0 };
           productMap.set(item.product_id, { ...current, newBaseQty: current.newBaseQty + baseQty });
@@ -296,7 +289,11 @@ export class PurchaseService {
             product_id: (item.product_id && isValidUUID(item.product_id)) ? item.product_id : null,
             qty: Number(item.qty || 1),
             rate: Number(item.rate || 0),
-            amount: Number(item.amount || (Number(item.qty || 1) * Number(item.rate || 0)))
+            amount: Number(item.amount || (Number(item.qty || 1) * Number(item.rate || 0))),
+            unit: item.unit || 'Nos',
+            base_quantity: Number(item.base_quantity || item.qty || 1),
+            base_unit: item.base_unit || 'Nos',
+            conversion_factor: Number(item.conversion_factor || 1)
           }));
 
           const itemsRes = await handleServiceCall<PurchaseItemRow[]>(
@@ -341,7 +338,6 @@ export class PurchaseService {
       const items = bill.items || [];
 
       // 2. Pre-validate stock availability for all items before any database mutations
-      const isValidUUID = (idVal: any) => typeof idVal === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idVal);
 
       for (const item of items) {
         if (!item.product_id || !isValidUUID(item.product_id)) continue;
@@ -354,8 +350,7 @@ export class PurchaseService {
 
         if (prod) {
           const currentStock = Number(prod.current_stock || 0);
-          const piecesPerPack = Math.max(0.000001, Number(prod.pieces_per_pack || 1));
-          const reversalBaseUnits = Number(item.qty || 0) * piecesPerPack;
+          const reversalBaseUnits = Number(item.base_quantity || item.qty || 0);
 
           if (currentStock < reversalBaseUnits) {
             const prodName = prod.product_name || item.product_name || 'Product';
@@ -373,14 +368,13 @@ export class PurchaseService {
 
         const { data: prod } = await supabase
           .from('products')
-          .select('current_stock, pieces_per_pack')
+          .select('current_stock')
           .eq('id', item.product_id)
           .single();
 
         if (prod) {
           const currentStock = Number(prod.current_stock || 0);
-          const piecesPerPack = Math.max(0.000001, Number(prod.pieces_per_pack || 1));
-          const reversalBaseUnits = Number(item.qty || 0) * piecesPerPack;
+          const reversalBaseUnits = Number(item.base_quantity || item.qty || 0);
           const newStock = Math.max(0, currentStock - reversalBaseUnits);
 
           await supabase.from('products').update({ current_stock: newStock }).eq('id', item.product_id);

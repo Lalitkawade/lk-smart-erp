@@ -376,7 +376,11 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
         gst_percent: Number(p?.gst || 18),
         qty: Number(item.qty || 1),
         rate: Number(item.rate || 0),
-        amount: Number(item.qty || 1) * Number(item.rate || 0)
+        amount: Number(item.rate || 0) * Number(item.qty || 1),
+        unit: p?.p_unit || p?.purchase_units?.[0] || 'Nos',
+        base_unit: p?.base_unit || p?.unit || 'Nos',
+        base_quantity: Number(item.qty || 1) * Math.max(0.000001, Number(p?.pieces_per_pack || 1)),
+        conversion_factor: Math.max(0.000001, Number(p?.pieces_per_pack || 1))
       });
     }
 

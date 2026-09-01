@@ -41,7 +41,7 @@ export class ProductService {
     let query = supabase
       .from('products')
       .select('*')
-      .or(`product_name.ilike.${term},category_name.ilike.${term},barcode.ilike.${term}`)
+      .or(`product_name.ilike.${term},category_name.ilike.${term},barcode.ilike.${term},product_code.ilike.${term}`)
       .order('product_name', { ascending: true });
 
     if (tenantId) {
@@ -54,9 +54,37 @@ export class ProductService {
    * Create a new product preserving provided ID or generated UUID
    */
   static async createProduct(productData: Partial<Product>): Promise<ServiceResponse<Product>> {
-    return handleServiceCall(
-      supabase.from('products').insert([productData as any]).select().single()
-    );
+    try {
+      if (!productData.product_code) {
+        let query = supabase
+          .from('products')
+          .select('product_code')
+          .not('product_code', 'is', null)
+          .order('product_code', { ascending: false })
+          .limit(1);
+          
+        if (productData.tenant_id) {
+          query = query.eq('tenant_id', productData.tenant_id);
+        }
+
+        const { data: codeData, error: codeError } = await query.maybeSingle();
+        
+        let nextNumber = 1;
+        if (codeData && codeData.product_code) {
+          const match = codeData.product_code.match(/PRD-(\d+)/);
+          if (match && match[1]) {
+            nextNumber = parseInt(match[1], 10) + 1;
+          }
+        }
+        productData.product_code = `PRD-${nextNumber.toString().padStart(4, '0')}`;
+      }
+
+      return handleServiceCall(
+        supabase.from('products').insert([productData as any]).select().single()
+      );
+    } catch (error: any) {
+      return { data: null, error };
+    }
   }
 
   /**
@@ -119,5 +147,40 @@ export class ProductService {
 
     const { data } = await query;
     return Boolean(data && data.length > 0);
+  }
+
+  /**
+   * Fetch all unit conversions for a specific product
+   */
+  static async fetchProductConversions(productId: string): Promise<ServiceResponse<any[]>> {
+    return handleServiceCall(
+      supabase.from('product_unit_conversions').select('*').eq('product_id', productId)
+    );
+  }
+
+  /**
+   * Fetch all unit conversions globally
+   */
+  static async fetchAllConversions(tenantId?: string): Promise<ServiceResponse<any[]>> {
+    let query = supabase.from('product_unit_conversions').select('*');
+    if (tenantId) query = query.eq('tenant_id', tenantId);
+    return handleServiceCall(query);
+  }
+
+  /**
+   * Replace all product conversions safely
+   */
+  static async saveProductConversions(productId: string, conversions: any[]): Promise<ServiceResponse<null>> {
+    try {
+      // First delete existing ones
+      await supabase.from('product_unit_conversions').delete().eq('product_id', productId);
+      
+      if (conversions && conversions.length > 0) {
+        await supabase.from('product_unit_conversions').insert(conversions);
+      }
+      return { data: null, error: null };
+    } catch (e: any) {
+      return { data: null, error: e.message || 'Failed to save conversions' };
+    }
   }
 }

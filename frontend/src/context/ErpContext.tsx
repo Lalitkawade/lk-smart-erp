@@ -59,7 +59,7 @@ export const ErpDataProvider: React.FC<{ children: ReactNode }> = ({ children })
           supabase.from('expenses').select('*').order('expense_date', { ascending: false }),
           supabase.from('products').select('*').order('product_name', { ascending: true }),
           supabase.from('customers').select('*').order('customer_name', { ascending: true }),
-          supabase.from('suppliers').select('*').order('supplier_name', { ascending: true }),
+          supabase.from('suppliers').select('*').order('created_at', { ascending: false }),
           supabase.from('customer_payments').select('*').order('payment_date', { ascending: false }),
           supabase.from('supplier_payments').select('*').order('payment_date', { ascending: false }),
           supabase.from('settings').select('*').limit(1).maybeSingle(),
