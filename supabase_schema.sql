@@ -29,6 +29,7 @@ DROP TABLE IF EXISTS sales_returns CASCADE;
 DROP TABLE IF EXISTS sales_items CASCADE;
 DROP TABLE IF EXISTS sales_invoices CASCADE;
 DROP TABLE IF EXISTS expenses CASCADE;
+DROP TABLE IF EXISTS product_unit_conversions CASCADE;
 DROP TABLE IF EXISTS products CASCADE;
 DROP TABLE IF EXISTS suppliers CASCADE;
 DROP TABLE IF EXISTS customers CASCADE;
@@ -87,6 +88,7 @@ ON CONFLICT (tenant_id) DO NOTHING;
 CREATE TABLE suppliers (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
+    supplier_code TEXT,
     supplier_name TEXT NOT NULL,
     phone TEXT,
     email TEXT,
@@ -118,6 +120,7 @@ CREATE TABLE products (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
     product_name TEXT NOT NULL,
+    product_code TEXT UNIQUE,
     sku TEXT,
     barcode TEXT,
     category_name TEXT DEFAULT 'General',
@@ -150,10 +153,25 @@ CREATE TABLE products (
     secondary_unit TEXT,
     conversion_rate NUMERIC(10, 4) DEFAULT 1.0000,
     secondary_selling_price NUMERIC(12, 2) DEFAULT 0.00,
+    purchase_units TEXT[] DEFAULT ARRAY['Pcs'],
+    selling_units TEXT[] DEFAULT ARRAY['Pcs'],
+    base_unit TEXT DEFAULT 'Pcs',
     supplier_id UUID REFERENCES suppliers(id) ON DELETE SET NULL,
     supplier_name TEXT,
     supplier_phone TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 7a. PRODUCT UNIT CONVERSIONS TABLE
+CREATE TABLE product_unit_conversions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
+    product_id UUID REFERENCES products(id) ON DELETE CASCADE,
+    unit_code TEXT NOT NULL,
+    base_unit_code TEXT NOT NULL,
+    conversion_factor NUMERIC(14, 4) NOT NULL DEFAULT 1.0000,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(product_id, unit_code)
 );
 
 -- 8. EXPENSES TABLE
@@ -195,7 +213,11 @@ CREATE TABLE sales_items (
     product_id UUID REFERENCES products(id) ON DELETE RESTRICT,
     qty NUMERIC(12, 2) DEFAULT 1.00,
     rate NUMERIC(12, 2) DEFAULT 0.00,
-    amount NUMERIC(12, 2) DEFAULT 0.00
+    amount NUMERIC(12, 2) DEFAULT 0.00,
+    unit TEXT DEFAULT 'Pcs',
+    base_quantity NUMERIC(12, 2) DEFAULT 1.00,
+    base_unit TEXT DEFAULT 'Pcs',
+    conversion_factor NUMERIC(14, 4) DEFAULT 1.0000
 );
 
 -- 10a. SALES RETURNS TABLE
@@ -218,7 +240,11 @@ CREATE TABLE sales_return_items (
     sales_item_id UUID REFERENCES sales_items(id) ON DELETE CASCADE,
     product_id UUID REFERENCES products(id) ON DELETE RESTRICT,
     return_qty NUMERIC(12, 2) DEFAULT 1.00,
-    refund_amount NUMERIC(12, 2) DEFAULT 0.00
+    refund_amount NUMERIC(12, 2) DEFAULT 0.00,
+    return_unit TEXT DEFAULT 'Pcs',
+    base_return_qty NUMERIC(12, 2) DEFAULT 1.00,
+    base_unit TEXT DEFAULT 'Pcs',
+    conversion_factor NUMERIC(14, 4) DEFAULT 1.0000
 );
 
 
@@ -249,7 +275,11 @@ CREATE TABLE purchase_items (
     gst_percent NUMERIC(5, 2) DEFAULT 0.00,
     qty NUMERIC(12, 2) DEFAULT 1.00,
     rate NUMERIC(12, 2) DEFAULT 0.00,
-    amount NUMERIC(12, 2) DEFAULT 0.00
+    amount NUMERIC(12, 2) DEFAULT 0.00,
+    unit TEXT DEFAULT 'Pcs',
+    base_quantity NUMERIC(12, 2) DEFAULT 1.00,
+    base_unit TEXT DEFAULT 'Pcs',
+    conversion_factor NUMERIC(14, 4) DEFAULT 1.0000
 );
 
 -- 13. CUSTOMER PAYMENTS TABLE
@@ -356,6 +386,7 @@ ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE suppliers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE customers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE products ENABLE ROW LEVEL SECURITY;
+ALTER TABLE product_unit_conversions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE expenses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sales_invoices ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sales_items ENABLE ROW LEVEL SECURITY;
@@ -384,6 +415,7 @@ CREATE POLICY "Tenant Isolation: settings" ON settings FOR ALL TO authenticated 
 CREATE POLICY "Tenant Isolation: suppliers" ON suppliers FOR ALL TO authenticated USING (tenant_id = public.get_auth_tenant_id() OR tenant_id IS NULL) WITH CHECK (tenant_id = public.get_auth_tenant_id());
 CREATE POLICY "Tenant Isolation: customers" ON customers FOR ALL TO authenticated USING (tenant_id = public.get_auth_tenant_id() OR tenant_id IS NULL) WITH CHECK (tenant_id = public.get_auth_tenant_id());
 CREATE POLICY "Tenant Isolation: products" ON products FOR ALL TO authenticated USING (tenant_id = public.get_auth_tenant_id() OR tenant_id IS NULL) WITH CHECK (tenant_id = public.get_auth_tenant_id());
+CREATE POLICY "Tenant Isolation: product_unit_conversions" ON product_unit_conversions FOR ALL TO authenticated USING (tenant_id = public.get_auth_tenant_id() OR tenant_id IS NULL) WITH CHECK (tenant_id = public.get_auth_tenant_id());
 CREATE POLICY "Tenant Isolation: expenses" ON expenses FOR ALL TO authenticated USING (tenant_id = public.get_auth_tenant_id() OR tenant_id IS NULL) WITH CHECK (tenant_id = public.get_auth_tenant_id());
 CREATE POLICY "Tenant Isolation: sales_invoices" ON sales_invoices FOR ALL TO authenticated USING (tenant_id = public.get_auth_tenant_id() OR tenant_id IS NULL) WITH CHECK (tenant_id = public.get_auth_tenant_id());
 CREATE POLICY "Tenant Isolation: sales_items" ON sales_items FOR ALL TO authenticated USING (EXISTS (SELECT 1 FROM sales_invoices WHERE sales_invoices.id = sales_items.invoice_id AND (sales_invoices.tenant_id = public.get_auth_tenant_id() OR sales_invoices.tenant_id IS NULL)));
