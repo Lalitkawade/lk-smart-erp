@@ -6,7 +6,6 @@
     "frontend"
   ],
   "scripts": {
-    "postinstall": "npm --prefix frontend install --legacy-peer-deps",
     "dev": "npm --prefix frontend run dev",
     "build": "npm --prefix frontend install --legacy-peer-deps && npm --prefix frontend run build",
     "preview": "npm --prefix frontend run preview"
