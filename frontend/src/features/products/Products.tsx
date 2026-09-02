@@ -505,6 +505,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
     supplier_name: '',
     supplier_phone: '',
     pieces_per_pack: 1,
+    conversion_lhs: 1,
     piece_selling_price: 0,
     additional_stock: 0,
     purchase_date: new Date().toISOString().slice(0, 10),
@@ -579,6 +580,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
       p_unit: p.p_unit || p.unit || 'Box',
       s_unit: p.s_unit || p.unit || 'Nos',
       pieces_per_pack: Number(p.pieces_per_pack || 1),
+      conversion_lhs: 1,
       purchase_price: Number(p.purchase_price || 0),
       selling_price: Number(p.selling_price || 0),
       dealer_price: Number(p.dealer_price || 0),
@@ -849,6 +851,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
       supplier_name: p.supplier_name || '',
       supplier_phone: p.supplier_phone || '',
       pieces_per_pack: p.pieces_per_pack || 1,
+      conversion_lhs: 1,
       piece_selling_price: p.piece_selling_price || 0,
       additional_stock: 0,
       purchase_date: new Date().toISOString().slice(0, 10),
@@ -935,7 +938,9 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
           existingStock = Number(matchedExistingProduct.current_stock || 0);
         }
 
-        const conversionFactor = Math.max(0.000001, Number(item.pieces_per_pack || 1));
+        // We now support LHS (e.g. 0.5 Box = 100 Pcs). Conversion factor is RHS / LHS.
+        const conversionLhs = Math.max(0.000001, Number(item.conversion_lhs || 1));
+        const conversionFactor = Math.max(0.000001, Number(item.pieces_per_pack || 1)) / conversionLhs;
         const pPrice = Number(item.purchase_price || 0); // Price per Purchase Unit (e.g. ₹300 / Box)
         const sPrice = Number(item.selling_price || 0);   // Price per Selling Unit (e.g. ₹5 / Pcs)
         const calculatedBaseUnitCost = conversionFactor > 0 ? (pPrice / conversionFactor) : pPrice;
@@ -2423,7 +2428,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                               <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wide flex items-center gap-2 flex-wrap">
                                 <span>Units & Dual-Unit Conversion</span>
                                 <span className="text-[10px] font-extrabold text-blue-600 bg-blue-50 dark:bg-blue-950 px-2 py-0.5 rounded border border-blue-200 dark:border-blue-800">
-                                  1 {item.p_unit} = {item.pieces_per_pack ?? 0} {item.unit}
+                                  {item.conversion_lhs || 1} {item.p_unit} = {item.pieces_per_pack ?? 0} {item.unit}
                                 </span>
                               </h4>
                               <p className="text-[11px] text-slate-500 dark:text-slate-400">Configure purchase, selling, and inventory base unit conversions</p>
@@ -2505,7 +2510,18 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
 
                               <div className="bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-800 rounded-xl p-3.5 flex flex-wrap items-center justify-center gap-3 shadow-sm">
                                 <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700">
-                                  <span className="font-black text-sm text-slate-900 dark:text-slate-100 font-mono">1</span>
+                                  <input
+                                    type="number"
+                                    step="any"
+                                    min="0"
+                                    className="w-16 bg-transparent text-center text-sm font-black text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-600/30 rounded"
+                                    value={item.conversion_lhs === 0 ? 0 : (item.conversion_lhs ?? '')}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      updateProductItem(index, { conversion_lhs: val as any });
+                                    }}
+                                    placeholder="1"
+                                  />
                                   <select
                                     className="bg-transparent text-xs font-bold text-blue-600 dark:text-blue-400 focus:outline-none cursor-pointer"
                                     value={item.p_unit}
@@ -2530,12 +2546,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                                     value={item.pieces_per_pack === 0 ? 0 : (item.pieces_per_pack ?? '')}
                                     onChange={(e) => {
                                       const val = e.target.value;
-                                      if (val === '') {
-                                        updateProductItem(index, { pieces_per_pack: '' });
-                                      } else {
-                                        const num = Number(val);
-                                        updateProductItem(index, { pieces_per_pack: isNaN(num) ? '' : num });
-                                      }
+                                      updateProductItem(index, { pieces_per_pack: val as any });
                                     }}
                                     placeholder="1"
                                   />
@@ -2555,7 +2566,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                                 <i className="fa-solid fa-eye text-blue-200"></i>
                                 <span>Live Conversion Preview:</span>
                                 <span className="font-mono text-amber-300 font-black text-sm">
-                                  1 {item.p_unit} = {item.pieces_per_pack ?? 0} {item.unit}
+                                  {item.conversion_lhs || 1} {item.p_unit} = {item.pieces_per_pack ?? 0} {item.unit}
                                 </span>
                               </div>
                             </div>
@@ -2848,20 +2859,20 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
 
                                 <div className="bg-slate-800/90 p-2 rounded-xl border border-slate-700">
                                   <span className="text-slate-400 block text-[9.5px] font-sans">Conversion:</span>
-                                  <strong className="text-amber-300 text-xs">1 {item.p_unit || 'Box'} = {item.pieces_per_pack || 1} {item.unit || 'Pcs'}</strong>
+                                  <strong className="text-amber-300 text-xs">{item.conversion_lhs || 1} {item.p_unit || 'Box'} = {item.pieces_per_pack || 1} {item.unit || 'Pcs'}</strong>
                                 </div>
 
                                 <div className="bg-slate-800/90 p-2 rounded-xl border border-slate-700">
                                   <span className="text-slate-400 block text-[9.5px] font-sans">Stock Added:</span>
                                   <strong className="text-emerald-400 text-xs">
-                                    +{Number(item.additional_stock || 0) * Number(item.pieces_per_pack || 1)} {item.unit || 'Pcs'}
+                                    +{Number(item.additional_stock || 0) * (Number(item.pieces_per_pack || 1) / Number(item.conversion_lhs || 1))} {item.unit || 'Pcs'}
                                   </strong>
                                 </div>
 
                                 <div className="col-span-2 sm:col-span-1 bg-emerald-950/80 p-2 rounded-xl border border-emerald-500/60">
                                   <span className="text-emerald-300 block text-[9.5px] font-sans font-bold">Updated Stock:</span>
                                   <strong className="text-emerald-400 text-xs font-black">
-                                    {Number(item.current_stock || 0) + (Number(item.additional_stock || 0) * Number(item.pieces_per_pack || 1))} {item.unit || 'Pcs'}
+                                    {Number(item.current_stock || 0) + (Number(item.additional_stock || 0) * (Number(item.pieces_per_pack || 1) / Number(item.conversion_lhs || 1)))} {item.unit || 'Pcs'}
                                   </strong>
                                 </div>
                               </div>
@@ -2887,8 +2898,8 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                                   placeholder={`Enter opening qty in ${item.p_unit || 'Box'}...`}
                                   onFocus={(e) => e.target.select()}
                                   onChange={(e) => {
-                                    const val = e.target.value === '' ? 0 : Number(e.target.value);
-                                    updateProductItem(index, { additional_stock: val, current_stock: val });
+                                    const val = e.target.value;
+                                    updateProductItem(index, { additional_stock: val as any, current_stock: val as any });
                                   }}
                                 />
                                 <span className="absolute right-3 top-2.5 text-xs font-bold text-slate-500 font-mono uppercase">
@@ -2916,13 +2927,13 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
 
                                 <div className="bg-slate-800/90 p-2 rounded-xl border border-slate-700">
                                   <span className="text-slate-400 block text-[9.5px] font-sans">Conversion Rule:</span>
-                                  <strong className="text-amber-300 text-xs">1 {item.p_unit || 'Box'} = {item.pieces_per_pack || 1} {item.unit || 'Pcs'}</strong>
+                                  <strong className="text-amber-300 text-xs">{item.conversion_lhs || 1} {item.p_unit || 'Box'} = {item.pieces_per_pack || 1} {item.unit || 'Pcs'}</strong>
                                 </div>
 
                                 <div className="bg-emerald-950/80 p-2 rounded-xl border border-emerald-500/60">
                                   <span className="text-emerald-300 block text-[9.5px] font-sans font-bold">Initial Base Stock Saved:</span>
                                   <strong className="text-emerald-400 text-xs font-black">
-                                    {Number(item.additional_stock || item.current_stock || 0) * Number(item.pieces_per_pack || 1)} {item.unit || 'Pcs'}
+                                    {Number(item.additional_stock || item.current_stock || 0) * (Number(item.pieces_per_pack || 1) / Number(item.conversion_lhs || 1))} {item.unit || 'Pcs'}
                                   </strong>
                                 </div>
                               </div>
