@@ -96,9 +96,20 @@ export class SaleService {
         invoice_id: newSale.id
       }));
 
-      const itemsRes = await handleServiceCall<SalesItemRow[]>(
+      let itemsRes = await handleServiceCall<SalesItemRow[]>(
         supabase.from('sales_items').insert(cleanItems as any).select()
       );
+
+      if (itemsRes.error && (itemsRes.error.includes('Could not find') || itemsRes.error.includes('column'))) {
+        console.warn("⚠️ Database schema is missing new columns (run migration script!). Falling back to legacy insert...");
+        const legacyItems = cleanItems.map(it => {
+          const { base_quantity, base_unit, conversion_factor, ...rest } = it as any;
+          return rest;
+        });
+        itemsRes = await handleServiceCall<SalesItemRow[]>(
+          supabase.from('sales_items').insert(legacyItems as any).select()
+        );
+      }
 
       return {
         data: {
@@ -152,9 +163,20 @@ export class SaleService {
           tenant_id: updatedSale.tenant_id
         }));
 
-        const itemsRes = await handleServiceCall<SalesItemRow[]>(
+        let itemsRes = await handleServiceCall<SalesItemRow[]>(
           supabase.from('sales_items').insert(cleanItems as any).select()
         );
+
+        if (itemsRes.error && (itemsRes.error.includes('Could not find') || itemsRes.error.includes('column'))) {
+          console.warn("⚠️ Database schema is missing new columns (run migration script!). Falling back to legacy insert...");
+          const legacyItems = cleanItems.map(it => {
+            const { base_quantity, base_unit, conversion_factor, ...rest } = it as any;
+            return rest;
+          });
+          itemsRes = await handleServiceCall<SalesItemRow[]>(
+            supabase.from('sales_items').insert(legacyItems as any).select()
+          );
+        }
 
         return {
           data: {

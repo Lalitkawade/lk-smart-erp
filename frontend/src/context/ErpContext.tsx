@@ -68,6 +68,8 @@ export const ErpDataProvider: React.FC<{ children: ReactNode }> = ({ children })
         ]);
 
         const allPurchaseItems = (purchaseItemsRes && purchaseItemsRes.status === 'fulfilled' && !purchaseItemsRes.value.error) ? (purchaseItemsRes.value.data as any[]) : [];
+        console.log("[DEBUG ERP] purchaseItemsRes status:", purchaseItemsRes?.status, "error:", purchaseItemsRes?.status === 'fulfilled' ? purchaseItemsRes.value.error : 'rejected');
+        console.log("[DEBUG ERP] allPurchaseItems length:", allPurchaseItems.length);
         if (salesRes.status === 'fulfilled' && !salesRes.value.error && salesRes.value.data) {
           const allReturns = (returnsRes.status === 'fulfilled' && !returnsRes.value.error) ? returnsRes.value.data as any[] : [];
           
@@ -102,6 +104,9 @@ export const ErpDataProvider: React.FC<{ children: ReactNode }> = ({ children })
                }
                return item;
             });
+            if (p.id === 'STOCK-EDIT' || (p.bill_number && p.bill_number.includes('STOCK-EDIT'))) {
+               console.log(`[DEBUG ERP] Bill ${p.id} has ${myItems.length} myItems, rawItems length: ${rawItems.length}, resolvedItems length: ${resolvedItems.length}`);
+            }
 
             return {
               ...p,

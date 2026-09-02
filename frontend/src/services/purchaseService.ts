@@ -117,6 +117,7 @@ export class PurchaseService {
       const cleanItems = itemsPayload.map(item => ({
         bill_id: createdBill.id,
         product_id: (item.product_id && isValidUUID(item.product_id)) ? item.product_id : null,
+        product_name: item.product_name || 'Procured Item',
         qty: Number(item.qty || 1),
         rate: Number(item.rate || 0),
         amount: Number(item.amount || (Number(item.qty || 1) * Number(item.rate || 0))),
@@ -129,6 +130,18 @@ export class PurchaseService {
       let itemsRes = await handleServiceCall<PurchaseItemRow[]>(
         supabase.from('purchase_items').insert(cleanItems as any).select()
       );
+
+      if (itemsRes.error && (itemsRes.error.includes('Could not find') || itemsRes.error.includes('column'))) {
+        console.warn("⚠️ Database schema is missing new columns (run migration script!). Falling back to legacy insert...");
+        const legacyItems = cleanItems.map(it => {
+          const { base_quantity, base_unit, conversion_factor, ...rest } = it as any;
+          return rest;
+        });
+        itemsRes = await handleServiceCall<PurchaseItemRow[]>(
+          supabase.from('purchase_items').insert(legacyItems as any).select()
+        );
+        if (itemsRes.error) console.error("Legacy insert failed:", itemsRes.error);
+      }
 
       if (itemsRes.error) {
         console.warn("⚠️ Error inserting purchase_items, retrying without product_id...", itemsRes.error);
@@ -296,9 +309,28 @@ export class PurchaseService {
             conversion_factor: Number(item.conversion_factor || 1)
           }));
 
-          const itemsRes = await handleServiceCall<PurchaseItemRow[]>(
+          let itemsRes = await handleServiceCall<PurchaseItemRow[]>(
             supabase.from('purchase_items').insert(cleanItems as any).select()
           );
+
+          if (itemsRes.error && (itemsRes.error.includes('Could not find') || itemsRes.error.includes('column'))) {
+            console.warn("⚠️ Database schema is missing new columns (run migration script!). Falling back to legacy insert...");
+            const legacyItems = cleanItems.map(it => {
+              const { base_quantity, base_unit, conversion_factor, ...rest } = it as any;
+              return rest;
+            });
+            itemsRes = await handleServiceCall<PurchaseItemRow[]>(
+              supabase.from('purchase_items').insert(legacyItems as any).select()
+            );
+          }
+
+          if (itemsRes.error) {
+            console.warn("⚠️ Error updating purchase_items, retrying without product_id...", itemsRes.error);
+            const safeItems = cleanItems.map(it => ({ ...it, product_id: null }));
+            itemsRes = await handleServiceCall<PurchaseItemRow[]>(
+              supabase.from('purchase_items').insert(safeItems as any).select()
+            );
+          }
 
           return {
             data: {

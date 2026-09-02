@@ -46,48 +46,7 @@ const resolveBillProcuredItems = (b: any, productsList: any[]) => {
   }
 
 
-  // 3. Smart catalog matching by vendor and purchase cost matching
-  const supId = b.supplier_id;
-  const supName = (b.supplier_name || '').trim().toUpperCase();
-
-  const vendorProducts = (productsList || []).filter((p: any) => {
-    if (supId && p.supplier_id === supId) return true;
-    if (supName && supName !== 'GENERAL VENDOR' && p.supplier_name && p.supplier_name.trim().toUpperCase() === supName) return true;
-    return false;
-  });
-
-  if (vendorProducts.length > 0) {
-    const mapped = vendorProducts.map((p: any) => {
-      const pPrice = Number(p.purchase_price || 0);
-      const piecesPerPack = Math.max(0.000001, Number(p.pieces_per_pack || 1));
-      const baseStock = Number(p.current_stock || 0);
-      const purchasePackQty = piecesPerPack > 1 ? Math.max(1, Math.round(baseStock / piecesPerPack)) : Math.max(1, baseStock);
-      return {
-        product_name: p.product_name || 'Procured Product Item',
-        qty: purchasePackQty,
-        rate: pPrice,
-        amount: purchasePackQty * pPrice
-      };
-    });
-
-    const totalMappedCost = mapped.reduce((sum: number, item: any) => sum + item.amount, 0);
-    const billCost = Number(b.total_amount || 0);
-
-    // Only return catalog items if their total cost sum equals or closely matches the bill total cost
-    if (mapped.length === 1 || Math.abs(totalMappedCost - billCost) < 1.0) {
-      return mapped;
-    }
-  }
-
-  // 4. Fallback if no specific products matched
-  return [
-    {
-      product_name: b.supplier_name ? `Procured Material (${b.supplier_name})` : 'Procured Material Item',
-      qty: 1,
-      rate: Number(b.total_amount || 0),
-      amount: Number(b.total_amount || 0)
-    }
-  ];
+  return [];
 };
 
 export default function Products({ tenantId, businessType, mode = 'catalog', autoOpenModal, autoOpenPurchaseModal, onModalClosed }: ProductsProps) {
@@ -336,6 +295,9 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
     const actualBillPurchases: any[] = [];
     const list: any[] = purchasesList || [];
 
+    console.log("[DEBUG] Evaluating product history for:", p.product_name, p.id);
+    console.log("[DEBUG] Total purchasesList length:", (purchasesList || []).length);
+
     list.forEach((bill: any) => {
       const resolvedItems = resolveBillProcuredItems(bill, products);
       const supName = bill.supplier_name || (bill.supplier_id ? suppliers.find((s: any) => s.id === bill.supplier_id)?.supplier_name : '') || prodSupplierName || 'Vendor Supplier';
@@ -345,8 +307,13 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
         const itemProdName = item.product_name || item.product?.product_name || products.find(pr => pr.id === itemProdId)?.product_name;
 
         const isMatch = (itemProdId && String(itemProdId) === String(p.id)) ||
-          (itemProdName && p.product_name && itemProdName.toLowerCase().trim() === p.product_name.toLowerCase().trim()) ||
-          (resolvedItems.length === 1 && supName && prodSupplierName && supName.trim().toUpperCase() === prodSupplierName.trim().toUpperCase());
+          (itemProdName && p.product_name && itemProdName.toLowerCase().trim() === p.product_name.toLowerCase().trim());
+
+        if (String(itemProdId) === String(p.id) || (itemProdName && p.product_name && itemProdName.toLowerCase().trim() === p.product_name.toLowerCase().trim())) {
+           console.log("[DEBUG] FOUND POTENTIAL MATCH! Bill:", bill.id, "ItemProdId:", itemProdId, "ItemProdName:", itemProdName, "isMatch:", isMatch);
+        } else {
+           console.log("[DEBUG] NO MATCH. Bill:", bill.id, "ItemProdId:", itemProdId, "ItemProdName:", itemProdName, "Target:", p.id, p.product_name);
+        }
 
         if (isMatch) {
           const rawQty = Number(item.qty || item.quantity || 1);
@@ -380,46 +347,8 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
       });
     });
 
-    const matchedPurchases: any[] = [];
-    matchedPurchases.push(...actualBillPurchases);
-
-    // 2. Read all persisted individual stock edit logs for this product (REMOVED - Now rely strictly on cloud purchases)
-
-    // 3. Calculate sum of base stock accounted for by purchase bills and stock logs
-    const totalAccountedQty = matchedPurchases.reduce((sum, item) => sum + Number(item.base_qty || 0), 0);
-    const unbilledStockDifference = Math.max(0, Number(p.current_stock || 0) - totalAccountedQty);
-
-    // If current stock exceeds total accounted quantity, add fallback entry for remaining stock
-    if (unbilledStockDifference > 0) {
-      const catalogPurchasePrice = Number(p.purchase_price || 0);
-      const extraPackQty = piecesPerPack > 1 ? (unbilledStockDifference / piecesPerPack) : unbilledStockDifference;
-      const extraPackRate = catalogPurchasePrice;
-      const extraPieceRate = pieceCostRate;
-      const extraAmount = extraPackQty * extraPackRate;
-
-      const isOpeningOnly = matchedPurchases.length === 0;
-      const fallbackSupName = prodSupplierName || (isOpeningOnly ? 'Catalog Opening Stock' : 'Direct Stock Addition / Manual Edit');
-
-      matchedPurchases.push({
-        id: (isOpeningOnly ? 'init-' : 'edit-adj-') + p.id + '-' + (p.updated_at || Date.now()),
-        date: (isOpeningOnly ? p.created_at : p.updated_at) || new Date().toISOString(),
-        bill_number: isOpeningOnly ? 'INIT-STOCK' : 'STOCK-EDIT',
-        supplier_name: fallbackSupName,
-        payment_mode: isOpeningOnly ? 'Opening Stock' : 'Stock Adjustment',
-        pack_qty: extraPackQty,
-        base_qty: unbilledStockDifference,
-        pack_rate: extraPackRate,
-        piece_rate: extraPieceRate,
-        selling_price: pieceSellingRate,
-        amount: extraAmount,
-        p_unit: pUnit,
-        s_unit: sUnit,
-        isDualUnit
-      });
-    }
-
     // Sort entries chronologically
-    const finalPurchases = [...matchedPurchases];
+    const finalPurchases = [...actualBillPurchases];
     finalPurchases.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
     for (let i = 0; i < finalPurchases.length; i++) {
@@ -1129,6 +1058,8 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
             if (pRes.error) {
               console.error('Failed to sync stock edit to cloud database:', pRes.error);
               alert('Cloud Sync Failed: ' + pRes.error + ' | Please tell the AI assistant this exact error message!');
+            } else {
+              if (refreshAllData) await refreshAllData();
             }
           } catch (e: any) {
             console.error('Failed to store stock edit log:', e);
@@ -3412,35 +3343,10 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
               </div>
             )}
 
-            {/* History Tab Selector */}
+            {/* Header / Table Title */}
             <div className="flex items-center justify-between border-b border-border pb-2 flex-wrap gap-2">
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setHistoryTab('purchases')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition cursor-pointer flex items-center gap-1.5 ${historyTab === 'purchases'
-                      ? 'bg-primary text-white shadow-xs'
-                      : 'bg-background text-textSecondary hover:text-foreground border border-border'
-                    }`}
-                >
-                  <i className="fa-solid fa-truck-ramp-box text-xs"></i>
-                  <span>Supplier Inflows</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setHistoryTab('sales')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition cursor-pointer flex items-center gap-1.5 ${historyTab === 'sales'
-                      ? 'bg-primary text-white shadow-xs'
-                      : 'bg-background text-textSecondary hover:text-foreground border border-border'
-                    }`}
-                >
-                  <i className="fa-solid fa-cart-shopping text-xs"></i>
-                  <span>Sales Outflows ({prodSalesHistory.length})</span>
-                </button>
-              </div>
-
-              <div className="text-[11px] font-mono text-textMuted font-semibold">
-                {historyTab === 'purchases' ? '📊 Compare Supplier Rates & Price Variance' : '🛒 Sales History'}
+              <div className="text-[11px] font-mono text-textMuted font-semibold uppercase tracking-wider">
+                📊 Compare Supplier Rates & Price Variance
               </div>
             </div>
 
@@ -3450,23 +3356,18 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                 <thead>
                   <tr className="border-b border-border bg-background/50 text-textPrimary uppercase font-extrabold tracking-wider text-[11px] whitespace-nowrap">
                     <th className="p-3 text-center">#</th>
-                    <th className="p-3">{historyTab === 'purchases' ? 'Inflow Date & Time' : 'Sale Date & Time'}</th>
-                    <th className="p-3">{historyTab === 'purchases' ? 'Supplier / Vendor' : 'Customer Name'}</th>
+                    <th className="p-3">Inflow Date & Time</th>
+                    <th className="p-3">Supplier / Vendor</th>
                     <th className="p-3">Ref / Invoice No.</th>
-                    <th className="p-3 text-center">{historyTab === 'purchases' ? 'Qty Added' : 'Qty Sold'}</th>
-                    {historyTab === 'purchases' && (
-                      <th className="p-3 text-right">Rate / Package</th>
-                    )}
-                    <th className="p-3 text-right">{historyTab === 'purchases' ? 'Cost Rate / Unit' : 'Selling Rate'}</th>
-                    {historyTab === 'purchases' && (
-                      <th className="p-3 text-center">Supplier Rate Variance</th>
-                    )}
+                    <th className="p-3 text-center">Qty Added</th>
+                    <th className="p-3 text-right">Rate / Package</th>
+                    <th className="p-3 text-right">Cost Rate / Unit</th>
+                    <th className="p-3 text-center">Supplier Rate Variance</th>
                     <th className="p-3 text-right">Total Amount</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {historyTab === 'purchases' ? (
-                    filteredPurchaseHistory.length === 0 ? (
+                  {filteredPurchaseHistory.length === 0 ? (
                       <tr>
                         <td colSpan={9} className="p-8 text-center text-textMuted font-medium">No purchase inflow history logged for this product.</td>
                       </tr>
@@ -3518,35 +3419,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                           </tr>
                         );
                       })
-                    )
-                  ) : (
-                    prodSalesHistory.length === 0 ? (
-                      <tr>
-                        <td colSpan={7} className="p-8 text-center text-textMuted font-medium">No sales invoice history logged for this product.</td>
-                      </tr>
-                    ) : (
-                      prodSalesHistory.map((s, i) => {
-                        const rawD = new Date(s.date);
-                        const isDateOnly = typeof s.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s.date.trim());
-                        const formattedDateStr = isNaN(rawD.getTime()) ? String(s.date || '-') : (
-                          isDateOnly
-                            ? rawD.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-                            : `${rawD.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}, ${rawD.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}`
-                        );
-                        return (
-                          <tr key={i} className="hover:bg-slate-100/5 transition font-medium">
-                            <td className="p-3 font-mono font-bold text-foreground text-center">{i + 1}</td>
-                            <td className="p-3 font-mono text-xs font-semibold whitespace-nowrap text-foreground">{formattedDateStr}</td>
-                            <td className="p-3 font-extrabold uppercase text-foreground">{s.customer_name} ({s.payment_mode})</td>
-                            <td className="p-3 font-mono text-[11px] text-textMuted">{s.id}</td>
-                            <td className="p-3 font-mono font-extrabold text-rose-500 text-center">-{s.qty} {selectedHistoryProduct.s_unit || 'Pcs'}</td>
-                            <td className="p-3 font-mono font-bold text-foreground text-right">₹{Number(s.rate || 0).toFixed(2)}</td>
-                            <td className="p-3 font-mono font-black text-emerald-600 dark:text-emerald-400 text-right">₹{Number(s.amount || (s.qty * s.rate)).toFixed(2)}</td>
-                          </tr>
-                        );
-                      })
-                    )
-                  )}
+                    )}
                 </tbody>
               </table>
             </div>

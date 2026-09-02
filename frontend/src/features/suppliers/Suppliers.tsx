@@ -69,6 +69,7 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
     address: '',
     dob: '',
     establishment_date: '',
+    gst_number: '',
     outstanding: 0
   });
 
@@ -442,7 +443,11 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
   }, [suppliers, contextPurchases, payments]);
 
   const chronologicalSuppliers = useMemo(() => {
-    return [...suppliers].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    return [...suppliers].sort((a, b) => {
+      const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return (isNaN(timeA) ? 0 : timeA) - (isNaN(timeB) ? 0 : timeB);
+    });
   }, [suppliers]);
 
   const getVendorCode = (s: Supplier, idx?: number) => {
@@ -470,7 +475,7 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
         phone.includes(search) ||
         code.includes(search.toLowerCase())
       );
-    });
+    }).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }, [suppliers, search, filterTab, supplierStatsMap]);
 
   return (

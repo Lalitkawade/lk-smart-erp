@@ -36,6 +36,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
     addToCart,
     updateCartQty,
     updateCartRate,
+    updateCartDiscount,
     updateCartUnit,
     removeFromCart,
     processCheckout,
@@ -81,7 +82,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
   });
 
   const cartSubtotal = useMemo(() => {
-    return cart.reduce((acc, curr) => acc + curr.qty * curr.rate, 0);
+    return cart.reduce((acc, curr) => acc + (curr.qty * curr.rate * (1 - (curr.discountPercent || 0) / 100)), 0);
   }, [cart]);
 
   const manualDiscount = useMemo(() => {
@@ -1082,9 +1083,24 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                             </div>
 
                             <div className="flex items-center gap-1">
+                              <span className="text-textMuted text-[10px] font-sans font-bold">Disc %:</span>
+                              <input
+                                type="number"
+                                min="0"
+                                max="100"
+                                step="any"
+                                className="w-16 bg-background border border-border rounded text-center text-xs text-foreground p-1 font-mono font-bold focus:outline-none focus:border-primary shadow-inner"
+                                value={item.discountPercent || ''}
+                                onChange={(e) => updateCartDiscount(item.product.id, parseFloat(e.target.value) || 0, isLoose)}
+                                placeholder="0"
+                                title="Discount Percentage"
+                              />
+                            </div>
+
+                            <div className="flex items-center gap-1">
                               <span className="text-textMuted text-[10px] font-sans font-bold">Total:</span>
                               <strong className="text-xs font-black text-primary">
-                                ₹{(item.rate * item.qty).toFixed(2)}
+                                ₹{(item.rate * item.qty * (1 - (item.discountPercent || 0) / 100)).toFixed(2)}
                               </strong>
                             </div>
                           </div>
@@ -1502,13 +1518,14 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                             <th className="p-1 border-r border-slate-300 text-center w-16">HSN</th>
                             <th className="p-1 border-r border-slate-300 text-center w-12">Qty</th>
                             <th className="p-1 border-r border-slate-300 text-right w-16">Rate (₹)</th>
+                            <th className="p-1 border-r border-slate-300 text-center w-12">Disc %</th>
                             <th className="p-1 text-right w-20">Amount (₹)</th>
                           </tr>
                         </thead>
                         <tbody>
                           {(!printInvoice.items || printInvoice.items.length === 0) ? (
                             <tr>
-                              <td colSpan={6} className="p-2 text-center text-slate-400">No items logged.</td>
+                              <td colSpan={7} className="p-2 text-center text-slate-400">No items logged.</td>
                             </tr>
                           ) : printInvoice.items.map((item: any, idx: number) => {
                             const matchProd = products.find(p => p.id === (item.product_id || item.product?.id));
@@ -1518,7 +1535,14 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                             const unit = item.unitName || item.unit || (item.isLoose ? (matchProd?.s_unit || matchProd?.unit) : (matchProd?.p_unit)) || matchProd?.s_unit || matchProd?.unit || '';
                             const displayQty = unit ? `${qty} ${unit}` : `${qty}`;
                             const rate = Number(item.rate || item.price || 0);
-                            const amt = item.amount || (qty * rate);
+                            const amt = Number(item.amount || (qty * rate));
+                            
+                            let discStr = '-';
+                            const rawTotal = qty * rate;
+                            if (rawTotal > 0 && amt < rawTotal - 0.01) { // 0.01 threshold for float inaccuracies
+                              const discPct = ((rawTotal - amt) / rawTotal) * 100;
+                              discStr = `${discPct.toFixed(1).replace(/\.0$/, '')}%`;
+                            }
 
                             return (
                               <tr key={idx} className="border-b border-slate-200">
@@ -1527,6 +1551,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                                 <td className="p-1 border-r border-slate-200 text-center font-mono text-slate-600">{hsn}</td>
                                 <td className="p-1 border-r border-slate-200 text-center font-mono font-bold whitespace-nowrap">{displayQty}</td>
                                 <td className="p-1 border-r border-slate-200 text-right font-mono">₹{rate.toFixed(2)}</td>
+                                <td className="p-1 border-r border-slate-200 text-center font-mono text-slate-600 font-semibold">{discStr}</td>
                                 <td className="p-1 text-right font-mono font-bold">₹{amt.toFixed(2)}</td>
                               </tr>
                             );
