@@ -127,7 +127,7 @@ export function useBilling(tenantId: string) {
     const activeCart = cart.filter(i => i.qty > 0);
     if (activeCart.length === 0) throw new Error('Cart is empty or has 0 quantity items.');
 
-    const cartSubtotal = activeCart.reduce((acc, curr) => acc + (curr.qty * curr.rate * (1 - (curr.discountPercent || 0) / 100)), 0);
+    const cartSubtotal = activeCart.reduce((acc, curr) => acc + Math.round(curr.qty * curr.rate * (1 - (curr.discountPercent || 0) / 100)), 0);
     const manualDiscount = options?.discountAmount && options.discountAmount > 0 
       ? Math.min(cartSubtotal, options.discountAmount) 
       : 0;
@@ -287,7 +287,7 @@ export function useBilling(tenantId: string) {
           product_id: item.product.id,
           qty: item.qty,
           rate: item.rate,
-          amount: item.qty * item.rate * (1 - (item.discountPercent || 0) / 100),
+          amount: Math.round(item.qty * item.rate * (1 - (item.discountPercent || 0) / 100)),
           unit: transactionUnit,
           base_unit: item.product.base_unit || item.product.unit || 'Nos',
           conversion_factor: conversionFactor,
@@ -323,7 +323,7 @@ export function useBilling(tenantId: string) {
           product: c.product,
           qty: c.qty,
           rate: c.rate,
-          amount: c.qty * c.rate * (1 - (c.discountPercent || 0) / 100),
+          amount: Math.round(c.qty * c.rate * (1 - (c.discountPercent || 0) / 100)),
           isLoose: c.isLoose,
           unitName: (c as any).unitName || (c.isLoose ? (c.product.s_unit || c.product.unit) : c.product.p_unit),
           purchase_price: c.product.purchase_price,

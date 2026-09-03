@@ -84,6 +84,7 @@ export class PurchaseService {
       paid_amount: Number(billPayload.paid_amount || 0),
       due_amount: Number(billPayload.due_amount || 0),
       purchase_date: billPayload.purchase_date || new Date().toISOString(),
+      due_date: (billPayload as any).due_date || null,
       tenant_id: billPayload.tenant_id || null,
       status: billPayload.status || 'Completed'
     };

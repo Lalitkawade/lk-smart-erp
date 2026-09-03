@@ -82,7 +82,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
   });
 
   const cartSubtotal = useMemo(() => {
-    return cart.reduce((acc, curr) => acc + (curr.qty * curr.rate * (1 - (curr.discountPercent || 0) / 100)), 0);
+    return cart.reduce((acc, curr) => acc + Math.round(curr.qty * curr.rate * (1 - (curr.discountPercent || 0) / 100)), 0);
   }, [cart]);
 
   const manualDiscount = useMemo(() => {
@@ -92,8 +92,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
   }, [manualDiscountInput, cartSubtotal]);
 
   const totalAmount = useMemo(() => {
-    // Round up the final amount to the next whole number (e.g. 1.4 -> 2)
-    return Math.ceil(Math.max(0, cartSubtotal - manualDiscount));
+    return Math.max(0, cartSubtotal - manualDiscount);
   }, [cartSubtotal, manualDiscount]);
   const [custSearchQuery, setCustSearchQuery] = useState<string>('');
   const [custDropdownOpen, setCustDropdownOpen] = useState<boolean>(false);
@@ -1083,6 +1082,34 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                             </div>
 
                             <div className="flex items-center gap-1">
+                              <span className="text-textMuted text-[10px] font-sans font-bold">Mrgn %:</span>
+                              <input
+                                type="number"
+                                step="any"
+                                className="w-16 bg-background border border-border rounded text-center text-xs text-emerald-600 dark:text-emerald-400 p-1 font-mono font-bold focus:outline-none focus:border-primary shadow-inner"
+                                value={(() => {
+                                  const piecesPerPack = Math.max(0.000001, Number(item.product.pieces_per_pack || 1));
+                                  const purchasePrice = Number(item.product.purchase_price || 0);
+                                  const unitCost = isLoose ? (purchasePrice / piecesPerPack) : purchasePrice;
+                                  if (unitCost <= 0) return '';
+                                  return Math.round(((item.rate - unitCost) / unitCost) * 100);
+                                })()}
+                                onChange={(e) => {
+                                  const m = parseFloat(e.target.value);
+                                  if (isNaN(m)) return;
+                                  const piecesPerPack = Math.max(0.000001, Number(item.product.pieces_per_pack || 1));
+                                  const purchasePrice = Number(item.product.purchase_price || 0);
+                                  const unitCost = isLoose ? (purchasePrice / piecesPerPack) : purchasePrice;
+                                  if (unitCost > 0) {
+                                    updateCartRate(item.product.id, Math.round((unitCost * (1 + m / 100)) * 100) / 100, isLoose);
+                                  }
+                                }}
+                                title="Margin % (Updates Rate based on Purchase Cost)"
+                                placeholder="0"
+                              />
+                            </div>
+
+                            <div className="flex items-center gap-1">
                               <span className="text-textMuted text-[10px] font-sans font-bold">Disc %:</span>
                               <input
                                 type="number"
@@ -1518,7 +1545,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                             <th className="p-1 border-r border-slate-300 text-center w-16">HSN</th>
                             <th className="p-1 border-r border-slate-300 text-center w-12">Qty</th>
                             <th className="p-1 border-r border-slate-300 text-right w-16">Rate (₹)</th>
-                            <th className="p-1 border-r border-slate-300 text-center w-12">Disc %</th>
+
                             <th className="p-1 text-right w-20">Amount (₹)</th>
                           </tr>
                         </thead>
@@ -1537,13 +1564,6 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                             const rate = Number(item.rate || item.price || 0);
                             const amt = Number(item.amount || (qty * rate));
                             
-                            let discStr = '-';
-                            const rawTotal = qty * rate;
-                            if (rawTotal > 0 && amt < rawTotal - 0.01) { // 0.01 threshold for float inaccuracies
-                              const discPct = ((rawTotal - amt) / rawTotal) * 100;
-                              discStr = `${discPct.toFixed(1).replace(/\.0$/, '')}%`;
-                            }
-
                             return (
                               <tr key={idx} className="border-b border-slate-200">
                                 <td className="p-1 border-r border-slate-200 text-center font-mono">{idx + 1}</td>
@@ -1551,7 +1571,6 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                                 <td className="p-1 border-r border-slate-200 text-center font-mono text-slate-600">{hsn}</td>
                                 <td className="p-1 border-r border-slate-200 text-center font-mono font-bold whitespace-nowrap">{displayQty}</td>
                                 <td className="p-1 border-r border-slate-200 text-right font-mono">₹{rate.toFixed(2)}</td>
-                                <td className="p-1 border-r border-slate-200 text-center font-mono text-slate-600 font-semibold">{discStr}</td>
                                 <td className="p-1 text-right font-mono font-bold">₹{amt.toFixed(2)}</td>
                               </tr>
                             );

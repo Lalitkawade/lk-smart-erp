@@ -572,7 +572,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
     return {
       id: p.id,
       product_name: p.product_name,
-      sku: p.sku || '',
+      sku: p.product_code || '',
       barcode: p.barcode || '',
       category_name: p.category_name || 'General',
       brand_name: p.brand_name || 'Generic',
@@ -825,7 +825,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
     setProductItems([{
       id: p.id,
       product_name: p.product_name,
-      sku: p.sku || '',
+      sku: p.product_code || '',
       barcode: p.barcode || '',
       category_name: p.category_name,
       brand_name: p.brand_name,
@@ -927,7 +927,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
           : (item.product_name && item.product_name.trim()
             ? products.find(p => {
               if (item.barcode && p.barcode && p.barcode === item.barcode.trim()) return true;
-              if (item.sku && p.sku && p.sku.toUpperCase() === item.sku.trim().toUpperCase()) return true;
+              if (item.sku && p.product_code && p.product_code.toUpperCase() === item.sku.trim().toUpperCase()) return true;
               return p.product_name && p.product_name.toLowerCase().trim() === item.product_name.toLowerCase().trim();
             })
             : undefined);
@@ -975,7 +975,8 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
         const productPayload = {
           tenant_id: tenantId,
           product_name: item.product_name,
-          sku: item.sku || null,
+          product_code: item.sku || null,
+          sku: null,
           barcode: item.barcode || null,
           category_name: item.category_name,
           brand_name: item.brand_name,
@@ -1094,6 +1095,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
           rawDate.setHours(now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
         }
         const safeIsoDate = isNaN(rawDate.getTime()) ? now.toISOString() : rawDate.toISOString();
+        const safeDueDate = dueDate ? new Date(dueDate).toISOString() : null;
 
         const effectivePaid = effectivePaidAmount;
         const dueAmount = effectiveDueAmount;
@@ -1111,7 +1113,8 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
           total_amount: totalBillCost,
           paid_amount: effectivePaid,
           due_amount: dueAmount,
-          purchase_date: safeIsoDate
+          purchase_date: safeIsoDate,
+          due_date: safeDueDate
         };
 
         const rows = savedBillItems.map((bi, idx) => {
@@ -1182,9 +1185,9 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
     return products.filter(p => {
       const pName = (p.product_name || '').toLowerCase();
       const barcode = (p.barcode || '').toLowerCase();
-      const sku = (p.sku || '').toLowerCase();
+      const product_code = (p.product_code || '').toLowerCase();
       const hsn = (p.hsn || '').toLowerCase();
-      return pName.includes(q) || barcode.includes(q) || sku.includes(q) || hsn.includes(q);
+      return pName.includes(q) || barcode.includes(q) || product_code.includes(q) || hsn.includes(q);
     }).slice(0, 6);
   };
 
@@ -1192,7 +1195,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
     return products
       .filter(p => {
         const name = p?.product_name || '';
-        const sku = p?.sku || '';
+        const product_code = p?.product_code || '';
         const barcode = p?.barcode || '';
         const category = p?.category_name || '';
         const hsn = p?.hsn || '';
@@ -1201,7 +1204,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
 
         const matchesSearch = !q || (
           name.toLowerCase().includes(q) ||
-          sku.toLowerCase().includes(q) ||
+          product_code.toLowerCase().includes(q) ||
           barcode.toLowerCase().includes(q) ||
           category.toLowerCase().includes(q) ||
           hsn.toLowerCase().includes(q) ||
@@ -2592,7 +2595,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                                   const exactMatch = products.find(p =>
                                     (p.product_name && p.product_name.trim().toLowerCase() === queryLower) ||
                                     (p.barcode && p.barcode.trim() === item.product_name.trim()) ||
-                                    (p.sku && p.sku.trim().toLowerCase() === queryLower)
+                                    (p.product_code && p.product_code.trim().toLowerCase() === queryLower)
                                   );
                                   if (exactMatch && (!item.id || item.id !== exactMatch.id)) {
                                     const filled = autofillProductFromCatalog(exactMatch);
@@ -2661,16 +2664,17 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                         </div>
 
                         <div>
-                          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">SKU Code</label>
+                          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Product ID</label>
                           <input
                             type="text"
-                            className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-600 shadow-xs"
+                            placeholder="e.g. PRD-0001"
+                            className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-600 shadow-xs uppercase"
                             value={item.sku}
                             onChange={(e) => {
-                              const val = e.target.value;
+                              const val = e.target.value.toUpperCase();
                               updateProductItem(index, { sku: val });
                               if (val.trim()) {
-                                const match = products.find(p => p.sku && p.sku.trim().toLowerCase() === val.trim().toLowerCase());
+                                const match = products.find(p => p.product_code && p.product_code.trim().toUpperCase() === val.trim().toUpperCase());
                                 if (match) {
                                   const filled = autofillProductFromCatalog(match);
                                   updateProductItem(index, filled);

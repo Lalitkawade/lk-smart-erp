@@ -55,30 +55,6 @@ export class ProductService {
    */
   static async createProduct(productData: Partial<Product>): Promise<ServiceResponse<Product>> {
     try {
-      if (!productData.product_code) {
-        let query = supabase
-          .from('products')
-          .select('product_code')
-          .not('product_code', 'is', null)
-          .order('product_code', { ascending: false })
-          .limit(1);
-          
-        if (productData.tenant_id) {
-          query = query.eq('tenant_id', productData.tenant_id);
-        }
-
-        const { data: codeData, error: codeError } = await query.maybeSingle();
-        
-        let nextNumber = 1;
-        if (codeData && codeData.product_code) {
-          const match = codeData.product_code.match(/PRD-(\d+)/);
-          if (match && match[1]) {
-            nextNumber = parseInt(match[1], 10) + 1;
-          }
-        }
-        productData.product_code = `PRD-${nextNumber.toString().padStart(4, '0')}`;
-      }
-
       return handleServiceCall(
         supabase.from('products').insert([productData as any]).select().single()
       );

@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { useErpContext } from '../../context/ErpContext';
 import { useSuppliers } from '../../hooks/useSuppliers';
-import { SupplierService } from '../../services/supplierService';
 import { PaymentService } from '../../services/paymentService';
 import { t } from '../../utils/i18n';
 
@@ -16,6 +15,7 @@ interface Supplier {
   address?: string | null;
   dob?: string | null;
   establishment_date?: string | null;
+  due_date?: string | null;
   outstanding: number;
   initial_outstanding?: number;
   gst_number?: string | null;
@@ -125,7 +125,7 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
       dob: formatDateForInput(s.dob),
       establishment_date: formatDateForInput(s.establishment_date),
       gst_number: s.gst_number || '',
-      outstanding: s.outstanding || 0
+      outstanding: Number(s.outstanding || 0)
     });
     setModalOpen(true);
   };
@@ -166,11 +166,16 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
       outstanding: Number(formData.outstanding || 0),
       created_at: editingSupplier?.created_at
     };
+    
+    console.log('--- DEBUG --- Supplier Component Payload:', supplierPayload);
 
-    setModalOpen(false);
-    triggerToast('⚡ Supplier profile saved successfully!');
-
-    await saveSupplier(supplierPayload);
+    try {
+      await saveSupplier(supplierPayload);
+      setModalOpen(false);
+      triggerToast('✅ Supplier profile saved successfully!');
+    } catch (e: any) {
+      setPhoneError(e.message || 'Failed to save supplier profile.');
+    }
   };
 
   const handleDeleteSupplier = async (id: string) => {
@@ -396,6 +401,7 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
       realtimeOutstanding: number;
       lastPurchaseDate: string | null; 
       lastPaymentDate: string | null;
+      earliestDueDate: string | null;
     }>();
 
     const allPurchs: any[] = contextPurchases || [];
@@ -418,6 +424,19 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
 
       const realtimeOutstanding = Number(s.outstanding || 0) + totalPurch - totalPaid;
 
+      let earliestDueDate: string | null = null;
+      console.log(`[DEBUG SUPPLIER DUE DATE] Evaluating supplier: ${s.supplier_name}`);
+      suppBills.forEach(b => {
+        const amtDue = Number(b.total_amount || 0) - Number(b.paid_amount || 0);
+        console.log(`  - Bill: ${b.bill_number} | Due Amt: ${amtDue} | Raw due_date: ${b.due_date}`);
+      });
+
+      suppBills.filter(b => (Number(b.total_amount || 0) - Number(b.paid_amount || 0)) > 0 && b.due_date).forEach(b => {
+        if (!earliestDueDate || new Date(b.due_date) < new Date(earliestDueDate)) {
+          earliestDueDate = b.due_date;
+        }
+      });
+
       let lastPurchDate: string | null = null;
       if (suppBills.length > 0) {
         const sorted = [...suppBills].sort((a, b) => new Date(b.purchase_date || b.created_at || 0).getTime() - new Date(a.purchase_date || a.created_at || 0).getTime());
@@ -435,7 +454,8 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
         totalPaid,
         realtimeOutstanding,
         lastPurchaseDate: lastPurchDate,
-        lastPaymentDate: lastPayDate
+        lastPaymentDate: lastPayDate,
+        earliestDueDate
       });
     });
 
@@ -534,6 +554,7 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
               <th className="py-3 px-3.5 text-center whitespace-nowrap">Phone</th>
               <th className="py-3 px-3.5 text-center whitespace-nowrap">Purchases</th>
               <th className="py-3 px-3.5 text-center whitespace-nowrap">Pending Payable</th>
+              <th className="py-3 px-3.5 text-center whitespace-nowrap">Earliest Due</th>
               <th className="py-3 px-3.5 text-center whitespace-nowrap">Last Buy</th>
               <th className="py-3 px-3.5 text-center whitespace-nowrap">Last Paid</th>
               <th className="py-3 px-3.5 text-center whitespace-nowrap">Status</th>
@@ -543,7 +564,7 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
           <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
             {isLoading && suppliers.length === 0 ? (
               <tr>
-                <td colSpan={9} className="py-12 text-center text-slate-400 text-xs font-medium">
+                <td colSpan={10} className="py-12 text-center text-slate-400 text-xs font-medium">
                   <div className="flex flex-col items-center justify-center gap-2">
                     <i className="fa-solid fa-circle-notch fa-spin text-2xl text-primary"></i>
                     <span>Loading vendor accounts & ledger records...</span>
@@ -552,15 +573,15 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
               </tr>
             ) : filteredSuppliers.length === 0 ? (
               <tr>
-                <td colSpan={9} className="py-8 text-center text-slate-400 text-xs font-medium">
+                <td colSpan={10} className="py-8 text-center text-slate-400 text-xs font-medium">
                   <i className="fa-solid fa-truck-ramp-box text-2xl text-slate-400 mb-2 block"></i>
                   No matching vendor records found.
                 </td>
               </tr>
-            ) : filteredSuppliers.map((s, idx) => {
+            ) : filteredSuppliers.map((s) => {
               const chronologicalIdx = chronologicalSuppliers.findIndex(cs => cs.id === s.id);
               const code = getVendorCode(s, chronologicalIdx);
-              const stats = supplierStatsMap.get(s.id) || { totalPurchases: 0, realtimeOutstanding: Number(s.outstanding || 0), lastPurchaseDate: null, lastPaymentDate: null };
+              const stats = supplierStatsMap.get(s.id) || { totalPurchases: 0, realtimeOutstanding: Number(s.outstanding || 0), lastPurchaseDate: null, lastPaymentDate: null, earliestDueDate: null };
               const hasPayable = stats.realtimeOutstanding > 0;
 
               return (
@@ -599,6 +620,9 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
                     <span className={`font-bold inline-block px-2.5 py-0.5 rounded-lg ${hasPayable ? 'text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800' : 'text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800'}`}>
                       ₹{stats.realtimeOutstanding.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </span>
+                  </td>
+                  <td className="py-3.5 px-4 text-center text-xs font-mono font-bold text-slate-900 dark:text-slate-100">
+                    {stats.earliestDueDate && hasPayable ? new Date(stats.earliestDueDate).toLocaleDateString('en-IN') : '-'}
                   </td>
                   <td className="py-3.5 px-4 text-center text-xs font-mono text-slate-600 dark:text-slate-300">
                     {stats.lastPurchaseDate ? new Date(stats.lastPurchaseDate).toLocaleDateString('en-IN') : '-'}

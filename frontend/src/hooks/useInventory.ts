@@ -40,6 +40,7 @@ export function useInventory(tenantId: string, _businessType?: string) {
       id: productId,
       tenant_id: activeTenantId,
       product_name: productPayload.product_name || 'General Product',
+      product_code: (productPayload as any).product_code || null,
       sku: productPayload.sku || null,
       barcode: productPayload.barcode || null,
       category_name: productPayload.category_name || 'General',
