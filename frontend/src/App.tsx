@@ -560,6 +560,25 @@ function App() {
     return 0;
   };
 
+  const overdueSupplierBills = useMemo(() => {
+    try {
+      if (Array.isArray(purchases) && purchases.length > 0) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        return purchases.filter(b => {
+          const amtDue = Number(b.total_amount || 0) - Number(b.paid_amount || 0);
+          if (amtDue <= 0 || !b.due_date) return false;
+          
+          const dueDate = new Date(b.due_date);
+          dueDate.setHours(0, 0, 0, 0);
+          return dueDate < today;
+        });
+      }
+    } catch(e) {}
+    return [];
+  }, [purchases]);
+
   const rawCompName = tenant?.company_name || '';
   const companyName = (!rawCompName || rawCompName === 'LK Hardware ERP' || rawCompName === 'My Enterprise' || rawCompName === 'LK HARDWARE ERP') ? 'Maharudra Hardware' : rawCompName;
 
@@ -863,7 +882,7 @@ function App() {
               <div className="relative">
                 <button onClick={() => setShowNotifications(!showNotifications)} className="relative p-2 text-textSecondary hover:text-textPrimary bg-background border border-border rounded-xl transition shadow-2xs active:scale-95" title="System Alerts">
                   <i className="fa-regular fa-bell text-xs"></i>
-                  {(lowStockCount > 0 || getCustomerDues() > 0 || getSupplierDues() > 0 || highDemandAlerts.length > 0 || todaysBirthdays.length > 0) && (
+                  {(lowStockCount > 0 || getCustomerDues() > 0 || getSupplierDues() > 0 || overdueSupplierBills.length > 0 || highDemandAlerts.length > 0 || todaysBirthdays.length > 0) && (
                     <>
                       <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-rose-500 rounded-full animate-ping"></span>
                       <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-rose-500 rounded-full"></span>

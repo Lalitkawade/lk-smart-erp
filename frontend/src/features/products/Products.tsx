@@ -993,7 +993,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
           dealer_price: item.dealer_price,
           mrp: item.mrp,
           current_stock: finalStock,                // Inventory stock in Base Stock Unit (e.g. 1000 Nos)
-          min_stock_level: item.min_stock_level === '' ? 0 : Number(item.min_stock_level),
+          min_stock_level: (item.min_stock_level as any) === '' ? 0 : Number(item.min_stock_level),
           hsn: item.hsn || null,
           gst: item.gst,
           godown: item.godown || null,
@@ -2953,7 +2953,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                             type="number"
                             className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none font-mono font-bold shadow-xs"
                             required
-                            value={item.min_stock_level === undefined || item.min_stock_level === null ? '' : item.min_stock_level}
+                            value={(item.min_stock_level as any) === undefined || (item.min_stock_level as any) === null ? '' : item.min_stock_level}
                             placeholder="0"
                             onFocus={(e) => e.target.select()}
                             onChange={(e) => updateProductItem(index, { min_stock_level: e.target.value === '' ? '' as any : Number(e.target.value) })}

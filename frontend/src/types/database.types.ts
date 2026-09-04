@@ -416,6 +416,7 @@ export type PurchaseBillRow = {
   paid_amount?: number;
   due_amount?: number;
   purchase_date?: string;
+  due_date?: string | null;
   status?: string;
   created_at?: string;
 }
@@ -432,6 +433,7 @@ export type PurchaseBillInsert = {
   paid_amount?: number;
   due_amount?: number;
   purchase_date?: string;
+  due_date?: string | null;
   status?: string;
   created_at?: string;
 }
@@ -446,6 +448,7 @@ export type PurchaseBillUpdate = {
   paid_amount?: number;
   due_amount?: number;
   purchase_date?: string;
+  due_date?: string | null;
   status?: string;
 }
 
