@@ -307,6 +307,25 @@ function App() {
     return minStockBase > 0 && baseStockQty <= minStockBase;
   }).length;
 
+  const overdueSupplierBills = useMemo(() => {
+    try {
+      if (Array.isArray(purchases) && purchases.length > 0) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        return purchases.filter(b => {
+          const amtDue = Number(b.total_amount || 0) - Number(b.paid_amount || 0);
+          if (amtDue <= 0 || !b.due_date) return false;
+          
+          const dueDate = new Date(b.due_date);
+          dueDate.setHours(0, 0, 0, 0);
+          return dueDate < today;
+        });
+      }
+    } catch(e) {}
+    return [];
+  }, [purchases]);
+
   const notifiedRef = useRef(new Set<string>());
 
   // Native Browser & Mobile Device Web Notifications for Important Alerts
@@ -362,7 +381,16 @@ function App() {
       );
     }
 
-  }, [udharDueCustomers.length, highDemandAlerts?.length, lowStockCount, todaysBirthdays?.length, user]);
+    if (overdueSupplierBills && overdueSupplierBills.length > 0) {
+      const totalOverdue = overdueSupplierBills.reduce((acc: number, b: any) => acc + (Number(b.total_amount || 0) - Number(b.paid_amount || 0)), 0);
+      notify(
+        '⏳ Vendor Bills Overdue',
+        `${overdueSupplierBills.length} Bill(s) have crossed their due date (₹${totalOverdue.toLocaleString('en-IN')} pending)!`,
+        `vendor-dues-${overdueSupplierBills.length}`
+      );
+    }
+
+  }, [udharDueCustomers.length, highDemandAlerts?.length, lowStockCount, todaysBirthdays?.length, overdueSupplierBills.length, user]);
 
   const [inAppToasts, setInAppToasts] = useState<NotificationItem[]>([]);
 
@@ -429,12 +457,29 @@ function App() {
       });
     }
 
+    if (overdueSupplierBills && overdueSupplierBills.length > 0) {
+      const totalOverdue = overdueSupplierBills.reduce((acc: number, b: any) => acc + (Number(b.total_amount || 0) - Number(b.paid_amount || 0)), 0);
+      items.push({
+        id: 'toast-vendor-dues',
+        title: '⏳ Vendor Bills Overdue',
+        message: `${overdueSupplierBills.length} Bill(s) have crossed their due date (₹${totalOverdue.toLocaleString('en-IN')} pending)!`,
+        type: 'warning',
+        icon: 'fa-solid fa-file-invoice-dollar text-red-500',
+        color: 'border-red-500',
+        actionLabel: 'View Payables',
+        onAction: () => {
+          setActiveTab('suppliers');
+        }
+      });
+    }
+
     if (items.length > 0) {
       setInAppToasts(items);
       sessionStorage.setItem('lk_toasts_shown_v1', 'true');
     }
 
-  }, [udharDueCustomers.length, highDemandAlerts?.length, lowStockCount, todaysBirthdays?.length, user, customersList.length, productsList.length]);
+  }, [udharDueCustomers.length, highDemandAlerts?.length, lowStockCount, todaysBirthdays?.length, overdueSupplierBills.length, user, customersList.length, productsList.length]);
+
 
   if (loading) {
     return (
@@ -559,25 +604,6 @@ function App() {
     } catch(e){}
     return 0;
   };
-
-  const overdueSupplierBills = useMemo(() => {
-    try {
-      if (Array.isArray(purchases) && purchases.length > 0) {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-
-        return purchases.filter(b => {
-          const amtDue = Number(b.total_amount || 0) - Number(b.paid_amount || 0);
-          if (amtDue <= 0 || !b.due_date) return false;
-          
-          const dueDate = new Date(b.due_date);
-          dueDate.setHours(0, 0, 0, 0);
-          return dueDate < today;
-        });
-      }
-    } catch(e) {}
-    return [];
-  }, [purchases]);
 
   const rawCompName = tenant?.company_name || '';
   const companyName = (!rawCompName || rawCompName === 'LK Hardware ERP' || rawCompName === 'My Enterprise' || rawCompName === 'LK HARDWARE ERP') ? 'Maharudra Hardware' : rawCompName;
