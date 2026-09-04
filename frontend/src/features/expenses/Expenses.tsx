@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useErpContext } from '../../context/ErpContext';
+import { useAuth } from '../../hooks/useAuth';
 import { ExpenseService } from '../../services/expenseService';
 import { t } from '../../utils/i18n';
 
@@ -21,6 +22,7 @@ interface ExpensesProps {
 }
 
 export default function Expenses({ autoOpenModal, onModalClosed }: ExpensesProps = {}) {
+  const { tenant } = useAuth();
   const { expenses: contextExpenses, refreshAllData } = useErpContext();
   const expenses: Expense[] = (contextExpenses || []) as Expense[];
   const [search, setSearch] = useState('');
@@ -71,7 +73,7 @@ export default function Expenses({ autoOpenModal, onModalClosed }: ExpensesProps
 
     try {
       const res = await ExpenseService.createExpense({
-        tenant_id: '00000000-0000-0000-0000-000000000000',
+        tenant_id: tenant?.id || '00000000-0000-0000-0000-000000000000',
         category: formData.category,
         amount: numAmount,
         payment_mode: formData.payment_mode,

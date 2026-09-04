@@ -40,7 +40,7 @@ const resolveBillProcuredItems = (b: any, productsList: any[]) => {
         product_name: name,
         qty: qty,
         rate: rate,
-        amount: Number(it.amount || qty * rate)
+        amount: Number(it.amount !== undefined && it.amount !== null ? it.amount : Math.round(qty * rate))
       };
     });
   }
@@ -993,7 +993,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
           dealer_price: item.dealer_price,
           mrp: item.mrp,
           current_stock: finalStock,                // Inventory stock in Base Stock Unit (e.g. 1000 Nos)
-          min_stock_level: item.min_stock_level,
+          min_stock_level: item.min_stock_level === '' ? 0 : Number(item.min_stock_level),
           hsn: item.hsn || null,
           gst: item.gst,
           godown: item.godown || null,
@@ -2000,7 +2000,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                           <td className="p-2.5 font-bold text-slate-900 dark:text-slate-100">{it.product_name}</td>
                           <td className="p-2.5 text-center font-bold text-blue-600 dark:text-blue-400">{qty}</td>
                           <td className="p-2.5 text-right">₹{rate.toFixed(2)}</td>
-                          <td className="p-2.5 text-right font-bold text-emerald-600 dark:text-emerald-400">₹{Number(it.amount || (qty * rate)).toFixed(2)}</td>
+                          <td className="p-2.5 text-right font-bold text-emerald-600 dark:text-emerald-400">₹{Number(it.amount !== undefined && it.amount !== null ? it.amount : Math.round(qty * rate)).toFixed(2)}</td>
                         </tr>
                       );
                     });
@@ -2956,7 +2956,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                             value={item.min_stock_level === undefined || item.min_stock_level === null ? '' : item.min_stock_level}
                             placeholder="0"
                             onFocus={(e) => e.target.select()}
-                            onChange={(e) => updateProductItem(index, { min_stock_level: e.target.value === '' ? 0 : Number(e.target.value) })}
+                            onChange={(e) => updateProductItem(index, { min_stock_level: e.target.value === '' ? '' as any : Number(e.target.value) })}
                           />
                         </div>
                         <div>

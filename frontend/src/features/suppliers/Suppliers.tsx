@@ -189,9 +189,12 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
   };
 
   const handleOpenPayModal = (s: Supplier) => {
+    const stats = supplierStatsMap.get(s.id);
+    const pendingPayable = stats ? stats.realtimeOutstanding : Number(s.outstanding || 0);
+    
     setPayFormData({
       supplier_id: s.id,
-      amount: Number(s.outstanding || 0),
+      amount: pendingPayable,
       payment_mode: 'Bank Transfer',
       ref_number: ''
     });

@@ -45,6 +45,8 @@ export interface CartItem {
   qtyText?: string;
   rate: number;
   discountPercent?: number;
+    discountText?: string;
+    marginText?: string;
   isLoose?: boolean;
 }
 

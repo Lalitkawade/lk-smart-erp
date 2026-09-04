@@ -68,16 +68,16 @@ export function useBilling(tenantId: string) {
     setCart(cart.map(i => (i.product.id === productId && i.isLoose === isLoose) ? { ...i, qty: Math.max(0, qty), qtyText } : i));
   };
 
-  const updateCartRate = (productId: string, rate: number, isLoose: boolean = true) => {
+  const updateCartRate = (productId: string, rate: number, isLoose: boolean = true, marginText?: string) => {
     const safeRate = Math.max(0, Number(rate) || 0);
-    setCart(cart.map(i => (i.product.id === productId && i.isLoose === isLoose) ? { ...i, rate: safeRate } : i));
+    setCart(cart.map(i => (i.product.id === productId && i.isLoose === isLoose) ? { ...i, rate: safeRate, marginText: marginText } : i));
   };
 
-  const updateCartDiscount = (productId: string, discount: number, isLoose: boolean = true) => {
+  const updateCartDiscount = (productId: string, discount: number, isLoose: boolean = true, discountText?: string) => {
     const safeDisc = Math.max(0, Math.min(100, Number(discount) || 0));
     setCart(cart.map(i => {
       if (i.product.id === productId && i.isLoose === isLoose) {
-        return { ...i, discountPercent: safeDisc };
+        return { ...i, discountPercent: safeDisc, discountText: discountText };
       }
       return i;
     }));

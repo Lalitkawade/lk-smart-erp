@@ -491,7 +491,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
               date: s.sale_date,
               price: Number(item.rate || 0),
               qty: netQty,
-              amount: netQty * Number(item.rate || 0),
+              amount: Math.round(netQty * Number(item.rate || 0)),
               customer_name: s.customer_name || 'Cash Customer',
               rawSaleObj: s
             });
@@ -744,7 +744,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                             )}
                             <button
                               type="button"
-                              className="flex-1 py-1.5 px-2 bg-blue-600 hover:bg-blue-500 text-white font-extrabold rounded-lg text-[10px] uppercase transition shadow-sm active:scale-95 cursor-pointer font-mono text-center truncate"
+                              className="flex-1 py-1.5 px-2 bg-blue-600 hover:bg-blue-50 text-white font-extrabold rounded-lg text-[10px] uppercase transition shadow-sm active:scale-95 cursor-pointer font-mono text-center truncate"
                               onClick={() => handleCartAdd(p, true)}
                               title={`Add 1 ${sUnit}`}
                             >
@@ -1088,22 +1088,36 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                                 step="any"
                                 className="w-16 bg-background border border-border rounded text-center text-xs text-emerald-600 dark:text-emerald-400 p-1 font-mono font-bold focus:outline-none focus:border-primary shadow-inner"
                                 value={(() => {
-                                  const piecesPerPack = Math.max(0.000001, Number(item.product.pieces_per_pack || 1));
-                                  const purchasePrice = Number(item.product.purchase_price || 0);
-                                  const unitCost = isLoose ? (purchasePrice / piecesPerPack) : purchasePrice;
-                                  if (unitCost <= 0) return '';
-                                  return Math.round(((item.rate - unitCost) / unitCost) * 100);
-                                })()}
+                                    if (item.marginText !== undefined) return item.marginText;
+                                    const piecesPerPack = Math.max(0.000001, Number(item.product.pieces_per_pack || 1));
+                                    const purchasePrice = Number(item.product.purchase_price || 0);
+                                    const unitCost = isLoose ? (purchasePrice / piecesPerPack) : purchasePrice;
+                                    if (unitCost <= 0) return '';
+                                    return Math.round(((item.rate - unitCost) / unitCost) * 100);
+                                  })()}
                                 onChange={(e) => {
-                                  const m = parseFloat(e.target.value);
-                                  if (isNaN(m)) return;
-                                  const piecesPerPack = Math.max(0.000001, Number(item.product.pieces_per_pack || 1));
-                                  const purchasePrice = Number(item.product.purchase_price || 0);
-                                  const unitCost = isLoose ? (purchasePrice / piecesPerPack) : purchasePrice;
-                                  if (unitCost > 0) {
-                                    updateCartRate(item.product.id, Math.round((unitCost * (1 + m / 100)) * 100) / 100, isLoose);
-                                  }
-                                }}
+                                    const val = e.target.value;
+                                    if (val === '') {
+                                      const piecesPerPack = Math.max(0.000001, Number(item.product.pieces_per_pack || 1));
+                                      const purchasePrice = Number(item.product.purchase_price || 0);
+                                      const unitCost = isLoose ? (purchasePrice / piecesPerPack) : purchasePrice;
+                                      updateCartRate(item.product.id, unitCost > 0 ? unitCost : item.rate, isLoose, '');
+                                      return;
+                                    }
+                                    const m = parseFloat(val);
+                                    if (isNaN(m)) {
+                                      updateCartRate(item.product.id, item.rate, isLoose, val);
+                                      return;
+                                    }
+                                    const piecesPerPack = Math.max(0.000001, Number(item.product.pieces_per_pack || 1));
+                                    const purchasePrice = Number(item.product.purchase_price || 0);
+                                    const unitCost = isLoose ? (purchasePrice / piecesPerPack) : purchasePrice;
+                                    if (unitCost > 0) {
+                                      updateCartRate(item.product.id, Math.round((unitCost * (1 + m / 100)) * 100) / 100, isLoose, val);
+                                    } else {
+                                      updateCartRate(item.product.id, item.rate, isLoose, val);
+                                    }
+                                  }}
                                 title="Margin % (Updates Rate based on Purchase Cost)"
                                 placeholder="0"
                               />
@@ -1117,8 +1131,16 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                                 max="100"
                                 step="any"
                                 className="w-16 bg-background border border-border rounded text-center text-xs text-foreground p-1 font-mono font-bold focus:outline-none focus:border-primary shadow-inner"
-                                value={item.discountPercent || ''}
-                                onChange={(e) => updateCartDiscount(item.product.id, parseFloat(e.target.value) || 0, isLoose)}
+                                value={item.discountText !== undefined ? item.discountText : (item.discountPercent || '')}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  if (val === '') {
+                                    updateCartDiscount(item.product.id, 0, isLoose, '');
+                                    return;
+                                  }
+                                  const d = parseFloat(val);
+                                  updateCartDiscount(item.product.id, isNaN(d) ? 0 : d, isLoose, val);
+                                }}
                                 placeholder="0"
                                 title="Discount Percentage"
                               />
@@ -1127,7 +1149,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                             <div className="flex items-center gap-1">
                               <span className="text-textMuted text-[10px] font-sans font-bold">Total:</span>
                               <strong className="text-xs font-black text-primary">
-                                ₹{(item.rate * item.qty * (1 - (item.discountPercent || 0) / 100)).toFixed(2)}
+                                ₹{Math.round(item.rate * item.qty * (1 - (item.discountPercent || 0) / 100)).toFixed(2)}
                               </strong>
                             </div>
                           </div>
@@ -1562,7 +1584,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                             const unit = item.unitName || item.unit || (item.isLoose ? (matchProd?.s_unit || matchProd?.unit) : (matchProd?.p_unit)) || matchProd?.s_unit || matchProd?.unit || '';
                             const displayQty = unit ? `${qty} ${unit}` : `${qty}`;
                             const rate = Number(item.rate || item.price || 0);
-                            const amt = Number(item.amount || (qty * rate));
+                            const amt = Number(item.amount !== undefined && item.amount !== null ? item.amount : Math.round(qty * rate));
                             
                             return (
                               <tr key={idx} className="border-b border-slate-200">
@@ -1958,10 +1980,11 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                               const name = item.product?.product_name || item.product_name || 'Item';
                               const qty = Number(item.qty || 1);
                               const rate = Number(item.rate || 0);
+                              const itemAmt = Number(item.amount !== undefined && item.amount !== null ? item.amount : Math.round(qty * rate));
                               return (
                                 <div key={i} className="flex justify-between items-center text-xs bg-slate-900 p-2 rounded-lg border border-slate-800">
                                   <span className="text-slate-200 font-bold uppercase truncate max-w-[280px]">{name} x {qty}</span>
-                                  <span className="font-mono text-primary font-bold">₹{(qty * rate).toFixed(2)} <span className="text-slate-400 text-[10px] font-normal">(₹{rate}/unit)</span></span>
+                                  <span className="font-mono text-primary font-bold">₹{itemAmt.toFixed(2)} <span className="text-slate-400 text-[10px] font-normal">(₹{rate}/unit)</span></span>
                                 </div>
                               );
                             })}
@@ -2136,3 +2159,4 @@ function formatNumberToIndianWords(amount: number): string {
 
   return `Rupees ${result.trim()} Only`;
 }
+
