@@ -385,17 +385,17 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
     }
   };
 
-  const handleCartAdd = (p: Product, isLoose: boolean = false) => {
+  const handleCartAdd = (p: Product, isLoose: boolean = false, unitConfig?: any) => {
     try {
-      addToCart(p, isLoose);
+      addToCart(p, isLoose, unitConfig);
     } catch (e: any) {
       alert(e.message);
     }
   };
 
-  const handleQtyChange = (productId: string, qty: number, isLoose: boolean = false, qtyText?: string) => {
+  const handleQtyChange = (productId: string, qty: number, isLoose: boolean = false, qtyText?: string, unitConfigName?: string) => {
     try {
-      updateCartQty(productId, Math.max(0, qty), isLoose, qtyText);
+      updateCartQty(productId, Math.max(0, qty), isLoose, qtyText, unitConfigName);
     } catch (e: any) {
       alert(e.message);
     }
@@ -731,25 +731,53 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                           </div>
 
                           {/* Dynamic Action Buttons */}
-                          <div className="flex items-center gap-1.5 pt-1">
-                            {isDualUnit && (
-                              <button
-                                type="button"
-                                className="flex-1 py-1.5 px-2.5 bg-primary hover:bg-primary/90 text-white font-extrabold rounded-lg text-[10px] uppercase transition shadow-sm active:scale-95 cursor-pointer font-mono text-center truncate"
-                                onClick={() => handleCartAdd(p, false)}
-                                title={`Add 1 ${pUnit} (${piecesPerPack} ${sUnit})`}
-                              >
-                                + 1 {pUnit}
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              className="flex-1 py-1.5 px-2 bg-blue-600 hover:bg-blue-50 text-white font-extrabold rounded-lg text-[10px] uppercase transition shadow-sm active:scale-95 cursor-pointer font-mono text-center truncate"
-                              onClick={() => handleCartAdd(p, true)}
-                              title={`Add 1 ${sUnit}`}
-                            >
-                              + 1 {sUnit}
-                            </button>
+                          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                            {(() => {
+                              const buttons = [];
+                              if (isDualUnit) {
+                                buttons.push(
+                                  <button
+                                    key="p_unit"
+                                    type="button"
+                                    className="flex-1 min-w-[60px] py-1.5 px-2 bg-primary hover:bg-primary/90 text-white font-extrabold rounded-lg text-[10px] uppercase transition shadow-sm active:scale-95 cursor-pointer font-mono text-center truncate"
+                                    onClick={() => handleCartAdd(p, false)}
+                                    title={`Add 1 ${pUnit} (${piecesPerPack} ${sUnit})`}
+                                  >
+                                    +1 {pUnit}
+                                  </button>
+                                );
+                              }
+                              
+                              if (p.multi_units && p.multi_units.length > 0) {
+                                p.multi_units.forEach((mu: any, idx: number) => {
+                                  buttons.push(
+                                    <button
+                                      key={`custom_${idx}`}
+                                      type="button"
+                                      className="flex-1 min-w-[60px] py-1.5 px-2 bg-amber-500 hover:bg-amber-600 text-white font-extrabold rounded-lg text-[10px] uppercase transition shadow-sm active:scale-95 cursor-pointer font-mono text-center truncate"
+                                      onClick={() => handleCartAdd(p, false, mu)}
+                                      title={`Add 1 ${mu.name} (${mu.conversionRate} ${sUnit})`}
+                                    >
+                                      +1 {mu.name}
+                                    </button>
+                                  );
+                                });
+                              }
+
+                              buttons.push(
+                                <button
+                                  key="s_unit"
+                                  type="button"
+                                  className="flex-1 min-w-[60px] py-1.5 px-2 bg-blue-600 hover:bg-blue-500 text-white font-extrabold rounded-lg text-[10px] uppercase transition shadow-sm active:scale-95 cursor-pointer font-mono text-center truncate"
+                                  onClick={() => handleCartAdd(p, true)}
+                                  title={`Add 1 ${sUnit}`}
+                                >
+                                  +1 {sUnit}
+                                </button>
+                              );
+                              
+                              return buttons;
+                            })()}
                           </div>
                         </div>
                       );
@@ -1001,12 +1029,49 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                       <p className="text-xs text-textMuted text-center py-4 bg-background/20 rounded-lg border border-dashed border-border/50">No items selected yet. Click items on the left panel to add to cart.</p>
                     ) : cart.map((item) => {
                       const isLoose = item.isLoose ?? true;
-                      const compoundKey = `${item.product.id}-${isLoose ? 'loose' : 'pack'}`;
                       const pUnit = item.product.p_unit || 'Box';
                       const sUnit = item.product.s_unit || item.product.unit || 'Pcs';
-                      const unitName = (item as any).unitName || (isLoose ? sUnit : pUnit);
                       const piecesPerPack = Math.max(0.000001, Number(item.product.pieces_per_pack || 1));
-                      const isDualUnit = piecesPerPack > 1 || (pUnit.toLowerCase() !== sUnit.toLowerCase());
+                      const unitName = (item as any).unitName || (item.unitConfig ? item.unitConfig.name : (isLoose ? sUnit : pUnit));
+                      
+                      const availableUnits: Array<{ key: string, name: string, label: string, isLoose: boolean, unitConfig: any }> = [];
+                      availableUnits.push({
+                        key: 's_unit',
+                        name: sUnit,
+                        label: sUnit,
+                        isLoose: true,
+                        unitConfig: undefined
+                      });
+                      
+                      if (piecesPerPack > 1 || pUnit.toLowerCase() !== sUnit.toLowerCase()) {
+                        availableUnits.push({
+                          key: 'p_unit',
+                          name: pUnit,
+                          label: `${pUnit} (1 = ${piecesPerPack} ${sUnit})`,
+                          isLoose: false,
+                          unitConfig: undefined
+                        });
+                      }
+                      
+                      if (item.product.multi_units && item.product.multi_units.length > 0) {
+                        item.product.multi_units.forEach((mu: any, idx: number) => {
+                          availableUnits.push({
+                            key: `custom_${idx}`,
+                            name: mu.name,
+                            label: `${mu.name} (1 = ${mu.conversionRate} ${sUnit})`,
+                            isLoose: false,
+                            unitConfig: mu
+                          });
+                        });
+                      }
+                      
+                      let selectedUnitKey = item.isLoose ? 's_unit' : 'p_unit';
+                      if (item.unitConfig) {
+                        const idx = (item.product.multi_units || []).findIndex((mu: any) => mu.name === item.unitConfig?.name);
+                        selectedUnitKey = idx >= 0 ? `custom_${idx}` : selectedUnitKey;
+                      }
+
+                      const compoundKey = `${item.product.id}-${selectedUnitKey}`;
 
                       return (
                         <div key={compoundKey} className="p-3 bg-background/60 rounded-xl border border-border space-y-2 shadow-xs">
@@ -1015,21 +1080,24 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                               <div className="text-xs font-black text-foreground uppercase truncate max-w-[240px]">{item.product.product_name}</div>
                               <div className="flex items-center gap-2 text-[10px] text-textSecondary mt-1 font-semibold">
                                 <span>Selling Unit:</span>
-                                {isDualUnit ? (
+                                {availableUnits.length > 1 ? (
                                   <select
-                                    value={isLoose ? 's_unit' : 'p_unit'}
+                                    value={selectedUnitKey}
                                     onChange={(e) => {
-                                      const targetIsLoose = e.target.value === 's_unit';
-                                      try {
-                                        updateCartUnit(item.product.id, isLoose, targetIsLoose);
-                                      } catch (err: any) {
-                                        alert(err.message || 'Cannot switch unit');
+                                      const targetUnit = availableUnits.find(u => u.key === e.target.value);
+                                      if (targetUnit) {
+                                        try {
+                                          updateCartUnit(item.product.id, isLoose, item.unitConfig?.name, targetUnit.isLoose, targetUnit.unitConfig);
+                                        } catch (err: any) {
+                                          alert(err.message || 'Cannot switch unit');
+                                        }
                                       }
                                     }}
-                                    className="bg-primary/10 border border-primary/30 text-primary font-bold text-[10px] px-1.5 py-0.5 rounded cursor-pointer uppercase focus:outline-none"
+                                    className="bg-primary/10 border border-primary/30 text-primary font-bold text-[10px] px-1.5 py-0.5 rounded cursor-pointer uppercase focus:outline-none max-w-[150px] truncate"
                                   >
-                                    <option value="s_unit">{sUnit}</option>
-                                    <option value="p_unit">{pUnit} (1 {pUnit} = {piecesPerPack} {sUnit})</option>
+                                    {availableUnits.map(u => (
+                                      <option key={u.key} value={u.key}>{u.label}</option>
+                                    ))}
                                   </select>
                                 ) : (
                                   <span className="font-bold text-primary bg-primary/10 px-2 py-0.5 rounded border border-primary/30 uppercase text-[10px]">
@@ -1042,7 +1110,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                             <button
                               type="button"
                               className="text-rose-500 hover:text-rose-400 text-base font-bold p-1 cursor-pointer"
-                              onClick={() => removeFromCart(item.product.id, isLoose)}
+                              onClick={() => removeFromCart(item.product.id, isLoose, item.unitConfig?.name)}
                               title="Remove item"
                             >
                               &times;
@@ -1062,7 +1130,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                                 onChange={(e) => {
                                   const textVal = e.target.value;
                                   const val = textVal === '' ? 0 : (parseFloat(textVal) || 0);
-                                  handleQtyChange(item.product.id, Math.max(0, val), isLoose, textVal);
+                                  handleQtyChange(item.product.id, Math.max(0, val), isLoose, textVal, item.unitConfig?.name);
                                 }}
                                 title="Quantity"
                               />
@@ -1076,7 +1144,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                                 step="any"
                                 className="w-20 bg-background border border-border rounded text-center text-xs text-foreground p-1 font-mono font-bold focus:outline-none focus:border-primary shadow-inner"
                                 value={item.rate}
-                                onChange={(e) => updateCartRate(item.product.id, parseFloat(e.target.value) || 0, isLoose)}
+                                onChange={(e) => updateCartRate(item.product.id, parseFloat(e.target.value) || 0, isLoose, '', item.unitConfig?.name)}
                                 title="Rate per Unit"
                               />
                             </div>
@@ -1101,21 +1169,21 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                                       const piecesPerPack = Math.max(0.000001, Number(item.product.pieces_per_pack || 1));
                                       const purchasePrice = Number(item.product.purchase_price || 0);
                                       const unitCost = isLoose ? (purchasePrice / piecesPerPack) : purchasePrice;
-                                      updateCartRate(item.product.id, unitCost > 0 ? unitCost : item.rate, isLoose, '');
+                                      updateCartRate(item.product.id, unitCost > 0 ? unitCost : item.rate, isLoose, '', item.unitConfig?.name);
                                       return;
                                     }
                                     const m = parseFloat(val);
                                     if (isNaN(m)) {
-                                      updateCartRate(item.product.id, item.rate, isLoose, val);
+                                      updateCartRate(item.product.id, item.rate, isLoose, val, item.unitConfig?.name);
                                       return;
                                     }
                                     const piecesPerPack = Math.max(0.000001, Number(item.product.pieces_per_pack || 1));
                                     const purchasePrice = Number(item.product.purchase_price || 0);
                                     const unitCost = isLoose ? (purchasePrice / piecesPerPack) : purchasePrice;
                                     if (unitCost > 0) {
-                                      updateCartRate(item.product.id, Math.round((unitCost * (1 + m / 100)) * 100) / 100, isLoose, val);
+                                      updateCartRate(item.product.id, Math.round((unitCost * (1 + m / 100)) * 100) / 100, isLoose, val, item.unitConfig?.name);
                                     } else {
-                                      updateCartRate(item.product.id, item.rate, isLoose, val);
+                                      updateCartRate(item.product.id, item.rate, isLoose, val, item.unitConfig?.name);
                                     }
                                   }}
                                 title="Margin % (Updates Rate based on Purchase Cost)"
@@ -1135,11 +1203,11 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                                 onChange={(e) => {
                                   const val = e.target.value;
                                   if (val === '') {
-                                    updateCartDiscount(item.product.id, 0, isLoose, '');
+                                    updateCartDiscount(item.product.id, 0, isLoose, '', item.unitConfig?.name);
                                     return;
                                   }
                                   const d = parseFloat(val);
-                                  updateCartDiscount(item.product.id, isNaN(d) ? 0 : d, isLoose, val);
+                                  updateCartDiscount(item.product.id, isNaN(d) ? 0 : d, isLoose, val, item.unitConfig?.name);
                                 }}
                                 placeholder="0"
                                 title="Discount Percentage"

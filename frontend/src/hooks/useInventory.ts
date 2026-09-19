@@ -69,7 +69,8 @@ export function useInventory(tenantId: string, _businessType?: string) {
       piece_selling_price: Number(productPayload.piece_selling_price || 0),
       allow_decimal: Boolean(productPayload.allow_decimal),
       allow_purchase_unit_selling: productPayload.allow_purchase_unit_selling !== undefined ? Boolean(productPayload.allow_purchase_unit_selling) : true,
-      track_base_unit: productPayload.track_base_unit !== undefined ? Boolean(productPayload.track_base_unit) : true
+      track_base_unit: productPayload.track_base_unit !== undefined ? Boolean(productPayload.track_base_unit) : true,
+      multi_units: (productPayload as any).multi_units || []
     };
 
     try {

@@ -109,6 +109,7 @@ CREATE TABLE IF NOT EXISTS purchase_bills (
     paid_amount NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
     due_amount NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
     purchase_date TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    due_date DATE,
     UNIQUE(tenant_id, bill_number)
 );
 
@@ -362,3 +363,5 @@ CREATE POLICY job_card_parts_policy ON job_card_parts FOR ALL TO authenticated U
 
 
 
+
+ALTER TABLE products ADD COLUMN IF NOT EXISTS multi_units JSONB DEFAULT '[]'::jsonb;

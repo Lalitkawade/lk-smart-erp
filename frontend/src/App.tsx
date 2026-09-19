@@ -1088,6 +1088,7 @@ function App() {
             {activeTab === 'dashboard' && (
               <Dashboard tenantId={tenant?.id || 'default-hardware-erp'} sales={sales} purchases={purchases} expenses={expenses} onNavigate={setActiveTab} />
             )}
+            
             {activeTab === 'new-entry' && (
               <div className="space-y-6 animate-fade-in w-full max-w-[1600px] mx-auto my-4 transition-all duration-300">
                 <div className="bg-secondary border border-border p-5 sm:p-6 rounded-2xl shadow-md">

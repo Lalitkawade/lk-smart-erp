@@ -745,7 +745,7 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
       </div>
 
       {/* 2. Primary 4-Stat Bento Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
 
         {/* Total Sales */}
         <div
@@ -755,16 +755,16 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
         >
           <div className="flex justify-between items-start">
             <div>
-              <span className="text-[10.5px] font-bold text-textMuted uppercase tracking-wider flex items-center gap-1 group-hover:text-primary transition">
+              <span className="text-[9px] sm:text-[10.5px] font-bold text-textMuted uppercase tracking-wider flex items-center gap-1 group-hover:text-primary transition leading-tight">
                 {t('totalSales')} <i className="fa-solid fa-arrow-up-right text-[9px] opacity-0 group-hover:opacity-100 transition"></i>
               </span>
-              <div className="text-xl font-black text-foreground font-mono mt-1">₹{stats.sales.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
-              <span className="text-[10px] text-primary font-bold mt-1 inline-flex items-center gap-1">
+              <div className="text-base sm:text-xl font-black text-foreground font-mono mt-1">₹{stats.sales.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+              <span className="text-[8px] sm:text-[10px] text-primary font-bold mt-1 inline-flex items-center gap-1 leading-tight">
                 <i className="fa-solid fa-arrow-up-right"></i> {filteredData.sales.length} Invoices
               </span>
             </div>
-            <div className="p-3 bg-primary/10 text-primary rounded-xl border border-primary/20 group-hover:scale-110 group-hover:bg-primary group-hover:text-white transition duration-300">
-              <i className="fa-solid fa-file-invoice-dollar text-lg"></i>
+            <div className="p-2 sm:p-3 bg-primary/10 text-primary rounded-xl border border-primary/20 group-hover:scale-110 group-hover:bg-primary group-hover:text-white transition duration-300">
+              <i className="fa-solid fa-file-invoice-dollar text-base sm:text-lg"></i>
             </div>
           </div>
         </div>
@@ -777,16 +777,16 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
         >
           <div className="flex justify-between items-start">
             <div>
-              <span className="text-[10.5px] font-bold text-textMuted uppercase tracking-wider flex items-center gap-1 group-hover:text-purple-400 transition">
+              <span className="text-[9px] sm:text-[10.5px] font-bold text-textMuted uppercase tracking-wider flex items-center gap-1 group-hover:text-purple-400 transition leading-tight">
                 {t('totalPurchases')} <i className="fa-solid fa-arrow-up-right text-[9px] opacity-0 group-hover:opacity-100 transition"></i>
               </span>
-              <div className="text-xl font-black text-foreground font-mono mt-1">₹{stats.purchases.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
-              <span className="text-[10px] text-purple-400 font-bold mt-1 inline-flex items-center gap-1">
+              <div className="text-base sm:text-xl font-black text-foreground font-mono mt-1">₹{stats.purchases.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+              <span className="text-[8px] sm:text-[10px] text-purple-400 font-bold mt-1 inline-flex items-center gap-1 leading-tight">
                 <i className="fa-solid fa-boxes-stacked"></i> {filteredData.purchases.length} Procurement Bills
               </span>
             </div>
-            <div className="p-3 bg-purple-500/10 text-purple-400 rounded-xl border border-purple-500/20 group-hover:scale-110 group-hover:bg-purple-500 group-hover:text-white transition duration-300">
-              <i className="fa-solid fa-cart-shopping text-lg"></i>
+            <div className="p-2 sm:p-3 bg-purple-500/10 text-purple-400 rounded-xl border border-purple-500/20 group-hover:scale-110 group-hover:bg-purple-500 group-hover:text-white transition duration-300">
+              <i className="fa-solid fa-cart-shopping text-base sm:text-lg"></i>
             </div>
           </div>
         </div>
@@ -799,16 +799,16 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
         >
           <div className="flex justify-between items-start">
             <div>
-              <span className="text-[10.5px] font-bold text-textMuted uppercase tracking-wider flex items-center gap-1 group-hover:text-rose-400 transition">
+              <span className="text-[9px] sm:text-[10.5px] font-bold text-textMuted uppercase tracking-wider flex items-center gap-1 group-hover:text-rose-400 transition leading-tight">
                 {t('shopExpenses')} <i className="fa-solid fa-arrow-up-right text-[9px] opacity-0 group-hover:opacity-100 transition"></i>
               </span>
-              <div className="text-xl font-black text-foreground font-mono mt-1">₹{stats.expenses.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
-              <span className="text-[10px] text-rose-400 font-bold mt-1 inline-flex items-center gap-1">
+              <div className="text-base sm:text-xl font-black text-foreground font-mono mt-1">₹{stats.expenses.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+              <span className="text-[8px] sm:text-[10px] text-rose-400 font-bold mt-1 inline-flex items-center gap-1 leading-tight">
                 <i className="fa-solid fa-receipt"></i> {filteredData.expenses.length} Logged Entries
               </span>
             </div>
-            <div className="p-3 bg-rose-500/10 text-rose-400 rounded-xl border border-rose-500/20 group-hover:scale-110 group-hover:bg-rose-500 group-hover:text-white transition duration-300">
-              <i className="fa-solid fa-hand-holding-dollar text-lg"></i>
+            <div className="p-2 sm:p-3 bg-rose-500/10 text-rose-400 rounded-xl border border-rose-500/20 group-hover:scale-110 group-hover:bg-rose-500 group-hover:text-white transition duration-300">
+              <i className="fa-solid fa-hand-holding-dollar text-base sm:text-lg"></i>
             </div>
           </div>
         </div>
@@ -817,14 +817,14 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
         <div className="bento-card relative overflow-hidden group">
           <div className="flex justify-between items-start">
             <div>
-              <span className="text-[10.5px] font-bold text-textMuted uppercase tracking-wider">{t('netProfit')}</span>
-              <div className={`text-xl font-black font-mono mt-1 ${stats.netProfit >= 0 ? 'text-primary' : 'text-rose-400'}`}>
-                ₹{stats.netProfit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              <span className="text-[9px] sm:text-[10.5px] font-bold text-textMuted uppercase tracking-wider leading-tight">{t('netProfit')}</span>
+              <div className={`text-base sm:text-xl font-black font-mono mt-1 ${stats.netProfit >= 0 ? 'text-primary' : 'text-rose-400'}`}>
+                ₹{stats.netProfit.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
               </div>
-              <span className="text-[10px] text-textMuted font-semibold mt-1 block">Revenue - COGS - Expenses</span>
+              <span className="text-[8px] sm:text-[10px] text-textMuted font-semibold mt-1 block leading-tight">Revenue - COGS - Expenses</span>
             </div>
-            <div className={`p-3 rounded-xl border group-hover:scale-110 transition duration-300 ${stats.netProfit >= 0 ? 'bg-primary/10 text-primary border-primary/20' : 'bg-rose-500/10 text-rose-400 border-rose-500/20'}`}>
-              <i className="fa-solid fa-sack-dollar text-lg"></i>
+            <div className={`p-2 sm:p-3 rounded-xl border group-hover:scale-110 transition duration-300 ${stats.netProfit >= 0 ? 'bg-primary/10 text-primary border-primary/20' : 'bg-rose-500/10 text-rose-400 border-rose-500/20'}`}>
+              <i className="fa-solid fa-sack-dollar text-base sm:text-lg"></i>
             </div>
           </div>
         </div>
@@ -832,27 +832,27 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
       </div>
 
       {/* 3. Secondary 2-Stat Row (Stock Value + Supplier Pending Dues) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 gap-4">
 
         {/* Total Stock Value */}
         <div
           onClick={() => onNavigate('inventory-stock')}
-          className="bento-card p-4 flex items-center justify-between cursor-pointer group hover:border-amber-500/60 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-200"
+          className="bento-card p-3 sm:p-4 flex flex-col xl:flex-row items-start xl:items-center justify-between cursor-pointer group hover:border-amber-500/60 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-200 gap-3"
           title="Click to view Inventory Stock"
         >
-          <div className="flex items-center gap-3">
-            <div className="p-3 bg-amber-500/10 text-amber-500 rounded-xl border border-amber-500/20 group-hover:scale-110 group-hover:bg-amber-500 group-hover:text-white transition duration-300">
-              <i className="fa-solid fa-warehouse text-lg"></i>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="p-2 sm:p-3 bg-amber-500/10 text-amber-500 rounded-xl border border-amber-500/20 group-hover:scale-110 group-hover:bg-amber-500 group-hover:text-white transition duration-300 shrink-0">
+              <i className="fa-solid fa-warehouse text-base sm:text-lg"></i>
             </div>
             <div>
-              <span className="text-[10px] font-bold text-textMuted uppercase group-hover:text-amber-500 transition">Total Catalog Stock Valuation</span>
-              <div className="text-lg font-black text-foreground font-mono">₹{stats.stockValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+              <span className="text-[8.5px] sm:text-[10px] font-bold text-textMuted uppercase group-hover:text-amber-500 transition leading-tight line-clamp-2">Total Catalog Stock Valuation</span>
+              <div className="text-sm sm:text-lg font-black text-foreground font-mono">₹{stats.stockValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
             </div>
           </div>
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); onNavigate('inventory-stock'); }}
-            className="text-xs text-primary font-extrabold hover:underline group-hover:translate-x-1 transition cursor-pointer"
+            className="text-[10px] sm:text-xs text-primary font-extrabold hover:underline group-hover:translate-x-1 transition cursor-pointer self-start xl:self-auto"
           >
             View Inventory &rarr;
           </button>
@@ -861,22 +861,22 @@ export default function Dashboard({ tenantId, sales, purchases, expenses, onNavi
         {/* Vendor Pending Dues */}
         <div
           onClick={() => onNavigate('suppliers')}
-          className="bento-card p-4 flex items-center justify-between cursor-pointer group hover:border-orange-500/60 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-200"
+          className="bento-card p-3 sm:p-4 flex flex-col xl:flex-row items-start xl:items-center justify-between cursor-pointer group hover:border-orange-500/60 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-200 gap-3"
           title="Click to view Suppliers & Vendors"
         >
-          <div className="flex items-center gap-3">
-            <div className="p-3 bg-orange-500/10 text-orange-400 rounded-xl border border-orange-500/20 group-hover:scale-110 group-hover:bg-orange-500 group-hover:text-white transition duration-300">
-              <i className="fa-solid fa-truck-ramp-box text-lg"></i>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="p-2 sm:p-3 bg-orange-500/10 text-orange-400 rounded-xl border border-orange-500/20 group-hover:scale-110 group-hover:bg-orange-500 group-hover:text-white transition duration-300 shrink-0">
+              <i className="fa-solid fa-truck-ramp-box text-base sm:text-lg"></i>
             </div>
             <div>
-              <span className="text-[10px] font-bold text-textMuted uppercase group-hover:text-orange-400 transition">Supplier Payables (Outstanding Dues)</span>
-              <div className="text-lg font-black text-orange-400 font-mono">₹{stats.vendorPending.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+              <span className="text-[8.5px] sm:text-[10px] font-bold text-textMuted uppercase group-hover:text-orange-400 transition leading-tight line-clamp-2">Supplier Payables (Outstanding Dues)</span>
+              <div className="text-sm sm:text-lg font-black text-orange-400 font-mono">₹{stats.vendorPending.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
             </div>
           </div>
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); onNavigate('suppliers'); }}
-            className="text-xs text-primary font-extrabold hover:underline group-hover:translate-x-1 transition cursor-pointer"
+            className="text-[10px] sm:text-xs text-primary font-extrabold hover:underline group-hover:translate-x-1 transition cursor-pointer self-start xl:self-auto"
           >
             View Vendors &rarr;
           </button>

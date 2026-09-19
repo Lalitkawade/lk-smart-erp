@@ -17,37 +17,37 @@ export function useBilling(tenantId: string) {
 
   const sales = contextSales || [];
 
-  const addToCart = (product: Product, isLoose: boolean = false) => {
-    const existing = cart.find(item => item.product.id === product.id && item.isLoose === isLoose);
+  const addToCart = (product: Product, isLoose: boolean = false, unitConfig?: { name: string; conversionRate: number; price: number }) => {
+    const existing = cart.find(item => item.product.id === product.id && (unitConfig ? item.unitConfig?.name === unitConfig.name : (!item.unitConfig && item.isLoose === isLoose)));
     const piecesPerPack = Math.max(1, Number(product.pieces_per_pack || 1));
     const stockInBaseUnits = Number(product.current_stock || 0);
 
     // Calculate total base units currently added to cart for this product
     const currentBaseUnitsInCart = cart
       .filter(item => item.product.id === product.id)
-      .reduce((sum, item) => sum + (item.qty * (item.isLoose ? 1 : piecesPerPack)), 0);
+      .reduce((sum, item) => sum + (item.qty * (item.unitConfig ? item.unitConfig.conversionRate : (item.isLoose ? 1 : piecesPerPack))), 0);
 
-    const addedBaseUnits = isLoose ? 1 : piecesPerPack;
+    const addedBaseUnits = unitConfig ? unitConfig.conversionRate : (isLoose ? 1 : piecesPerPack);
 
     if (existing) {
       if (currentBaseUnitsInCart + addedBaseUnits > stockInBaseUnits) {
         const baseUnit = product.unit || product.s_unit || 'Nos';
         throw new Error(`Insufficient stock. Only ${stockInBaseUnits} ${baseUnit} available in inventory.`);
       }
-      setCart(cart.map(item => (item.product.id === product.id && item.isLoose === isLoose) ? { ...item, qty: item.qty + 1 } : item));
+      setCart(cart.map(item => (item.product.id === product.id && (unitConfig ? item.unitConfig?.name === unitConfig.name : (!item.unitConfig && item.isLoose === isLoose))) ? { ...item, qty: item.qty + 1 } : item));
     } else {
       if (addedBaseUnits > stockInBaseUnits) {
         const baseUnit = product.unit || product.s_unit || 'Nos';
         throw new Error(`Insufficient stock. Only ${stockInBaseUnits} ${baseUnit} available in inventory.`);
       }
       const { piecePrice, packPrice } = getProductUnitRates(product);
-      const rate = isLoose ? piecePrice : packPrice;
-      setCart([...cart, { product, qty: 1, rate, discountPercent: 0, isLoose }]);
+      const rate = unitConfig ? unitConfig.price : (isLoose ? piecePrice : packPrice);
+      setCart([...cart, { product, qty: 1, rate, discountPercent: 0, isLoose, unitConfig }]);
     }
   };
 
-  const updateCartQty = (productId: string, qty: number, isLoose: boolean = false, qtyText?: string) => {
-    const item = cart.find(i => i.product.id === productId && i.isLoose === isLoose);
+  const updateCartQty = (productId: string, qty: number, isLoose: boolean = false, qtyText?: string, unitConfigName?: string) => {
+    const item = cart.find(i => i.product.id === productId && (unitConfigName ? i.unitConfig?.name === unitConfigName : (!i.unitConfig && i.isLoose === isLoose)));
     if (!item) return;
 
     const piecesPerPack = Math.max(1, Number(item.product.pieces_per_pack || 1));
@@ -55,37 +55,38 @@ export function useBilling(tenantId: string) {
 
     // Calculate other cart items' total base units for this product
     const otherItemsBaseUnits = cart
-      .filter(i => i.product.id === productId && !(i.isLoose === isLoose))
-      .reduce((sum, i) => sum + (i.qty * (i.isLoose ? 1 : piecesPerPack)), 0);
+      .filter(i => i.product.id === productId && !(unitConfigName ? i.unitConfig?.name === unitConfigName : (!i.unitConfig && i.isLoose === isLoose)))
+      .reduce((sum, i) => sum + (i.qty * (i.unitConfig ? i.unitConfig.conversionRate : (i.isLoose ? 1 : piecesPerPack))), 0);
 
-    const requestedBaseUnits = otherItemsBaseUnits + (qty * (isLoose ? 1 : piecesPerPack));
+    const currentUnitConversionRate = item.unitConfig ? item.unitConfig.conversionRate : (isLoose ? 1 : piecesPerPack);
+    const requestedBaseUnits = otherItemsBaseUnits + (qty * currentUnitConversionRate);
 
     if (requestedBaseUnits > stockInBaseUnits) {
       const baseUnit = item.product.unit || item.product.s_unit || 'Nos';
       throw new Error(`Insufficient stock. Only ${stockInBaseUnits} ${baseUnit} available in inventory.`);
     }
 
-    setCart(cart.map(i => (i.product.id === productId && i.isLoose === isLoose) ? { ...i, qty: Math.max(0, qty), qtyText } : i));
+    setCart(cart.map(i => (i.product.id === productId && (unitConfigName ? i.unitConfig?.name === unitConfigName : (!i.unitConfig && i.isLoose === isLoose))) ? { ...i, qty: Math.max(0, qty), qtyText } : i));
   };
 
-  const updateCartRate = (productId: string, rate: number, isLoose: boolean = true, marginText?: string) => {
+  const updateCartRate = (productId: string, rate: number, isLoose: boolean = true, marginText?: string, unitConfigName?: string) => {
     const safeRate = Math.max(0, Number(rate) || 0);
-    setCart(cart.map(i => (i.product.id === productId && i.isLoose === isLoose) ? { ...i, rate: safeRate, marginText: marginText } : i));
+    setCart(cart.map(i => (i.product.id === productId && (unitConfigName ? i.unitConfig?.name === unitConfigName : (!i.unitConfig && i.isLoose === isLoose))) ? { ...i, rate: safeRate, marginText: marginText } : i));
   };
 
-  const updateCartDiscount = (productId: string, discount: number, isLoose: boolean = true, discountText?: string) => {
+  const updateCartDiscount = (productId: string, discount: number, isLoose: boolean = true, discountText?: string, unitConfigName?: string) => {
     const safeDisc = Math.max(0, Math.min(100, Number(discount) || 0));
     setCart(cart.map(i => {
-      if (i.product.id === productId && i.isLoose === isLoose) {
+      if (i.product.id === productId && (unitConfigName ? i.unitConfig?.name === unitConfigName : (!i.unitConfig && i.isLoose === isLoose))) {
         return { ...i, discountPercent: safeDisc, discountText: discountText };
       }
       return i;
     }));
   };
 
-  const updateCartUnit = (productId: string, currentIsLoose: boolean, targetIsLoose: boolean) => {
-    if (currentIsLoose === targetIsLoose) return;
-    const item = cart.find(i => i.product.id === productId && i.isLoose === currentIsLoose);
+  const updateCartUnit = (productId: string, currentIsLoose: boolean, currentUnitConfigName: string | undefined, targetIsLoose: boolean, targetUnitConfig?: { name: string; conversionRate: number; price: number }) => {
+    if (currentIsLoose === targetIsLoose && currentUnitConfigName === targetUnitConfig?.name) return;
+    const item = cart.find(i => i.product.id === productId && (currentUnitConfigName ? i.unitConfig?.name === currentUnitConfigName : (!i.unitConfig && i.isLoose === currentIsLoose)));
     if (!item) return;
 
     const piecesPerPack = Math.max(1, Number(item.product.pieces_per_pack || 1));
@@ -93,34 +94,36 @@ export function useBilling(tenantId: string) {
 
     // Calculate other cart items' total base units for this product
     const otherItemsBaseUnits = cart
-      .filter(i => i.product.id === productId && !(i.isLoose === currentIsLoose))
-      .reduce((sum, i) => sum + (i.qty * (i.isLoose ? 1 : piecesPerPack)), 0);
-    const targetItem = cart.find(i => i.product.id === productId && i.isLoose === currentIsLoose);
+      .filter(i => !(i.product.id === productId && (currentUnitConfigName ? i.unitConfig?.name === currentUnitConfigName : (!i.unitConfig && i.isLoose === currentIsLoose))))
+      .reduce((sum, i) => sum + (i.qty * (i.unitConfig ? i.unitConfig.conversionRate : (i.isLoose ? 1 : piecesPerPack))), 0);
+    
+    const targetItem = cart.find(i => i.product.id === productId && (currentUnitConfigName ? i.unitConfig?.name === currentUnitConfigName : (!i.unitConfig && i.isLoose === currentIsLoose)));
     if (!targetItem) return;
 
     const { piecePrice, packPrice } = getProductUnitRates(targetItem.product);
-    const newRate = targetIsLoose ? piecePrice : packPrice;
-    const existingTargetIndex = cart.findIndex(i => i.product.id === productId && i.isLoose === targetIsLoose);
+    const newRate = targetUnitConfig ? targetUnitConfig.price : (targetIsLoose ? piecePrice : packPrice);
+    const existingTargetIndex = cart.findIndex(i => i.product.id === productId && (targetUnitConfig ? i.unitConfig?.name === targetUnitConfig.name : (!i.unitConfig && i.isLoose === targetIsLoose)));
 
     if (existingTargetIndex >= 0) {
-      setCart(cart.filter(i => !(i.product.id === productId && i.isLoose === currentIsLoose)).map((i, idx) => {
-        if (i.product.id === productId && i.isLoose === targetIsLoose) {
+      setCart(cart.filter(i => !(i.product.id === productId && (currentUnitConfigName ? i.unitConfig?.name === currentUnitConfigName : (!i.unitConfig && i.isLoose === currentIsLoose)))).map((i, idx) => {
+        if (i.product.id === productId && (targetUnitConfig ? i.unitConfig?.name === targetUnitConfig.name : (!i.unitConfig && i.isLoose === targetIsLoose))) {
           return { ...i, qty: i.qty + targetItem.qty, rate: newRate };
         }
         return i;
       }));
     } else {
       setCart(cart.map(i => {
-        if (i.product.id === productId && i.isLoose === currentIsLoose) {
-          return { ...i, isLoose: targetIsLoose, rate: newRate };
+        if (i.product.id === productId && (currentUnitConfigName ? i.unitConfig?.name === currentUnitConfigName : (!i.unitConfig && i.isLoose === currentIsLoose))) {
+          return { ...i, isLoose: targetIsLoose, unitConfig: targetUnitConfig, rate: newRate };
         }
         return i;
       }));
     }
   };
 
-  const removeFromCart = (productId: string, isLoose: boolean = true) => {
-    setCart(cart.filter(i => !(i.product.id === productId && i.isLoose === isLoose)));
+
+  const removeFromCart = (productId: string, isLoose: boolean = true, unitConfigName?: string) => {
+    setCart(cart.filter(i => !(i.product.id === productId && (unitConfigName ? i.unitConfig?.name === unitConfigName : (!i.unitConfig && i.isLoose === isLoose)))));
   };
 
   const processCheckout = async (options?: { amountCollected?: number; repayUdharAmount?: number; paymentMode?: string; transactionId?: string; discountAmount?: number; dueDate?: string; matchedCustomer?: any }) => {
@@ -278,10 +281,10 @@ export function useBilling(tenantId: string) {
 
       const itemsPayload = cart.map(item => {
         const piecesPerPack = Math.max(0.000001, Number(item.product.pieces_per_pack || 1));
-        const conversionFactor = item.isLoose ? 1 : piecesPerPack;
-        const transactionUnit = item.isLoose 
+        const conversionFactor = item.unitConfig ? item.unitConfig.conversionRate : (item.isLoose ? 1 : piecesPerPack);
+        const transactionUnit = item.unitConfig ? item.unitConfig.name : (item.isLoose 
           ? (item.product.s_unit || item.product.unit || 'Nos') 
-          : (item.product.p_unit || item.product.purchase_units?.[0] || 'Box');
+          : (item.product.p_unit || item.product.purchase_units?.[0] || 'Box'));
 
         return {
           product_id: item.product.id,
@@ -325,7 +328,8 @@ export function useBilling(tenantId: string) {
           rate: c.rate,
           amount: Math.round(c.qty * c.rate * (1 - (c.discountPercent || 0) / 100)),
           isLoose: c.isLoose,
-          unitName: (c as any).unitName || (c.isLoose ? (c.product.s_unit || c.product.unit) : c.product.p_unit),
+          unitConfig: c.unitConfig,
+          unitName: (c as any).unitName || (c.unitConfig ? c.unitConfig.name : (c.isLoose ? (c.product.s_unit || c.product.unit) : c.product.p_unit)),
           purchase_price: c.product.purchase_price,
           pieces_per_pack: c.product.pieces_per_pack
         }))

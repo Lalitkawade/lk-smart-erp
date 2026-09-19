@@ -97,6 +97,7 @@ CREATE TABLE suppliers (
     establishment_date DATE,
     gst_number TEXT,
     outstanding NUMERIC(12, 2) DEFAULT 0.00,
+    due_date DATE,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -261,6 +262,7 @@ CREATE TABLE purchase_bills (
     paid_amount NUMERIC(12, 2) DEFAULT 0.00,
     due_amount NUMERIC(12, 2) DEFAULT 0.00,
     purchase_date TIMESTAMPTZ DEFAULT NOW(),
+    due_date DATE,
     status TEXT DEFAULT 'Completed',
     created_at TIMESTAMPTZ DEFAULT NOW()
 );

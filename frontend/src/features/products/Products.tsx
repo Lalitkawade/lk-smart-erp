@@ -516,6 +516,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
     selling_units: ['Nos'],
     base_unit: 'Nos',
     conversions: [],
+    multi_units: [],
     isCollapsed: false,
     isUnitConversionExpanded: false
   });
@@ -601,7 +602,8 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
       piece_selling_price: Number(p.piece_selling_price || 0),
       allow_decimal: p.allow_decimal ?? false,
       allow_purchase_unit_selling: p.allow_purchase_unit_selling ?? true,
-      track_base_unit: p.track_base_unit ?? true
+      track_base_unit: p.track_base_unit ?? true,
+      multi_units: p.multi_units || [],
     };
   };
 
@@ -862,6 +864,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
       selling_units: p.selling_units || [p.unit || 'Nos'],
       base_unit: p.base_unit || p.unit || 'Nos',
       conversions: p.conversions || [],
+      multi_units: p.multi_units || [],
       isCollapsed: false,
       isUnitConversionExpanded: false
     }]);
@@ -1011,6 +1014,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
           allow_decimal: item.allow_decimal,
           allow_purchase_unit_selling: item.allow_purchase_unit_selling,
           track_base_unit: item.track_base_unit,
+          multi_units: item.multi_units || [],
           ...(targetProductId && { id: targetProductId })
         };
 
@@ -2572,6 +2576,89 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                                   {item.conversion_lhs || 1} {item.p_unit} = {item.pieces_per_pack ?? 0} {item.unit}
                                 </span>
                               </div>
+
+                              {/* Custom Selling Units Section */}
+                              <div className="mt-6 pt-4 border-t border-blue-200/50 dark:border-blue-800/50">
+                                <div className="flex justify-between items-center mb-3">
+                                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                                    <i className="fa-solid fa-layer-group text-blue-500"></i> Additional Selling Units
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const nextUnits = [...(item.multi_units || []), { name: '', conversionRate: 1, price: 0 }];
+                                      updateProductItem(index, { multi_units: nextUnits });
+                                    }}
+                                    className="text-[10px] bg-blue-100 hover:bg-blue-200 text-blue-700 dark:bg-blue-900 dark:text-blue-300 px-2 py-1 rounded transition font-bold"
+                                  >
+                                    + Add Unit
+                                  </button>
+                                </div>
+                                
+                                {item.multi_units && item.multi_units.length > 0 ? (
+                                  <div className="space-y-2">
+                                    {item.multi_units.map((mu: any, muIndex: number) => (
+                                      <div key={muIndex} className="flex flex-wrap md:flex-nowrap items-center gap-2 bg-white dark:bg-slate-900 p-2 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm">
+                                        <input
+                                          type="text"
+                                          placeholder="Unit Name (e.g. Dozen)"
+                                          className="flex-1 w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-1.5 text-xs focus:outline-blue-500"
+                                          value={mu.name}
+                                          onChange={(e) => {
+                                            const nextUnits = [...item.multi_units];
+                                            nextUnits[muIndex].name = e.target.value;
+                                            updateProductItem(index, { multi_units: nextUnits });
+                                          }}
+                                        />
+                                        <div className="flex items-center gap-1.5 flex-1 w-full">
+                                          <span className="text-[10px] text-slate-500 whitespace-nowrap">Eqv {item.unit || 'Nos'} =</span>
+                                          <input
+                                            type="number"
+                                            placeholder="Qty"
+                                            className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-1.5 text-xs focus:outline-blue-500 font-mono"
+                                            value={mu.conversionRate === 0 ? '' : mu.conversionRate}
+                                            onChange={(e) => {
+                                              const nextUnits = [...item.multi_units];
+                                              nextUnits[muIndex].conversionRate = Number(e.target.value);
+                                              updateProductItem(index, { multi_units: nextUnits });
+                                            }}
+                                          />
+                                        </div>
+                                        <div className="flex items-center gap-1.5 flex-1 w-full">
+                                          <span className="text-[10px] text-slate-500 whitespace-nowrap">Price ₹</span>
+                                          <input
+                                            type="number"
+                                            placeholder="Amount"
+                                            className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-1.5 text-xs focus:outline-blue-500 font-mono"
+                                            value={mu.price === 0 ? '' : mu.price}
+                                            onChange={(e) => {
+                                              const nextUnits = [...item.multi_units];
+                                              nextUnits[muIndex].price = Number(e.target.value);
+                                              updateProductItem(index, { multi_units: nextUnits });
+                                            }}
+                                          />
+                                        </div>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const nextUnits = [...item.multi_units];
+                                            nextUnits.splice(muIndex, 1);
+                                            updateProductItem(index, { multi_units: nextUnits });
+                                          }}
+                                          className="p-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded transition shrink-0"
+                                        >
+                                          <i className="fa-solid fa-trash text-[10px]"></i>
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div className="text-center py-2 text-[10px] text-slate-400 italic bg-slate-50 dark:bg-slate-800/50 rounded border border-dashed border-slate-200 dark:border-slate-700">
+                                    No additional units configured.
+                                  </div>
+                                )}
+                              </div>
+
                             </div>
                           </div>
                         )}
