@@ -310,9 +310,9 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
           (itemProdName && p.product_name && itemProdName.toLowerCase().trim() === p.product_name.toLowerCase().trim());
 
         if (String(itemProdId) === String(p.id) || (itemProdName && p.product_name && itemProdName.toLowerCase().trim() === p.product_name.toLowerCase().trim())) {
-           console.log("[DEBUG] FOUND POTENTIAL MATCH! Bill:", bill.id, "ItemProdId:", itemProdId, "ItemProdName:", itemProdName, "isMatch:", isMatch);
+          console.log("[DEBUG] FOUND POTENTIAL MATCH! Bill:", bill.id, "ItemProdId:", itemProdId, "ItemProdName:", itemProdName, "isMatch:", isMatch);
         } else {
-           console.log("[DEBUG] NO MATCH. Bill:", bill.id, "ItemProdId:", itemProdId, "ItemProdName:", itemProdName, "Target:", p.id, p.product_name);
+          console.log("[DEBUG] NO MATCH. Bill:", bill.id, "ItemProdId:", itemProdId, "ItemProdName:", itemProdName, "Target:", p.id, p.product_name);
         }
 
         if (isMatch) {
@@ -388,7 +388,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
   const filteredPurchaseHistory = useMemo(() => {
     if (!prodPurchaseHistory) return [];
     if (historyRateFilter === 'all') return prodPurchaseHistory;
-    
+
     if (historyRateFilter === 'lowest' && purchaseStats.lowest) {
       return prodPurchaseHistory.filter(item => item.piece_rate === purchaseStats.lowest!.piece_rate);
     }
@@ -1381,15 +1381,15 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
             type="button"
             onClick={() => setActiveViewTab('catalog')}
             className={`w-full py-2.5 px-2 rounded-t-xl transition flex items-center justify-center gap-1.5 cursor-pointer text-center ${activeViewTab === 'catalog'
-                ? 'bg-secondary border-t-2 border-x border-primary text-primary font-extrabold shadow-2xs'
-                : 'bg-background/50 border-t border-x border-border text-textMuted hover:text-foreground'
+              ? 'bg-secondary border-t-2 border-x border-primary text-primary font-extrabold shadow-2xs'
+              : 'bg-background/50 border-t border-x border-border text-textMuted hover:text-foreground'
               }`}
           >
             <i className="fa-solid fa-boxes-stacked text-xs shrink-0"></i>
             <span className="truncate">Product Items & Catalog</span>
             <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono shrink-0 ${activeViewTab === 'catalog'
-                ? 'bg-background text-foreground font-bold'
-                : 'bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-textMuted'
+              ? 'bg-background text-foreground font-bold'
+              : 'bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-textMuted'
               }`}>
               {products.length}
             </span>
@@ -1399,15 +1399,15 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
             type="button"
             onClick={() => setActiveViewTab('bills')}
             className={`w-full py-2.5 px-2 rounded-t-xl transition flex items-center justify-center gap-1.5 cursor-pointer text-center ${activeViewTab === 'bills'
-                ? 'bg-secondary border-t-2 border-x border-primary text-primary font-extrabold shadow-2xs'
-                : 'bg-background/50 border-t border-x border-border text-textMuted hover:text-foreground'
+              ? 'bg-secondary border-t-2 border-x border-primary text-primary font-extrabold shadow-2xs'
+              : 'bg-background/50 border-t border-x border-border text-textMuted hover:text-foreground'
               }`}
           >
             <i className="fa-solid fa-receipt text-xs shrink-0"></i>
             <span className="truncate">Procurement & Bills Desk</span>
             <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono shrink-0 ${activeViewTab === 'bills'
-                ? 'bg-background text-foreground font-bold'
-                : 'bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-textMuted'
+              ? 'bg-background text-foreground font-bold'
+              : 'bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-textMuted'
               }`}>
               {purchasesList.length}
             </span>
@@ -1551,8 +1551,8 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                         </td>
                         <td className="py-3 px-4 text-center whitespace-nowrap">
                           <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-lg uppercase border ${isPaid
-                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
-                              : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30'
+                            ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                            : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30'
                             }`}>
                             {isPaid ? `Paid (${b.payment_mode || 'Cash'})` : `⚠️ Dues ₹${dueAmt.toFixed(0)}`}
                           </span>
@@ -2282,7 +2282,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                           className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
                         />
                         <i className="fa-solid fa-file-invoice text-emerald-600 dark:text-emerald-400"></i>
-                        <span>Attach Supplier Purchase Invoice Number & Payment Status</span>
+                        <span>Purchase Invoice Number & Payment Status</span>
                       </label>
                     </div>
 
@@ -2433,7 +2433,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                             </div>
                             <div>
                               <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wide flex items-center gap-2 flex-wrap">
-                                <span>Units & Dual-Unit Conversion</span>
+                                <span>Units Conversion</span>
                                 <span className="text-[10px] font-extrabold text-blue-600 bg-blue-50 dark:bg-blue-950 px-2 py-0.5 rounded border border-blue-200 dark:border-blue-800">
                                   {item.conversion_lhs || 1} {item.p_unit} = {item.pieces_per_pack ?? 0} {item.unit}
                                 </span>
@@ -2452,7 +2452,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                         </div>
 
                         {/* Unit Dropdowns */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div className="grid grid-cols-3 gap-2 sm:gap-3">
                           <div>
                             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
                               Purchase Unit <span className="text-rose-500 font-bold">*</span>
@@ -2515,13 +2515,13 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                                 </span>
                               </div>
 
-                              <div className="bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-800 rounded-xl p-3.5 flex flex-wrap items-center justify-center gap-3 shadow-sm">
-                                <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700">
+                              <div className="bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-800 rounded-xl p-3.5 flex flex-col sm:flex-row items-center justify-center gap-3 shadow-sm w-full">
+                                <div className="flex items-center justify-between w-full sm:w-auto gap-2 bg-slate-100 dark:bg-slate-800 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700">
                                   <input
                                     type="number"
                                     step="any"
                                     min="0"
-                                    className="w-16 bg-transparent text-center text-sm font-black text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-600/30 rounded"
+                                    className="w-full sm:w-16 flex-1 bg-transparent text-center text-sm font-black text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-600/30 rounded"
                                     value={item.conversion_lhs === 0 ? 0 : (item.conversion_lhs ?? '')}
                                     onChange={(e) => {
                                       const val = e.target.value;
@@ -2544,12 +2544,12 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                                   =
                                 </div>
 
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center justify-between w-full sm:w-auto gap-2">
                                   <input
                                     type="number"
                                     step="any"
                                     min="0"
-                                    className="w-28 bg-blue-50/80 dark:bg-slate-800 border-2 border-blue-600 rounded-xl p-2 text-center text-base font-black text-blue-700 dark:text-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-600/30 shadow-inner font-mono"
+                                    className="w-full sm:w-28 flex-1 bg-blue-50/80 dark:bg-slate-800 border-2 border-blue-600 rounded-xl p-2 text-center text-base font-black text-blue-700 dark:text-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-600/30 shadow-inner font-mono"
                                     value={item.pieces_per_pack === 0 ? 0 : (item.pieces_per_pack ?? '')}
                                     onChange={(e) => {
                                       const val = e.target.value;
@@ -2569,94 +2569,14 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                                 </div>
                               </div>
 
-                              <div className="bg-blue-600 text-white text-center py-2 px-4 rounded-xl text-xs font-extrabold shadow-sm flex items-center justify-center gap-2">
-                                <i className="fa-solid fa-eye text-blue-200"></i>
-                                <span>Live Conversion Preview:</span>
-                                <span className="font-mono text-amber-300 font-black text-sm">
+                              <div className="bg-blue-600 text-white text-center py-2 px-4 rounded-xl text-xs font-extrabold shadow-sm flex flex-col sm:flex-row items-center justify-center gap-2 w-full break-words">
+                                <div className="flex items-center gap-1.5">
+                                  <i className="fa-solid fa-eye text-blue-200"></i>
+                                  <span>Live Conversion Preview:</span>
+                                </div>
+                                <span className="font-mono text-amber-300 font-black text-sm text-center">
                                   {item.conversion_lhs || 1} {item.p_unit} = {item.pieces_per_pack ?? 0} {item.unit}
                                 </span>
-                              </div>
-
-                              {/* Custom Selling Units Section */}
-                              <div className="mt-6 pt-4 border-t border-blue-200/50 dark:border-blue-800/50">
-                                <div className="flex justify-between items-center mb-3">
-                                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                                    <i className="fa-solid fa-layer-group text-blue-500"></i> Additional Selling Units
-                                  </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const nextUnits = [...(item.multi_units || []), { name: '', conversionRate: 1, price: 0 }];
-                                      updateProductItem(index, { multi_units: nextUnits });
-                                    }}
-                                    className="text-[10px] bg-blue-100 hover:bg-blue-200 text-blue-700 dark:bg-blue-900 dark:text-blue-300 px-2 py-1 rounded transition font-bold"
-                                  >
-                                    + Add Unit
-                                  </button>
-                                </div>
-                                
-                                {item.multi_units && item.multi_units.length > 0 ? (
-                                  <div className="space-y-2">
-                                    {item.multi_units.map((mu: any, muIndex: number) => (
-                                      <div key={muIndex} className="flex flex-wrap md:flex-nowrap items-center gap-2 bg-white dark:bg-slate-900 p-2 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm">
-                                        <input
-                                          type="text"
-                                          placeholder="Unit Name (e.g. Dozen)"
-                                          className="flex-1 w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-1.5 text-xs focus:outline-blue-500"
-                                          value={mu.name}
-                                          onChange={(e) => {
-                                            const nextUnits = [...item.multi_units];
-                                            nextUnits[muIndex].name = e.target.value;
-                                            updateProductItem(index, { multi_units: nextUnits });
-                                          }}
-                                        />
-                                        <div className="flex items-center gap-1.5 flex-1 w-full">
-                                          <span className="text-[10px] text-slate-500 whitespace-nowrap">Eqv {item.unit || 'Nos'} =</span>
-                                          <input
-                                            type="number"
-                                            placeholder="Qty"
-                                            className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-1.5 text-xs focus:outline-blue-500 font-mono"
-                                            value={mu.conversionRate === 0 ? '' : mu.conversionRate}
-                                            onChange={(e) => {
-                                              const nextUnits = [...item.multi_units];
-                                              nextUnits[muIndex].conversionRate = Number(e.target.value);
-                                              updateProductItem(index, { multi_units: nextUnits });
-                                            }}
-                                          />
-                                        </div>
-                                        <div className="flex items-center gap-1.5 flex-1 w-full">
-                                          <span className="text-[10px] text-slate-500 whitespace-nowrap">Price ₹</span>
-                                          <input
-                                            type="number"
-                                            placeholder="Amount"
-                                            className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-1.5 text-xs focus:outline-blue-500 font-mono"
-                                            value={mu.price === 0 ? '' : mu.price}
-                                            onChange={(e) => {
-                                              const nextUnits = [...item.multi_units];
-                                              nextUnits[muIndex].price = Number(e.target.value);
-                                              updateProductItem(index, { multi_units: nextUnits });
-                                            }}
-                                          />
-                                        </div>
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            const nextUnits = [...item.multi_units];
-                                            nextUnits.splice(muIndex, 1);
-                                            updateProductItem(index, { multi_units: nextUnits });
-                                          }}
-                                          className="p-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded transition shrink-0"
-                                        >
-                                          <i className="fa-solid fa-trash text-[10px]"></i>
-                                        </button>
-                                      </div>
-                                    ))}
-                                  </div>
-                                ) : (
-                                  <div className="text-center py-2 text-[10px] text-slate-400 italic bg-slate-50 dark:bg-slate-800/50 rounded border border-dashed border-slate-200 dark:border-slate-700">
-                                    No additional units configured.
-                                  </div>
-                                )}
                               </div>
 
                             </div>
@@ -2665,8 +2585,8 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                       </div>
 
                       {/* PRODUCT DETAILS GRID */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="col-span-1 sm:col-span-2 relative">
+                      <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                        <div className="col-span-2 relative">
                           <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Product Name *</label>
                           <input
                             type="text"
@@ -2791,7 +2711,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                         </div>
                         <div>
                           <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
-                            <span>Cost (Purchase Price) *</span>
+                            <span>Purchase Price *</span>
                             <span className="text-[10px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-950 px-1.5 py-0.5 rounded border border-blue-200 dark:border-blue-800">per {item.p_unit || 'Unit'}</span>
                           </label>
                           <input
@@ -2822,15 +2742,98 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                           />
                         </div>
 
+                        {/* Custom Selling Units Section */}
+                        <div className="col-span-2 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 p-3 sm:p-4 mt-2">
+                          <div className="flex justify-between items-center mb-3">
+                            <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                              <i className="fa-solid fa-layer-group text-blue-500"></i> Additional Selling Units
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const nextUnits = [...(item.multi_units || []), { name: '', conversionRate: 1, price: 0 }];
+                                updateProductItem(index, { multi_units: nextUnits });
+                              }}
+                              className="text-[10px] bg-blue-100 hover:bg-blue-200 text-blue-700 dark:bg-blue-900 dark:text-blue-300 px-2 py-1 rounded transition font-bold"
+                            >
+                              + Add Unit
+                            </button>
+                          </div>
+
+                          {item.multi_units && item.multi_units.length > 0 ? (
+                            <div className="space-y-2">
+                              {item.multi_units.map((mu: any, muIndex: number) => (
+                                <div key={muIndex} className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 bg-white dark:bg-slate-900 p-3 sm:p-2 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm">
+                                  <input
+                                    type="text"
+                                    placeholder="Unit Name (e.g. Dozen)"
+                                    className="w-full sm:flex-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-2 sm:p-1.5 text-xs focus:outline-blue-500"
+                                    value={mu.name}
+                                    onChange={(e) => {
+                                      const nextUnits = [...item.multi_units];
+                                      nextUnits[muIndex].name = e.target.value;
+                                      updateProductItem(index, { multi_units: nextUnits });
+                                    }}
+                                  />
+                                  <div className="flex items-center gap-2 sm:gap-1.5 w-full sm:flex-1">
+                                    <span className="text-[10px] text-slate-500 whitespace-nowrap">Eqv {item.unit || 'Nos'} =</span>
+                                    <input
+                                      type="number"
+                                      placeholder="Qty"
+                                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-2 sm:p-1.5 text-xs focus:outline-blue-500 font-mono"
+                                      value={mu.conversionRate === 0 ? '' : mu.conversionRate}
+                                      onChange={(e) => {
+                                        const nextUnits = [...item.multi_units];
+                                        nextUnits[muIndex].conversionRate = Number(e.target.value);
+                                        updateProductItem(index, { multi_units: nextUnits });
+                                      }}
+                                    />
+                                  </div>
+                                  <div className="flex items-center gap-2 sm:gap-1.5 w-full sm:flex-1">
+                                    <span className="text-[10px] text-slate-500 whitespace-nowrap">Price ₹</span>
+                                    <input
+                                      type="number"
+                                      placeholder="Amount"
+                                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-2 sm:p-1.5 text-xs focus:outline-blue-500 font-mono"
+                                      value={mu.price === 0 ? '' : mu.price}
+                                      onChange={(e) => {
+                                        const nextUnits = [...item.multi_units];
+                                        nextUnits[muIndex].price = Number(e.target.value);
+                                        updateProductItem(index, { multi_units: nextUnits });
+                                      }}
+                                    />
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const nextUnits = [...item.multi_units];
+                                      nextUnits.splice(muIndex, 1);
+                                      updateProductItem(index, { multi_units: nextUnits });
+                                    }}
+                                    className="w-full sm:w-auto p-2 sm:p-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded transition shrink-0 flex items-center justify-center gap-2 border border-rose-100 dark:border-rose-900 sm:border-none mt-1 sm:mt-0"
+                                  >
+                                    <i className="fa-solid fa-trash text-sm sm:text-[10px]"></i>
+                                    <span className="sm:hidden text-xs font-bold">Remove Unit</span>
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="text-center py-2 text-[10px] text-slate-400 italic bg-white dark:bg-slate-900 rounded border border-dashed border-slate-300 dark:border-slate-700">
+                              No additional units configured.
+                            </div>
+                          )}
+                        </div>
+
                         {/* RULE 8: Live Step-by-Step Unit Conversion & Margin Calculation Card */}
-                        <div className="col-span-1 sm:col-span-2 bg-gradient-to-r from-blue-50/90 via-slate-50 to-emerald-50/90 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 p-4 rounded-2xl border-2 border-blue-200 dark:border-blue-800 text-xs space-y-2.5 shadow-xs">
+                        <div className="col-span-2 bg-gradient-to-r from-blue-50/90 via-slate-50 to-emerald-50/90 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 p-4 rounded-2xl border-2 border-blue-200 dark:border-blue-800 text-xs space-y-2.5 shadow-xs">
                           <div className="flex justify-between items-center flex-wrap gap-2 border-b border-blue-200 dark:border-blue-800 pb-2">
                             <span className="font-extrabold text-blue-900 dark:text-blue-300 flex items-center gap-1.5 uppercase tracking-wide">
                               <i className="fa-solid fa-calculator text-blue-600"></i> Rule 8 Live Conversion & Profit Engine
                             </span>
                             <span className={`font-mono font-black text-xs px-2.5 py-0.5 rounded-md border ${marginPercent >= 0
-                                ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700'
-                                : 'bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300 border-rose-300 dark:border-rose-700'
+                              ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700'
+                              : 'bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300 border-rose-300 dark:border-rose-700'
                               }`}>
                               Margin: {marginPercent >= 0 ? '+' : ''}{marginPercent.toFixed(1)}%
                             </span>
@@ -2886,8 +2889,8 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                                   step="any"
                                   disabled={!isEditingBaseStock}
                                   className={`w-full border rounded-xl p-2.5 font-mono font-bold transition text-xs pr-14 ${isEditingBaseStock
-                                      ? 'bg-white dark:bg-slate-900 border-blue-600 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-600/20'
-                                      : 'bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-500 cursor-not-allowed opacity-80'
+                                    ? 'bg-white dark:bg-slate-900 border-blue-600 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-600/20'
+                                    : 'bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-500 cursor-not-allowed opacity-80'
                                     }`}
                                   value={item.current_stock === 0 ? '' : item.current_stock}
                                   placeholder="0"
@@ -2927,7 +2930,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                             )}
 
                             {/* Live Calculation Preview Card for Editing Stock */}
-                            <div className="col-span-1 sm:col-span-2 bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white border-2 border-blue-500/40 p-3.5 rounded-2xl space-y-2.5 font-mono text-xs shadow-md">
+                            <div className="col-span-2 bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white border-2 border-blue-500/40 p-3.5 rounded-2xl space-y-2.5 font-mono text-xs shadow-md">
                               <div className="flex justify-between items-center border-b border-blue-500/30 pb-2 flex-wrap gap-2">
                                 <span className="font-extrabold text-blue-300 uppercase tracking-wide flex items-center gap-2 text-[11px]">
                                   <i className="fa-solid fa-boxes-packing text-amber-400"></i> Purchase Inward Stock Calculation
@@ -2970,10 +2973,10 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                             </div>
                           </>
                         ) : (
-                          <div className="col-span-1 sm:col-span-2 space-y-3">
+                          <div className="col-span-2 space-y-3">
                             <div>
                               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
-                                <span>📦 Purchase Quantity (Opening Stock) *</span>
+                                <span>📦 Purchase Quantity *</span>
                                 <span className="text-[10px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-950 px-1.5 py-0.5 rounded border border-blue-200 dark:border-blue-800 uppercase">
                                   in {item.p_unit || 'Box'}
                                 </span>
@@ -3076,8 +3079,8 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                                 }
                               }}
                               className={`text-[10px] font-extrabold px-2 py-0.5 rounded-lg border transition flex items-center gap-1 cursor-pointer active:scale-95 ${isEditingTax
-                                  ? 'bg-rose-500/10 text-rose-500 border-rose-500/30 hover:bg-rose-500 hover:text-white'
-                                  : 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30 hover:bg-blue-600 hover:text-white'
+                                ? 'bg-rose-500/10 text-rose-500 border-rose-500/30 hover:bg-rose-500 hover:text-white'
+                                : 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30 hover:bg-blue-600 hover:text-white'
                                 }`}
                             >
                               <i className={`fa-solid ${isEditingTax ? 'fa-lock' : 'fa-lock-open'}`}></i>
@@ -3087,8 +3090,8 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                           <select
                             disabled={!isEditingTax}
                             className={`w-full border rounded-xl p-2.5 text-xs font-semibold transition ${isEditingTax
-                                ? 'bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none'
-                                : 'bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-400 cursor-not-allowed opacity-75'
+                              ? 'bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none'
+                              : 'bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-400 cursor-not-allowed opacity-75'
                               }`}
                             value={item.gst || 0}
                             onChange={(e) => updateProductItem(index, { gst: Number(e.target.value) })}
@@ -3120,7 +3123,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                             placeholder="e.g. 1.2kg, 500g"
                           />
                         </div>
-                        <div className="col-span-1 sm:col-span-2">
+                        <div className="col-span-2">
                           <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Product Description</label>
                           <textarea
                             className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none shadow-xs"
@@ -3134,8 +3137,8 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
 
                       {/* Stock Location Breakdown: Godown + Rack + Shelf */}
                       <div className="bg-white dark:bg-slate-900/80 p-4 border border-slate-200 dark:border-slate-700/80 rounded-2xl space-y-3 shadow-xs">
-                        <label className="block text-xs font-extrabold text-slate-900 dark:text-slate-100 uppercase tracking-wide">Stock Location (Warehouse / Shelf Breakdown)</label>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <label className="block text-xs font-extrabold text-slate-900 dark:text-slate-100 uppercase tracking-wide">Stock Location</label>
+                        <div className="grid grid-cols-3 gap-2 sm:gap-3">
                           <div>
                             <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">Godown (Warehouse)</label>
                             <input
@@ -3232,8 +3235,8 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                         type="button"
                         onClick={() => { setPaymentStatus('paid'); setCustomPaidAmount(''); }}
                         className={`py-2.5 px-3 rounded-xl font-extrabold text-xs transition border flex flex-col items-center justify-center gap-0.5 cursor-pointer ${paymentStatus === 'paid'
-                            ? 'bg-emerald-600 text-white border-emerald-400 shadow-md scale-102 ring-2 ring-emerald-500/30'
-                            : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-700'
+                          ? 'bg-emerald-600 text-white border-emerald-400 shadow-md scale-102 ring-2 ring-emerald-500/30'
+                          : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-700'
                           }`}
                       >
                         <span className="flex items-center gap-1.5">
@@ -3247,8 +3250,8 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                         type="button"
                         onClick={() => { setPaymentStatus('partial'); if (customPaidAmount === '') setCustomPaidAmount(Math.round(calculatedTotalBillCost / 2)); }}
                         className={`py-2.5 px-3 rounded-xl font-extrabold text-xs transition border flex flex-col items-center justify-center gap-0.5 cursor-pointer ${paymentStatus === 'partial'
-                            ? 'bg-amber-600 text-white border-amber-400 shadow-md scale-102 ring-2 ring-amber-500/30'
-                            : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-700'
+                          ? 'bg-amber-600 text-white border-amber-400 shadow-md scale-102 ring-2 ring-amber-500/30'
+                          : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-700'
                           }`}
                       >
                         <span className="flex items-center gap-1.5">
@@ -3262,8 +3265,8 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                         type="button"
                         onClick={() => { setPaymentStatus('credit'); setCustomPaidAmount(0); }}
                         className={`py-2.5 px-3 rounded-xl font-extrabold text-xs transition border flex flex-col items-center justify-center gap-0.5 cursor-pointer ${paymentStatus === 'credit'
-                            ? 'bg-rose-600 text-white border-rose-400 shadow-md scale-102 ring-2 ring-rose-500/30'
-                            : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-700'
+                          ? 'bg-rose-600 text-white border-rose-400 shadow-md scale-102 ring-2 ring-rose-500/30'
+                          : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-700'
                           }`}
                       >
                         <span className="flex items-center gap-1.5">
@@ -3306,7 +3309,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                           Select date when promising repayment
                         </span>
                       </div>
-                      <input 
+                      <input
                         type="date"
                         className="w-full bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-slate-100 font-mono font-bold focus:border-amber-600 focus:outline-none"
                         value={dueDate}
@@ -3317,8 +3320,8 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
 
                   {/* DUES BREAKDOWN BANNER */}
                   <div className={`p-3.5 rounded-xl border font-mono text-xs flex justify-between items-center ${effectiveDueAmount > 0
-                      ? 'bg-rose-950/80 border-rose-500/60 text-rose-200'
-                      : 'bg-emerald-950/80 border-emerald-500/60 text-emerald-200'
+                    ? 'bg-rose-950/80 border-rose-500/60 text-rose-200'
+                    : 'bg-emerald-950/80 border-emerald-500/60 text-emerald-200'
                     }`}>
                     <div className="space-y-0.5">
                       <div className="font-extrabold flex items-center gap-1.5 text-xs">
@@ -3385,7 +3388,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
             {/* SUPPLIER RATE COMPARISON KPI SUMMARY CARDS */}
             {historyTab === 'purchases' && (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                <div 
+                <div
                   className={`p-3 rounded-xl cursor-pointer transition ${historyRateFilter === 'lowest' ? 'bg-emerald-500/20 border-2 border-emerald-500 ring-4 ring-emerald-500/20' : 'bg-emerald-500/10 border border-emerald-500/30 hover:border-emerald-500/60'}`}
                   onClick={() => setHistoryRateFilter(prev => prev === 'lowest' ? 'all' : 'lowest')}
                 >
@@ -3401,7 +3404,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                   </div>
                 </div>
 
-                <div 
+                <div
                   className={`p-3 rounded-xl cursor-pointer transition ${historyRateFilter === 'highest' ? 'bg-rose-500/20 border-2 border-rose-500 ring-4 ring-rose-500/20' : 'bg-rose-500/10 border border-rose-500/30 hover:border-rose-500/60'}`}
                   onClick={() => setHistoryRateFilter(prev => prev === 'highest' ? 'all' : 'highest')}
                 >
@@ -3470,58 +3473,58 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                 </thead>
                 <tbody className="divide-y divide-border">
                   {filteredPurchaseHistory.length === 0 ? (
-                      <tr>
-                        <td colSpan={9} className="p-8 text-center text-textMuted font-medium">No purchase inflow history logged for this product.</td>
-                      </tr>
-                    ) : (
-                      filteredPurchaseHistory.map((h, i) => {
-                        const rawD = new Date(h.date);
-                        const isDateOnly = typeof h.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(h.date.trim());
-                        const formattedDateStr = isNaN(rawD.getTime()) ? String(h.date || '-') : (
-                          isDateOnly
-                            ? rawD.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-                            : `${rawD.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}, ${rawD.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}`
-                        );
-                        return (
-                          <tr key={i} className="hover:bg-slate-100/5 transition font-medium">
-                            <td className="p-3 font-mono font-bold text-foreground text-center">{i + 1}</td>
-                            <td className="p-3 font-mono text-xs font-semibold whitespace-nowrap text-foreground">{formattedDateStr}</td>
-                            <td className="p-3 font-extrabold uppercase text-blue-600 dark:text-blue-400">{h.supplier_name}</td>
-                            <td className="p-3 font-mono text-[11px] text-textMuted">{h.bill_number}</td>
-                            <td className={`p-3 font-mono font-extrabold text-center whitespace-nowrap ${h.base_qty > 0 ? 'text-primary' : 'text-rose-500'}`}>
-                              {h.base_qty > 0 ? '+' : ''}{h.base_qty} {h.s_unit}
-                              {h.isDualUnit && h.pack_qty !== 0 && (
-                                <span className="block text-[10px] text-textMuted font-normal font-sans">
-                                  ({h.pack_qty.toFixed(1).replace(/\.0$/, '')} {h.p_unit})
-                                </span>
-                              )}
-                            </td>
-                            <td className="p-3 font-mono text-right font-bold text-foreground whitespace-nowrap">
-                              {h.isDualUnit && h.pack_rate > 0 ? `₹${h.pack_rate.toFixed(2)} / ${h.p_unit}` : '-'}
-                            </td>
-                            <td className="p-3 font-mono font-bold text-foreground text-right whitespace-nowrap">
-                              ₹{Number(h.piece_rate || 0).toFixed(2)} <span className="text-[10px] text-textMuted font-sans">/ {h.s_unit}</span>
-                            </td>
-                            <td className="p-3 text-center whitespace-nowrap">
-                              {h.variance === 0 || h.variance === null ? (
-                                <span className="text-[10px] font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 px-2 py-0.5 rounded font-mono">
-                                  ➖ Baseline
-                                </span>
-                              ) : h.variance < 0 ? (
-                                <span className="text-[10px] font-extrabold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800 px-2 py-0.5 rounded font-mono" title="Cheaper purchase rate than previous batch!">
-                                  🟢 -₹{Math.abs(h.variance).toFixed(2)} Cheaper
-                                </span>
-                              ) : (
-                                <span className="text-[10px] font-extrabold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/60 border border-rose-300 dark:border-rose-800 px-2 py-0.5 rounded font-mono" title="Rate increased compared to previous purchase!">
-                                  🔴 +₹{h.variance.toFixed(2)} Price Rise
-                                </span>
-                              )}
-                            </td>
-                            <td className="p-3 font-mono font-black text-primary text-right whitespace-nowrap">₹{Number(h.amount || (h.base_qty * h.piece_rate)).toFixed(2)}</td>
-                          </tr>
-                        );
-                      })
-                    )}
+                    <tr>
+                      <td colSpan={9} className="p-8 text-center text-textMuted font-medium">No purchase inflow history logged for this product.</td>
+                    </tr>
+                  ) : (
+                    filteredPurchaseHistory.map((h, i) => {
+                      const rawD = new Date(h.date);
+                      const isDateOnly = typeof h.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(h.date.trim());
+                      const formattedDateStr = isNaN(rawD.getTime()) ? String(h.date || '-') : (
+                        isDateOnly
+                          ? rawD.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+                          : `${rawD.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}, ${rawD.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}`
+                      );
+                      return (
+                        <tr key={i} className="hover:bg-slate-100/5 transition font-medium">
+                          <td className="p-3 font-mono font-bold text-foreground text-center">{i + 1}</td>
+                          <td className="p-3 font-mono text-xs font-semibold whitespace-nowrap text-foreground">{formattedDateStr}</td>
+                          <td className="p-3 font-extrabold uppercase text-blue-600 dark:text-blue-400">{h.supplier_name}</td>
+                          <td className="p-3 font-mono text-[11px] text-textMuted">{h.bill_number}</td>
+                          <td className={`p-3 font-mono font-extrabold text-center whitespace-nowrap ${h.base_qty > 0 ? 'text-primary' : 'text-rose-500'}`}>
+                            {h.base_qty > 0 ? '+' : ''}{h.base_qty} {h.s_unit}
+                            {h.isDualUnit && h.pack_qty !== 0 && (
+                              <span className="block text-[10px] text-textMuted font-normal font-sans">
+                                ({h.pack_qty.toFixed(1).replace(/\.0$/, '')} {h.p_unit})
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-3 font-mono text-right font-bold text-foreground whitespace-nowrap">
+                            {h.isDualUnit && h.pack_rate > 0 ? `₹${h.pack_rate.toFixed(2)} / ${h.p_unit}` : '-'}
+                          </td>
+                          <td className="p-3 font-mono font-bold text-foreground text-right whitespace-nowrap">
+                            ₹{Number(h.piece_rate || 0).toFixed(2)} <span className="text-[10px] text-textMuted font-sans">/ {h.s_unit}</span>
+                          </td>
+                          <td className="p-3 text-center whitespace-nowrap">
+                            {h.variance === 0 || h.variance === null ? (
+                              <span className="text-[10px] font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 px-2 py-0.5 rounded font-mono">
+                                ➖ Baseline
+                              </span>
+                            ) : h.variance < 0 ? (
+                              <span className="text-[10px] font-extrabold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800 px-2 py-0.5 rounded font-mono" title="Cheaper purchase rate than previous batch!">
+                                🟢 -₹{Math.abs(h.variance).toFixed(2)} Cheaper
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-extrabold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/60 border border-rose-300 dark:border-rose-800 px-2 py-0.5 rounded font-mono" title="Rate increased compared to previous purchase!">
+                                🔴 +₹{h.variance.toFixed(2)} Price Rise
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-3 font-mono font-black text-primary text-right whitespace-nowrap">₹{Number(h.amount || (h.base_qty * h.piece_rate)).toFixed(2)}</td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>

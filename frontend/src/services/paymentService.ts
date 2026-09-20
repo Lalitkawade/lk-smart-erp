@@ -2,7 +2,6 @@ import { handleServiceCall, ServiceResponse } from './baseService';
 import { supabase } from '../api/supabase';
 import type { CustomerPaymentRow, CustomerPaymentInsert, SupplierPaymentRow, SupplierPaymentInsert } from '../types/database.types';
 
-const isValidUUID = (id: any): boolean => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
 export class PaymentService {
   /**
