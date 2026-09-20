@@ -42,6 +42,7 @@ export class InventoryService {
       product: { id: string; current_stock?: number; pieces_per_pack?: number | null };
       qty: number;
       isLoose?: boolean;
+      unitConfig?: { conversionRate: number };
     }>
   ): Promise<ServiceResponse<boolean>> {
     try {
@@ -49,7 +50,9 @@ export class InventoryService {
         if (!item.product || !item.product.id || !isValidUUID(item.product.id)) return;
 
         const piecesPerPack = Math.max(0.000001, Number(item.product.pieces_per_pack || 1));
-        const totalDeductedBaseUnits = item.isLoose ? item.qty : item.qty * piecesPerPack;
+        const conversionFactor = item.unitConfig ? item.unitConfig.conversionRate : (item.isLoose ? 1 : piecesPerPack);
+        const totalDeductedBaseUnits = item.qty * conversionFactor;
+        
         const currentStock = Number(item.product.current_stock ?? 0);
         const newStock = Math.max(0, currentStock - totalDeductedBaseUnits);
 

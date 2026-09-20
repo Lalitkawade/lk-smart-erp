@@ -1159,7 +1159,12 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                                     if (item.marginText !== undefined) return item.marginText;
                                     const piecesPerPack = Math.max(0.000001, Number(item.product.pieces_per_pack || 1));
                                     const purchasePrice = Number(item.product.purchase_price || 0);
-                                    const unitCost = isLoose ? (purchasePrice / piecesPerPack) : purchasePrice;
+                                    let unitCost = purchasePrice;
+                                    if (item.unitConfig) {
+                                      unitCost = (purchasePrice / piecesPerPack) * item.unitConfig.conversionRate;
+                                    } else if (isLoose) {
+                                      unitCost = purchasePrice / piecesPerPack;
+                                    }
                                     if (unitCost <= 0) return '';
                                     return Math.round(((item.rate - unitCost) / unitCost) * 100);
                                   })()}
@@ -1168,7 +1173,12 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                                     if (val === '') {
                                       const piecesPerPack = Math.max(0.000001, Number(item.product.pieces_per_pack || 1));
                                       const purchasePrice = Number(item.product.purchase_price || 0);
-                                      const unitCost = isLoose ? (purchasePrice / piecesPerPack) : purchasePrice;
+                                      let unitCost = purchasePrice;
+                                      if (item.unitConfig) {
+                                        unitCost = (purchasePrice / piecesPerPack) * item.unitConfig.conversionRate;
+                                      } else if (isLoose) {
+                                        unitCost = purchasePrice / piecesPerPack;
+                                      }
                                       updateCartRate(item.product.id, unitCost > 0 ? unitCost : item.rate, isLoose, '', item.unitConfig?.name);
                                       return;
                                     }
@@ -1179,7 +1189,12 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                                     }
                                     const piecesPerPack = Math.max(0.000001, Number(item.product.pieces_per_pack || 1));
                                     const purchasePrice = Number(item.product.purchase_price || 0);
-                                    const unitCost = isLoose ? (purchasePrice / piecesPerPack) : purchasePrice;
+                                    let unitCost = purchasePrice;
+                                    if (item.unitConfig) {
+                                      unitCost = (purchasePrice / piecesPerPack) * item.unitConfig.conversionRate;
+                                    } else if (isLoose) {
+                                      unitCost = purchasePrice / piecesPerPack;
+                                    }
                                     if (unitCost > 0) {
                                       updateCartRate(item.product.id, Math.round((unitCost * (1 + m / 100)) * 100) / 100, isLoose, val, item.unitConfig?.name);
                                     } else {
