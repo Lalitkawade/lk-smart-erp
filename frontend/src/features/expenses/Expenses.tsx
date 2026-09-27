@@ -113,7 +113,24 @@ export default function Expenses({ autoOpenModal, onModalClosed }: ExpensesProps
     expenses.forEach(e => {
       summary[e.category] = (summary[e.category] || 0) + Number(e.amount);
     });
-    return Object.entries(summary);
+    return Object.entries(summary).sort((a, b) => b[1] - a[1]);
+  }, [expenses]);
+
+  // Calculate month-wise aggregates
+  const monthSummary = useMemo(() => {
+    const summary: Record<string, { label: string, total: number }> = {};
+    expenses.forEach(e => {
+      if (!e.expense_date) return;
+      const date = new Date(e.expense_date);
+      const sortKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      const label = date.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
+      
+      if (!summary[sortKey]) summary[sortKey] = { label, total: 0 };
+      summary[sortKey].total += Number(e.amount);
+    });
+    return Object.entries(summary)
+      .sort((a, b) => b[0].localeCompare(a[0])) // Sort descending by year-month
+      .map(([key, val]) => val);
   }, [expenses]);
 
   const filtered = expenses.filter(e => {
@@ -189,30 +206,58 @@ export default function Expenses({ autoOpenModal, onModalClosed }: ExpensesProps
           </div>
         </div>
 
-        {/* Expense Category Breakdowns */}
-        <div className="bg-secondary border border-border rounded-xl p-6 shadow-lg h-fit">
-          <h3 className="text-sm font-bold text-foreground mb-4">Operational Outflow Analysis</h3>
-          <div className="space-y-4">
-            {categorySummary.length === 0 ? (
-              <p className="text-xs text-textMuted py-6 text-center">No expense categories aggregated yet.</p>
-            ) : categorySummary.map(([cat, val]) => {
-              const total = expenses.reduce((acc, curr) => acc + curr.amount, 0);
-              const percentage = total > 0 ? (val / total) * 100 : 0;
-              return (
-                <div key={cat} className="space-y-1">
-                  <div className="flex justify-between text-xs font-semibold">
-                    <span className="text-textSecondary font-bold uppercase">{cat}</span>
-                    <span className="text-foreground font-mono">₹{val.toLocaleString()} ({percentage.toFixed(0)}%)</span>
+        {/* Analytics Side Panel */}
+        <div className="flex flex-col gap-6 h-fit">
+          
+          {/* Expense Category Breakdowns */}
+          <div className="bg-secondary border border-border rounded-xl p-6 shadow-lg">
+            <h3 className="text-sm font-bold text-foreground mb-4">Operational Outflow Analysis</h3>
+            <div className="space-y-4">
+              {categorySummary.length === 0 ? (
+                <p className="text-xs text-textMuted py-6 text-center">No expense categories aggregated yet.</p>
+              ) : categorySummary.map(([cat, val]) => {
+                const total = expenses.reduce((acc, curr) => acc + curr.amount, 0);
+                const percentage = total > 0 ? (val / total) * 100 : 0;
+                return (
+                  <div key={cat} className="space-y-1">
+                    <div className="flex justify-between text-xs font-semibold">
+                      <span className="text-textSecondary font-bold uppercase">{cat}</span>
+                      <span className="text-foreground font-mono">₹{val.toLocaleString('en-IN', { minimumFractionDigits: 2 })} ({percentage.toFixed(0)}%)</span>
+                    </div>
+                    <div className="w-full bg-background h-2 rounded-full overflow-hidden">
+                      <div className="bg-rose-500 h-full rounded-full" style={{ width: `${percentage}%` }}></div>
+                    </div>
                   </div>
-                  <div className="w-full bg-background h-2 rounded-full overflow-hidden">
-                    <div className="bg-rose-500 h-full rounded-full" style={{ width: `${percentage}%` }}></div>
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
-        </div>
 
+          {/* Month-wise Expenses Breakdowns */}
+          <div className="bg-secondary border border-border rounded-xl p-6 shadow-lg">
+            <h3 className="text-sm font-bold text-foreground mb-4">Month-wise Total Expenses</h3>
+            <div className="space-y-4">
+              {monthSummary.length === 0 ? (
+                <p className="text-xs text-textMuted py-6 text-center">No monthly expenses recorded yet.</p>
+              ) : monthSummary.map((m) => {
+                const maxMonthTotal = Math.max(...monthSummary.map(ms => ms.total));
+                const percentage = maxMonthTotal > 0 ? (m.total / maxMonthTotal) * 100 : 0;
+                return (
+                  <div key={m.label} className="space-y-1">
+                    <div className="flex justify-between text-xs font-semibold">
+                      <span className="text-textSecondary font-bold uppercase">{m.label}</span>
+                      <span className="text-foreground font-mono text-emerald-600 dark:text-emerald-400">₹{m.total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    <div className="w-full bg-background h-2 rounded-full overflow-hidden">
+                      <div className="bg-emerald-500 h-full rounded-full" style={{ width: `${percentage}%` }}></div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+        </div>
       </div>
 
       {/* Add Modal */}

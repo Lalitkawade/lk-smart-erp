@@ -1110,6 +1110,9 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
               body * {
                 visibility: hidden !important;
               }
+              #root {
+                display: none !important;
+              }
               #statement-print-area, #statement-print-area * {
                 visibility: visible !important;
               }

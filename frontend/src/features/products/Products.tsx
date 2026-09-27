@@ -56,6 +56,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
   const { products, isLoading, saveProduct, deleteProduct } = useInventory(tenantId, businessType);
   const [search, setSearch] = useState('');
   const [stockFilterTab, setStockFilterTab] = useState<'all' | 'low'>('all');
+  const [page, setPage] = useState(1);
 
   // Modals
   const [modalOpen, setModalOpen] = useState(false);
@@ -1355,7 +1356,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
         <div className="grid grid-cols-2 gap-2 border-b border-border text-xs font-bold mb-4">
           <button
             type="button"
-            onClick={() => setStockFilterTab('all')}
+            onClick={() => { setStockFilterTab('all'); setPage(1); }}
             className={`w-full py-2.5 px-2 rounded-t-xl transition flex items-center justify-center gap-1.5 cursor-pointer text-center ${stockFilterTab === 'all' ? 'bg-secondary border-t-2 border-x border-primary text-primary font-extrabold shadow-2xs' : 'bg-background/50 border-t border-x border-border text-textMuted hover:text-foreground'}`}
           >
             <span className="truncate">📦 All Warehouse Stock</span>
@@ -1363,7 +1364,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
           </button>
           <button
             type="button"
-            onClick={() => setStockFilterTab('low')}
+            onClick={() => { setStockFilterTab('low'); setPage(1); }}
             className={`w-full py-2.5 px-2 rounded-t-xl transition flex items-center justify-center gap-1.5 cursor-pointer text-center ${stockFilterTab === 'low' ? 'bg-secondary border-t-2 border-x border-rose-500 text-rose-500 font-extrabold shadow-2xs' : 'bg-background/50 border-t border-x border-border text-textMuted hover:text-foreground'}`}
           >
             <span className="truncate">⚠️ Low Stock Alerts</span>
@@ -1459,7 +1460,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                 className="w-full bg-secondary border border-border rounded-lg p-2.5 text-xs text-foreground focus:outline-none focus:border-primary font-semibold"
                 placeholder="Search by Bill No., Vendor Name, or Date..."
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
               />
             </div>
 
@@ -1600,7 +1601,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
         <>
           <div className="mb-4">
             <input type="text" className="w-full bg-background border border-border text-foreground rounded-lg p-3 text-sm focus:outline-none focus:border-primary font-semibold shadow-inner" placeholder={`🔍 ${t('searchPlaceholder')}`}
-              value={search} onChange={(e) => setSearch(e.target.value)} />
+              value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
           </div>
 
           <div className="bg-secondary/40 border border-border rounded-2xl shadow-sm overflow-x-auto">
@@ -1635,7 +1636,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                   <tr><td colSpan={8} className="py-8 text-center text-textMuted text-xs font-medium">Retrieving inventory records...</td></tr>
                 ) : filtered.length === 0 ? (
                   <tr><td colSpan={8} className="py-8 text-center text-textMuted text-xs font-medium">No matching stock items found.</td></tr>
-                ) : filtered.map((p) => {
+                ) : filtered.slice((page - 1) * 10, page * 10).map((p) => {
                   const name = p?.product_name || 'Unnamed Product';
                   const pUnit = p.p_unit || 'Box';
                   const sUnit = p.s_unit || p.unit || 'Nos';
@@ -1851,13 +1852,71 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
               </tbody>
             </table>
           </div>
+
+          {filtered.length > 10 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between border-t border-border mt-4 pt-4 gap-3 px-1">
+              <div className="text-xs text-textMuted font-medium text-center sm:text-left w-full sm:w-auto">
+                Showing <span className="font-bold text-foreground">{(page - 1) * 10 + 1}</span> to <span className="font-bold text-foreground">{Math.min(page * 10, filtered.length)}</span> of <span className="font-bold text-foreground">{filtered.length}</span> products
+              </div>
+              <div className="flex gap-2 w-full sm:w-auto justify-center sm:justify-end">
+                <button
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="px-4 py-2 rounded-lg border border-border text-xs font-extrabold text-foreground disabled:opacity-30 disabled:cursor-not-allowed hover:bg-secondary transition-colors"
+                >
+                  Previous
+                </button>
+                <button
+                  onClick={() => setPage(p => Math.min(Math.ceil(filtered.length / 10), p + 1))}
+                  disabled={page === Math.ceil(filtered.length / 10) || filtered.length === 0}
+                  className="px-4 py-2 rounded-lg border border-border text-xs font-extrabold text-foreground disabled:opacity-30 disabled:cursor-not-allowed hover:bg-secondary transition-colors"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
+
         </>
       )}
 
       {/* Printable Vendor Purchase Invoice Receipt Modal */}
       {viewingPurchaseBill && createPortal(
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4 z-[9999] animate-fade-in">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl overflow-y-auto max-h-[90vh]">
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4 z-[9999] animate-fade-in print:bg-white print:p-0">
+          <style>{`
+            @media print {
+              @page {
+                size: A4 portrait;
+                margin: 10mm;
+              }
+              body * {
+                visibility: hidden !important;
+              }
+              #root {
+                display: none !important;
+              }
+              #product-purchase-print-area, #product-purchase-print-area * {
+                visibility: visible !important;
+              }
+              #product-purchase-print-area {
+                position: absolute !important;
+                left: 0 !important;
+                top: 0 !important;
+                width: 100% !important;
+                background: white !important;
+                color: black !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                box-shadow: none !important;
+                border: none !important;
+                max-width: none !important;
+              }
+              .print\\:hidden {
+                display: none !important;
+              }
+            }
+          `}</style>
+          <div id="product-purchase-print-area" className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl overflow-y-auto max-h-[90vh] print:bg-white print:text-black print:border-none print:shadow-none print:m-0 print:p-0">
             <div className="flex justify-between items-start border-b pb-3 border-slate-200 dark:border-slate-800">
               <div>
                 <h3 className="text-base font-black text-slate-900 dark:text-slate-100 uppercase tracking-wide flex items-center gap-2">
@@ -1868,7 +1927,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
               <button
                 type="button"
                 onClick={() => setViewingPurchaseBill(null)}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-lg font-bold cursor-pointer"
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-lg font-bold cursor-pointer print:hidden"
               >
                 &times;
               </button>
@@ -1931,7 +1990,7 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
               <strong className="text-sm text-slate-900 dark:text-slate-100 font-black">₹{Number(viewingPurchaseBill.total_amount || 0).toFixed(2)}</strong>
             </div>
 
-            <div className="flex justify-end gap-2 pt-2">
+            <div className="flex justify-end gap-2 pt-2 print:hidden">
               <button
                 type="button"
                 onClick={() => handleDeleteProcurementBill(viewingPurchaseBill)}

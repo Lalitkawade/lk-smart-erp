@@ -861,6 +861,9 @@ export default function Suppliers({ autoOpenModal, onModalClosed }: SuppliersPro
               body * {
                 visibility: hidden !important;
               }
+              #root {
+                display: none !important;
+              }
               #supplier-print-area, #supplier-print-area * {
                 visibility: visible !important;
               }

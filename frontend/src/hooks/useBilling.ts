@@ -22,27 +22,28 @@ export function useBilling(tenantId: string) {
     const piecesPerPack = Math.max(1, Number(product.pieces_per_pack || 1));
     const stockInBaseUnits = Number(product.current_stock || 0);
 
+    const addedBaseUnits = unitConfig ? unitConfig.conversionRate : (isLoose ? 1 : piecesPerPack);
+    const { piecePrice, packPrice } = getProductUnitRates(product);
+    const totalAddedPrice = unitConfig ? unitConfig.price : (isLoose ? piecePrice : packPrice);
+    const ratePerBaseUnit = Number((totalAddedPrice / addedBaseUnits).toFixed(2));
+
     // Calculate total base units currently added to cart for this product
     const currentBaseUnitsInCart = cart
       .filter(item => item.product.id === product.id)
-      .reduce((sum, item) => sum + (item.qty * (item.unitConfig ? item.unitConfig.conversionRate : (item.isLoose ? 1 : piecesPerPack))), 0);
-
-    const addedBaseUnits = unitConfig ? unitConfig.conversionRate : (isLoose ? 1 : piecesPerPack);
+      .reduce((sum, item) => sum + item.qty, 0);
 
     if (existing) {
       if (currentBaseUnitsInCart + addedBaseUnits > stockInBaseUnits) {
         const baseUnit = product.unit || product.s_unit || 'Nos';
         throw new Error(`Insufficient stock. Only ${stockInBaseUnits} ${baseUnit} available in inventory.`);
       }
-      setCart(cart.map(item => (item.product.id === product.id && (unitConfig ? item.unitConfig?.name === unitConfig.name : (!item.unitConfig && item.isLoose === isLoose))) ? { ...item, qty: item.qty + 1 } : item));
+      setCart(cart.map(item => (item.product.id === product.id && (unitConfig ? item.unitConfig?.name === unitConfig.name : (!item.unitConfig && item.isLoose === isLoose))) ? { ...item, qty: item.qty + addedBaseUnits } : item));
     } else {
       if (addedBaseUnits > stockInBaseUnits) {
         const baseUnit = product.unit || product.s_unit || 'Nos';
         throw new Error(`Insufficient stock. Only ${stockInBaseUnits} ${baseUnit} available in inventory.`);
       }
-      const { piecePrice, packPrice } = getProductUnitRates(product);
-      const rate = unitConfig ? unitConfig.price : (isLoose ? piecePrice : packPrice);
-      setCart([...cart, { product, qty: 1, rate, discountPercent: 0, isLoose, unitConfig }]);
+      setCart([...cart, { product, qty: addedBaseUnits, rate: ratePerBaseUnit, discountPercent: 0, isLoose, unitConfig }]);
     }
   };
 
@@ -56,10 +57,9 @@ export function useBilling(tenantId: string) {
     // Calculate other cart items' total base units for this product
     const otherItemsBaseUnits = cart
       .filter(i => i.product.id === productId && !(unitConfigName ? i.unitConfig?.name === unitConfigName : (!i.unitConfig && i.isLoose === isLoose)))
-      .reduce((sum, i) => sum + (i.qty * (i.unitConfig ? i.unitConfig.conversionRate : (i.isLoose ? 1 : piecesPerPack))), 0);
+      .reduce((sum, i) => sum + i.qty, 0);
 
-    const currentUnitConversionRate = item.unitConfig ? item.unitConfig.conversionRate : (isLoose ? 1 : piecesPerPack);
-    const requestedBaseUnits = otherItemsBaseUnits + (qty * currentUnitConversionRate);
+    const requestedBaseUnits = otherItemsBaseUnits + qty;
 
     if (requestedBaseUnits > stockInBaseUnits) {
       const baseUnit = item.product.unit || item.product.s_unit || 'Nos';
@@ -95,13 +95,16 @@ export function useBilling(tenantId: string) {
     // Calculate other cart items' total base units for this product
     const otherItemsBaseUnits = cart
       .filter(i => !(i.product.id === productId && (currentUnitConfigName ? i.unitConfig?.name === currentUnitConfigName : (!i.unitConfig && i.isLoose === currentIsLoose))))
-      .reduce((sum, i) => sum + (i.qty * (i.unitConfig ? i.unitConfig.conversionRate : (i.isLoose ? 1 : piecesPerPack))), 0);
+      .reduce((sum, i) => sum + i.qty, 0);
     
     const targetItem = cart.find(i => i.product.id === productId && (currentUnitConfigName ? i.unitConfig?.name === currentUnitConfigName : (!i.unitConfig && i.isLoose === currentIsLoose)));
     if (!targetItem) return;
 
     const { piecePrice, packPrice } = getProductUnitRates(targetItem.product);
-    const newRate = targetUnitConfig ? targetUnitConfig.price : (targetIsLoose ? piecePrice : packPrice);
+    const targetAddedBaseUnits = targetUnitConfig ? targetUnitConfig.conversionRate : (targetIsLoose ? 1 : piecesPerPack);
+    const totalTargetPrice = targetUnitConfig ? targetUnitConfig.price : (targetIsLoose ? piecePrice : packPrice);
+    const newRate = Number((totalTargetPrice / targetAddedBaseUnits).toFixed(2));
+
     const existingTargetIndex = cart.findIndex(i => i.product.id === productId && (targetUnitConfig ? i.unitConfig?.name === targetUnitConfig.name : (!i.unitConfig && i.isLoose === targetIsLoose)));
 
     if (existingTargetIndex >= 0) {
@@ -280,21 +283,17 @@ export function useBilling(tenantId: string) {
       let invoice: any = { ...invoicePayload };
 
       const itemsPayload = cart.map(item => {
-        const piecesPerPack = Math.max(0.000001, Number(item.product.pieces_per_pack || 1));
-        const conversionFactor = item.unitConfig ? item.unitConfig.conversionRate : (item.isLoose ? 1 : piecesPerPack);
-        const transactionUnit = item.unitConfig ? item.unitConfig.name : (item.isLoose 
-          ? (item.product.s_unit || item.product.unit || 'Nos') 
-          : (item.product.p_unit || item.product.purchase_units?.[0] || 'Box'));
+        const baseUnit = item.product.s_unit || item.product.unit || item.product.base_unit || 'Nos';
 
         return {
           product_id: item.product.id,
           qty: item.qty,
           rate: item.rate,
           amount: Math.round(item.qty * item.rate * (1 - (item.discountPercent || 0) / 100)),
-          unit: transactionUnit,
-          base_unit: item.product.base_unit || item.product.unit || 'Nos',
-          conversion_factor: conversionFactor,
-          base_quantity: item.qty * conversionFactor
+          unit: baseUnit,
+          base_unit: baseUnit,
+          conversion_factor: 1,
+          base_quantity: item.qty
         };
       });
 
@@ -329,7 +328,7 @@ export function useBilling(tenantId: string) {
           amount: Math.round(c.qty * c.rate * (1 - (c.discountPercent || 0) / 100)),
           isLoose: c.isLoose,
           unitConfig: c.unitConfig,
-          unitName: (c as any).unitName || (c.unitConfig ? c.unitConfig.name : (c.isLoose ? (c.product.s_unit || c.product.unit) : c.product.p_unit)),
+          unitName: c.product.s_unit || c.product.unit || c.product.base_unit || 'Nos',
           purchase_price: c.product.purchase_price,
           pieces_per_pack: c.product.pieces_per_pack
         }))

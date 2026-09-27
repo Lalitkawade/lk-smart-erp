@@ -52,6 +52,7 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
   const products = contextProducts || [];
   const { purchases: bills, savePurchase, deletePurchase } = usePurchases(tenantId);
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
   
   // Modals
   const [modalOpen, setModalOpen] = useState(false);
@@ -495,14 +496,14 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
         <div className="w-full sm:w-1/2">
           <input type="text" className="w-full bg-secondary border border-border text-foreground rounded-lg p-2.5 text-xs focus:outline-none focus:border-primary font-semibold"
             placeholder="Search by Bill No., Vendor Supplier name, or item name..."
-            value={search} onChange={(e) => setSearch(e.target.value)} />
+            value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
         </div>
         <div className="w-full sm:w-auto flex items-center gap-2">
           <span className="text-xs font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap">Filter Vendor:</span>
           <select
             className="bg-secondary border border-border rounded-lg p-2 text-xs font-bold text-foreground focus:outline-none cursor-pointer"
             value={vendorFilter}
-            onChange={(e) => setVendorFilter(e.target.value)}
+            onChange={(e) => { setVendorFilter(e.target.value); setPage(1); }}
           >
             <option value="ALL">All Vendors ({suppliers.length})</option>
             {suppliers.map(s => (
@@ -534,7 +535,7 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
                   No matching purchase bills found.
                 </td>
               </tr>
-            ) : filteredBills.map((b: any) => {
+            ) : filteredBills.slice((page - 1) * 10, page * 10).map((b: any) => {
               const rawDate = new Date(b.purchase_date || b.created_at || Date.now());
               const formattedDate = isNaN(rawDate.getTime()) ? 'N/A' : rawDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
               const items = b.items || b.purchase_items || [];
@@ -610,6 +611,31 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
           </tbody>
         </table>
       </div>
+
+      {filteredBills.length > 10 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between border-t border-border mt-4 pt-4 gap-3">
+          <div className="text-xs text-textMuted font-medium text-center sm:text-left w-full sm:w-auto">
+            Showing <span className="font-bold text-foreground">{(page - 1) * 10 + 1}</span> to <span className="font-bold text-foreground">{Math.min(page * 10, filteredBills.length)}</span> of <span className="font-bold text-foreground">{filteredBills.length}</span> bills
+          </div>
+          <div className="flex gap-2 w-full sm:w-auto justify-center sm:justify-end">
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="px-4 py-2 rounded-lg border border-border text-xs font-extrabold text-foreground disabled:opacity-30 disabled:cursor-not-allowed hover:bg-secondary transition-colors"
+            >
+              Previous
+            </button>
+            <button
+              onClick={() => setPage(p => Math.min(Math.ceil(filteredBills.length / 10), p + 1))}
+              disabled={page === Math.ceil(filteredBills.length / 10) || filteredBills.length === 0}
+              className="px-4 py-2 rounded-lg border border-border text-xs font-extrabold text-foreground disabled:opacity-30 disabled:cursor-not-allowed hover:bg-secondary transition-colors"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
+
 
       {/* Log Bill Modal */}
       {modalOpen && createPortal(
@@ -1142,8 +1168,41 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
 
       {/* Purchase Bill Details Modal */}
       {viewingBill && createPortal(
-        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 z-[9999] overflow-y-auto animate-backdrop-fade">
-          <div className="bg-secondary border border-border p-6 rounded-2xl w-full max-w-2xl shadow-2xl my-auto space-y-6">
+        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 z-[9999] overflow-y-auto animate-backdrop-fade print:p-0 print:bg-white">
+          <style>{`
+            @media print {
+              @page {
+                size: A4 portrait;
+                margin: 10mm;
+              }
+              body * {
+                visibility: hidden !important;
+              }
+              #root {
+                display: none !important;
+              }
+              #purchase-print-area, #purchase-print-area * {
+                visibility: visible !important;
+              }
+              #purchase-print-area {
+                position: absolute !important;
+                left: 0 !important;
+                top: 0 !important;
+                width: 100% !important;
+                background: white !important;
+                color: black !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                box-shadow: none !important;
+                border: none !important;
+                max-width: none !important;
+              }
+              .print\\:hidden {
+                display: none !important;
+              }
+            }
+          `}</style>
+          <div id="purchase-print-area" className="bg-secondary border border-border p-6 rounded-2xl w-full max-w-2xl shadow-2xl my-auto space-y-6 print:bg-white print:text-black print:border-none print:shadow-none print:p-0 print:m-0">
             
             {/* Header */}
             <div className="flex justify-between items-start border-b border-border/80 pb-4">
@@ -1160,7 +1219,7 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
               <button 
                 type="button" 
                 onClick={() => setViewingBill(null)}
-                className="text-textSecondary hover:text-foreground text-xs font-bold bg-background/50 hover:bg-background border border-border px-3 py-1.5 rounded-lg transition"
+                className="text-textSecondary hover:text-foreground text-xs font-bold bg-background/50 hover:bg-background border border-border px-3 py-1.5 rounded-lg transition print:hidden"
               >
                 &times; Close
               </button>
@@ -1244,7 +1303,7 @@ export default function Purchases({ autoOpenModal = false, onModalClosed }: Purc
                 <span className="text-[10px] font-bold uppercase text-slate-400 block">Total Procurement Cost</span>
                 <span className="text-lg font-black text-emerald-400">₹{Number(viewingBill.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 print:hidden">
                 <button 
                   type="button" 
                   onClick={async () => {

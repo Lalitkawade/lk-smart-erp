@@ -24,13 +24,8 @@ export default function SalesReturnModal({ tenantId, invoice, onClose, onSuccess
           const piecesPerPack = Math.max(0.000001, Number(item.product?.pieces_per_pack || 1));
           const isDualUnit = piecesPerPack > 1 || (pUnit.toLowerCase() !== sUnit.toLowerCase());
           
-          const invoiceRate = Number(item.rate);
-          const packPriceDiff = Math.abs(invoiceRate - Number(item.product?.selling_price || 0));
-          const piecePriceDiff = Math.abs(invoiceRate - Number(item.product?.piece_selling_price || 0));
-          
-          // Guess the unit the item was sold in based on the rate
-          const likelySoldAsPack = packPriceDiff <= piecePriceDiff;
-          const invoiceUnit = likelySoldAsPack ? pUnit : sUnit;
+          // Use the actual unit saved in the invoice instead of guessing based on rates
+          const invoiceUnit = item.unit || item.base_unit || sUnit;
 
           let returnedQtyInInvoiceUnits = 0;
           if (invoice.returns && Array.isArray(invoice.returns)) {
@@ -58,6 +53,7 @@ export default function SalesReturnModal({ tenantId, invoice, onClose, onSuccess
 
           return {
             ...item,
+            original_qty: Number(item.qty || 0), // Save original qty for exact refund math
             qty: availableQty, // Replace original qty with net available qty in invoice units
             return_qty: 0,
             return_unit: invoiceUnit,
@@ -104,7 +100,10 @@ export default function SalesReturnModal({ tenantId, invoice, onClose, onSuccess
     } else if (item.invoice_unit === item.s_unit && item.return_unit === item.p_unit) {
       qtyInInvoiceUnits = item.return_qty * item.pieces_per_pack;
     }
-    return qtyInInvoiceUnits * Number(item.rate);
+    
+    // Use the effective rate (amount / original_qty) to account for any rounding or discounts applied during billing
+    const effectiveRate = item.original_qty > 0 ? (item.amount / item.original_qty) : Number(item.rate);
+    return Math.round(qtyInInvoiceUnits * effectiveRate);
   };
 
   const totalRefund = returnItems.reduce((acc, item) => acc + calculateRefund(item), 0);

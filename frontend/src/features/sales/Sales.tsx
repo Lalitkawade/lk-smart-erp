@@ -503,6 +503,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
   }, [sales, products]);
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [page, setPage] = useState(1);
   const filteredSaleLines = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
     return saleLines.filter(line => {
@@ -540,7 +541,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
       <div className="mb-4">
         <input type="text" className="w-full bg-background border border-border text-foreground rounded-lg p-3 text-sm focus:outline-none focus:border-primary font-semibold"
           placeholder="Search sales by product name, HSN, or Customer Name..."
-          value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+          value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }} />
       </div>
 
       <div className="bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-x-auto">
@@ -567,7 +568,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                   No sales invoices recorded yet matching "{searchQuery}". Click 'New Invoice Billing' to check out.
                 </td>
               </tr>
-            ) : filteredSaleLines.map((line, idx) => (
+            ) : filteredSaleLines.slice((page - 1) * 10, page * 10).map((line, idx) => (
               <tr key={idx} className="odd:bg-white dark:odd:bg-slate-900 even:bg-slate-50/70 dark:even:bg-slate-800/30 hover:bg-blue-50/60 dark:hover:bg-slate-800/70 transition-colors divide-x divide-slate-200 dark:divide-slate-800">
                 <td className="py-2.5 px-3 text-center text-xs font-mono font-bold text-slate-600 dark:text-slate-400">
                   {line.rawSaleObj?.invoice_number || line.rawSaleObj?.id || '-'}
@@ -640,6 +641,31 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
           </tbody>
         </table>
       </div>
+
+      {filteredSaleLines.length > 10 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between border-t border-border mt-4 pt-4 gap-3 px-1 mb-8">
+          <div className="text-xs text-textMuted font-medium text-center sm:text-left w-full sm:w-auto">
+            Showing <span className="font-bold text-foreground">{(page - 1) * 10 + 1}</span> to <span className="font-bold text-foreground">{Math.min(page * 10, filteredSaleLines.length)}</span> of <span className="font-bold text-foreground">{filteredSaleLines.length}</span> sale records
+          </div>
+          <div className="flex gap-2 w-full sm:w-auto justify-center sm:justify-end">
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="px-4 py-2 rounded-lg border border-border text-xs font-extrabold text-foreground disabled:opacity-30 disabled:cursor-not-allowed hover:bg-secondary transition-colors"
+            >
+              Previous
+            </button>
+            <button
+              onClick={() => setPage(p => Math.min(Math.ceil(filteredSaleLines.length / 10), p + 1))}
+              disabled={page === Math.ceil(filteredSaleLines.length / 10) || filteredSaleLines.length === 0}
+              className="px-4 py-2 rounded-lg border border-border text-xs font-extrabold text-foreground disabled:opacity-30 disabled:cursor-not-allowed hover:bg-secondary transition-colors"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
+
 
       {/* POS Billing Modal */}
       {billingModal && createPortal(
@@ -1134,7 +1160,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                                 }}
                                 title="Quantity"
                               />
-                              <span className="text-[10px] font-bold text-foreground uppercase">{unitName}</span>
+                              <span className="text-[10px] font-bold text-foreground uppercase">{sUnit}</span>
                             </div>
 
                             <div className="flex items-center gap-1">
@@ -1159,27 +1185,17 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                                     if (item.marginText !== undefined) return item.marginText;
                                     const piecesPerPack = Math.max(0.000001, Number(item.product.pieces_per_pack || 1));
                                     const purchasePrice = Number(item.product.purchase_price || 0);
-                                    let unitCost = purchasePrice;
-                                    if (item.unitConfig) {
-                                      unitCost = (purchasePrice / piecesPerPack) * item.unitConfig.conversionRate;
-                                    } else if (isLoose) {
-                                      unitCost = purchasePrice / piecesPerPack;
-                                    }
-                                    if (unitCost <= 0) return '';
-                                    return Math.round(((item.rate - unitCost) / unitCost) * 100);
-                                  })()}
+                                      const baseUnitCost = purchasePrice / piecesPerPack;
+                                      if (baseUnitCost <= 0) return '';
+                                      return Math.round(((item.rate - baseUnitCost) / baseUnitCost) * 100);
+                                    })()}
                                 onChange={(e) => {
                                     const val = e.target.value;
                                     if (val === '') {
                                       const piecesPerPack = Math.max(0.000001, Number(item.product.pieces_per_pack || 1));
                                       const purchasePrice = Number(item.product.purchase_price || 0);
-                                      let unitCost = purchasePrice;
-                                      if (item.unitConfig) {
-                                        unitCost = (purchasePrice / piecesPerPack) * item.unitConfig.conversionRate;
-                                      } else if (isLoose) {
-                                        unitCost = purchasePrice / piecesPerPack;
-                                      }
-                                      updateCartRate(item.product.id, unitCost > 0 ? unitCost : item.rate, isLoose, '', item.unitConfig?.name);
+                                      const baseUnitCost = purchasePrice / piecesPerPack;
+                                      updateCartRate(item.product.id, baseUnitCost > 0 ? baseUnitCost : item.rate, isLoose, '', item.unitConfig?.name);
                                       return;
                                     }
                                     const m = parseFloat(val);
@@ -1189,14 +1205,9 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                                     }
                                     const piecesPerPack = Math.max(0.000001, Number(item.product.pieces_per_pack || 1));
                                     const purchasePrice = Number(item.product.purchase_price || 0);
-                                    let unitCost = purchasePrice;
-                                    if (item.unitConfig) {
-                                      unitCost = (purchasePrice / piecesPerPack) * item.unitConfig.conversionRate;
-                                    } else if (isLoose) {
-                                      unitCost = purchasePrice / piecesPerPack;
-                                    }
-                                    if (unitCost > 0) {
-                                      updateCartRate(item.product.id, Math.round((unitCost * (1 + m / 100)) * 100) / 100, isLoose, val, item.unitConfig?.name);
+                                    const baseUnitCost = purchasePrice / piecesPerPack;
+                                    if (baseUnitCost > 0) {
+                                      updateCartRate(item.product.id, Math.round((baseUnitCost * (1 + m / 100)) * 100) / 100, isLoose, val, item.unitConfig?.name);
                                     } else {
                                       updateCartRate(item.product.id, item.rate, isLoose, val, item.unitConfig?.name);
                                     }
@@ -1527,6 +1538,9 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
               }
               body * {
                 visibility: hidden !important;
+              }
+              #root {
+                display: none !important;
               }
               #invoice-print-area, #invoice-print-area * {
                 visibility: visible !important;
