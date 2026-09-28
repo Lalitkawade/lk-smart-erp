@@ -79,6 +79,7 @@ export class ProductService {
     try {
       await supabase.from('purchase_items').update({ product_id: null }).eq('product_id', id);
       await supabase.from('sales_items').update({ product_id: null }).eq('product_id', id);
+      await supabase.from('sales_return_items').update({ product_id: null }).eq('product_id', id);
     } catch (e) {}
 
     return handleServiceCall(

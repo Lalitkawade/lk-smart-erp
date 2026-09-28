@@ -816,7 +816,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
               <form onSubmit={handleCheckoutSubmit} className="w-full md:w-7/12 flex flex-col justify-between pl-0 md:pl-2 space-y-4">
 
                 {/* 1. TOP: CUSTOMER SELECTION & MOBILE NUMBER SECTION */}
-                <div className="bg-background/50 border border-border p-3.5 rounded-xl space-y-3 shadow-xs">
+                <div className="bg-background/50 border border-border p-3.5 rounded-xl grid grid-cols-2 gap-3 shadow-xs">
                   <div>
                     <div className="flex justify-between items-center mb-1">
                       <label className="block text-xs text-textSecondary font-semibold">Select / Search Customer</label>
@@ -1271,7 +1271,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                     <div>
                       <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Payment Mode (Default: Cash)</label>
                       <select
@@ -1317,7 +1317,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
 
                     {/* Amount Collected & Credit Due Date Controls */}
                     {(isUdharEnabled || paymentMode === 'Credit') ? (
-                      <div>
+                      <div className="col-span-2 sm:col-span-1">
                         <div className="flex justify-between items-center mb-1">
                           <label className="block text-xs font-bold text-amber-700 dark:text-amber-300">Amount Collected (₹)</label>
                           <button
@@ -1339,7 +1339,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                         />
                       </div>
                     ) : (
-                      <div>
+                      <div className="col-span-2 sm:col-span-1">
                         <div className="flex justify-between items-center mb-1">
                           <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">Amount Billed & Paid</label>
                           <button
