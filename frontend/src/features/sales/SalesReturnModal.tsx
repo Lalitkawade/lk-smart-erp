@@ -22,10 +22,9 @@ export default function SalesReturnModal({ tenantId, invoice, onClose, onSuccess
           const pUnit = item.product?.p_unit || 'Box';
           const sUnit = item.product?.s_unit || item.product?.unit || 'Pcs';
           const piecesPerPack = Math.max(0.000001, Number(item.product?.pieces_per_pack || 1));
-          const isDualUnit = piecesPerPack > 1 || (pUnit.toLowerCase() !== sUnit.toLowerCase());
-          
           // Use the actual unit saved in the invoice instead of guessing based on rates
           const invoiceUnit = item.unit || item.base_unit || sUnit;
+          const isDualUnit = (piecesPerPack > 1 || (pUnit.toLowerCase() !== sUnit.toLowerCase())) && (invoiceUnit === pUnit || invoiceUnit === sUnit);
 
           let returnedQtyInInvoiceUnits = 0;
           if (invoice.returns && Array.isArray(invoice.returns)) {
@@ -148,9 +147,9 @@ export default function SalesReturnModal({ tenantId, invoice, onClose, onSuccess
       const itemsPayload = returnItems
         .filter((item) => item.return_qty > 0)
         .map((item) => {
-           // Calculate base unit stock return qty (s_unit)
-           let stockReturnQty = item.return_qty;
-           if (item.return_unit === item.p_unit) {
+           // Calculate base unit stock return qty using conversion factor
+           let stockReturnQty = item.return_qty * (Number(item.conversion_factor) || 1);
+           if (!item.conversion_factor && item.return_unit === item.p_unit) {
                stockReturnQty = item.return_qty * item.pieces_per_pack;
            }
 
@@ -223,6 +222,9 @@ export default function SalesReturnModal({ tenantId, invoice, onClose, onSuccess
                       >
                         <option value={item.p_unit}>{item.p_unit}</option>
                         <option value={item.s_unit}>{item.s_unit}</option>
+                        {(item.invoice_unit !== item.p_unit && item.invoice_unit !== item.s_unit) && (
+                           <option value={item.invoice_unit}>{item.invoice_unit}</option>
+                        )}
                       </select>
                     ) : (
                       <div className="p-1.5 text-xs font-bold uppercase text-textMuted text-center">{item.return_unit}</div>

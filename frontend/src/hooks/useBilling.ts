@@ -101,23 +101,31 @@ export function useBilling(tenantId: string) {
     if (!targetItem) return;
 
     const { piecePrice, packPrice } = getProductUnitRates(targetItem.product);
+    const currentAddedBaseUnits = currentUnitConfigName ? (targetItem.unitConfig?.conversionRate || 1) : (currentIsLoose ? 1 : piecesPerPack);
     const targetAddedBaseUnits = targetUnitConfig ? targetUnitConfig.conversionRate : (targetIsLoose ? 1 : piecesPerPack);
     const totalTargetPrice = targetUnitConfig ? targetUnitConfig.price : (targetIsLoose ? piecePrice : packPrice);
     const newRate = Number((totalTargetPrice / targetAddedBaseUnits).toFixed(2));
+
+    const currentUnits = targetItem.qty / currentAddedBaseUnits;
+    const newQty = currentUnits * targetAddedBaseUnits;
+
+    if (otherItemsBaseUnits + newQty > stockInBaseUnits) {
+      throw new Error(`Insufficient stock for this unit change. Only ${stockInBaseUnits} base units available.`);
+    }
 
     const existingTargetIndex = cart.findIndex(i => i.product.id === productId && (targetUnitConfig ? i.unitConfig?.name === targetUnitConfig.name : (!i.unitConfig && i.isLoose === targetIsLoose)));
 
     if (existingTargetIndex >= 0) {
       setCart(cart.filter(i => !(i.product.id === productId && (currentUnitConfigName ? i.unitConfig?.name === currentUnitConfigName : (!i.unitConfig && i.isLoose === currentIsLoose)))).map((i, idx) => {
         if (i.product.id === productId && (targetUnitConfig ? i.unitConfig?.name === targetUnitConfig.name : (!i.unitConfig && i.isLoose === targetIsLoose))) {
-          return { ...i, qty: i.qty + targetItem.qty, rate: newRate };
+          return { ...i, qty: i.qty + newQty, rate: newRate, qtyText: undefined, marginText: undefined, discountText: undefined };
         }
         return i;
       }));
     } else {
       setCart(cart.map(i => {
         if (i.product.id === productId && (currentUnitConfigName ? i.unitConfig?.name === currentUnitConfigName : (!i.unitConfig && i.isLoose === currentIsLoose))) {
-          return { ...i, isLoose: targetIsLoose, unitConfig: targetUnitConfig, rate: newRate };
+          return { ...i, isLoose: targetIsLoose, unitConfig: targetUnitConfig, rate: newRate, qty: newQty, qtyText: undefined, marginText: undefined, discountText: undefined };
         }
         return i;
       }));
@@ -284,15 +292,18 @@ export function useBilling(tenantId: string) {
 
       const itemsPayload = cart.map(item => {
         const baseUnit = item.product.s_unit || item.product.unit || item.product.base_unit || 'Nos';
+        
+        const addedBaseUnits = item.unitConfig ? item.unitConfig.conversionRate : (item.isLoose ? 1 : Math.max(1, Number(item.product.pieces_per_pack || 1)));
+        const unitName = item.unitConfig ? item.unitConfig.name : (item.isLoose ? (item.product.s_unit || baseUnit) : (item.product.p_unit || baseUnit));
 
         return {
           product_id: item.product.id,
-          qty: item.qty,
-          rate: item.rate,
+          qty: parseFloat((item.qty / addedBaseUnits).toFixed(4)),
+          rate: parseFloat((item.rate * addedBaseUnits).toFixed(2)),
           amount: Math.round(item.qty * item.rate * (1 - (item.discountPercent || 0) / 100)),
-          unit: baseUnit,
+          unit: unitName,
           base_unit: baseUnit,
-          conversion_factor: 1,
+          conversion_factor: addedBaseUnits,
           base_quantity: item.qty
         };
       });
@@ -319,19 +330,25 @@ export function useBilling(tenantId: string) {
         applied_to_udhar: appliedToPreviousUdhar,
         unpaid_current_bill: unpaidCurrentBill,
         remaining_outstanding: newOutstanding,
-        items: cart.map(c => ({
-          product_id: c.product.id,
-          product_name: c.product.product_name,
-          product: c.product,
-          qty: c.qty,
-          rate: c.rate,
-          amount: Math.round(c.qty * c.rate * (1 - (c.discountPercent || 0) / 100)),
-          isLoose: c.isLoose,
-          unitConfig: c.unitConfig,
-          unitName: c.product.s_unit || c.product.unit || c.product.base_unit || 'Nos',
-          purchase_price: c.product.purchase_price,
-          pieces_per_pack: c.product.pieces_per_pack
-        }))
+        items: cart.map(c => {
+          const baseUnit = c.product.s_unit || c.product.unit || c.product.base_unit || 'Nos';
+          const addedBaseUnits = c.unitConfig ? c.unitConfig.conversionRate : (c.isLoose ? 1 : Math.max(1, Number(c.product.pieces_per_pack || 1)));
+          const unitName = c.unitConfig ? c.unitConfig.name : (c.isLoose ? (c.product.s_unit || baseUnit) : (c.product.p_unit || baseUnit));
+
+          return {
+            product_id: c.product.id,
+            product_name: c.product.product_name,
+            product: c.product,
+            qty: parseFloat((c.qty / addedBaseUnits).toFixed(4)),
+            rate: parseFloat((c.rate * addedBaseUnits).toFixed(2)),
+            amount: Math.round(c.qty * c.rate * (1 - (c.discountPercent || 0) / 100)),
+            isLoose: c.isLoose,
+            unitConfig: c.unitConfig,
+            unitName: unitName,
+            purchase_price: c.product.purchase_price,
+            pieces_per_pack: c.product.pieces_per_pack
+          };
+        })
       };
 
       try {

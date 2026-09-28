@@ -1104,32 +1104,15 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                           <div className="flex justify-between items-start">
                             <div className="flex-grow pr-2">
                               <div className="text-xs font-black text-foreground uppercase truncate max-w-[240px]">{item.product.product_name}</div>
-                              <div className="flex items-center gap-2 text-[10px] text-textSecondary mt-1 font-semibold">
-                                <span>Selling Unit:</span>
-                                {availableUnits.length > 1 ? (
-                                  <select
-                                    value={selectedUnitKey}
-                                    onChange={(e) => {
-                                      const targetUnit = availableUnits.find(u => u.key === e.target.value);
-                                      if (targetUnit) {
-                                        try {
-                                          updateCartUnit(item.product.id, isLoose, item.unitConfig?.name, targetUnit.isLoose, targetUnit.unitConfig);
-                                        } catch (err: any) {
-                                          alert(err.message || 'Cannot switch unit');
-                                        }
-                                      }
-                                    }}
-                                    className="bg-primary/10 border border-primary/30 text-primary font-bold text-[10px] px-1.5 py-0.5 rounded cursor-pointer uppercase focus:outline-none max-w-[150px] truncate"
-                                  >
-                                    {availableUnits.map(u => (
-                                      <option key={u.key} value={u.key}>{u.label}</option>
-                                    ))}
-                                  </select>
-                                ) : (
-                                  <span className="font-bold text-primary bg-primary/10 px-2 py-0.5 rounded border border-primary/30 uppercase text-[10px]">
-                                    {unitName}
-                                  </span>
-                                )}
+                              <div className="flex flex-wrap items-center gap-2 text-[10px] text-textSecondary mt-1 font-semibold">
+                                <span className="text-textMuted">Selling Unit:</span>
+                                <span className="font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded border border-primary/30 uppercase truncate max-w-[120px]" title={unitName}>
+                                  {unitName}
+                                </span>
+                                <span className="text-textMuted border-l border-border pl-2">Stock:</span>
+                                <span className={Number(item.product.current_stock) > 0 ? "font-bold text-emerald-600 dark:text-emerald-400" : "font-bold text-rose-500"}>
+                                  {item.product.current_stock || 0} {sUnit}
+                                </span>
                               </div>
                             </div>
 
@@ -1160,7 +1143,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                                 }}
                                 title="Quantity"
                               />
-                              <span className="text-[10px] font-bold text-foreground uppercase">{sUnit}</span>
+                              <span className="text-[10px] font-bold text-foreground uppercase truncate max-w-[50px]">{sUnit}</span>
                             </div>
 
                             <div className="flex items-center gap-1">
@@ -1679,7 +1662,16 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                             const hsn = matchProd?.hsn || item.product?.hsn || item.hsn || '-';
                             const qty = Number(item.qty || 1);
                             const unit = item.unitName || item.unit || (item.isLoose ? (matchProd?.s_unit || matchProd?.unit) : (matchProd?.p_unit)) || matchProd?.s_unit || matchProd?.unit || '';
-                            const displayQty = unit ? `${qty} ${unit}` : `${qty}`;
+                            let displayQty = `${qty}`;
+                            if (unit) {
+                              if (unit.startsWith('1 ')) {
+                                displayQty = `${qty} ${unit.substring(2)}`;
+                              } else if (unit.toLowerCase() === '1 feet') {
+                                displayQty = `${qty} FEET`;
+                              } else {
+                                displayQty = `${qty} ${unit}`;
+                              }
+                            }
                             const rate = Number(item.rate || item.price || 0);
                             const amt = Number(item.amount !== undefined && item.amount !== null ? item.amount : Math.round(qty * rate));
                             
