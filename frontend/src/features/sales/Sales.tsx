@@ -1668,6 +1668,8 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                                 displayQty = `${qty} ${unit.substring(2)}`;
                               } else if (unit.toLowerCase() === '1 feet') {
                                 displayQty = `${qty} FEET`;
+                              } else if (qty === 1 && /^\d/.test(unit)) {
+                                displayQty = unit;
                               } else {
                                 displayQty = `${qty} ${unit}`;
                               }
