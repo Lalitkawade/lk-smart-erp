@@ -147,7 +147,7 @@ export default function Expenses({ autoOpenModal, onModalClosed }: ExpensesProps
           <h2 className="text-xl font-bold text-foreground">{t('shopOperatingExpenses')}</h2>
           <p className="text-xs text-textMuted mt-1">Audit daily store operational costs and administrative cash outflows</p>
         </div>
-        <button className="w-full sm:w-auto px-4 py-2 bg-primary hover:bg-primary/90 text-white font-bold rounded-lg text-sm text-center shrink-0 shadow-md transition active:scale-95 cursor-pointer" onClick={handleOpenAdd}>
+        <button className="bg-green-600 hover:bg-green-700 text-white text-sm px-5 py-2.5 rounded-lg font-bold transition-all shadow-md flex items-center gap-2 w-full sm:w-auto justify-center cursor-pointer active:scale-95" onClick={handleOpenAdd}>
           + {t('logExpense')}
         </button>
       </div>
@@ -342,7 +342,7 @@ export default function Expenses({ autoOpenModal, onModalClosed }: ExpensesProps
               {/* Sticky Action Footer */}
               <div className="shrink-0 flex gap-3 pt-3 border-t border-border mt-4">
                 <button type="button" className="flex-1 py-2.5 border border-border text-textSecondary rounded-lg text-xs font-bold hover:bg-background transition" onClick={() => setModalOpen(false)}>Cancel</button>
-                <button type="submit" className="flex-1 py-2.5 bg-primary hover:bg-primary/90 text-white font-bold rounded-lg text-xs transition shadow-md cursor-pointer">Save Expense</button>
+                <button type="submit" className="flex-1 py-2.5 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg text-xs transition shadow-md cursor-pointer">Save Expense</button>
               </div>
             </form>
           </div>

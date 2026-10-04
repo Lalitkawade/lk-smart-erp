@@ -346,7 +346,8 @@ export function useBilling(tenantId: string) {
             unitConfig: c.unitConfig,
             unitName: unitName,
             purchase_price: c.product.purchase_price,
-            pieces_per_pack: c.product.pieces_per_pack
+            pieces_per_pack: c.product.pieces_per_pack,
+            base_quantity: c.qty
           };
         })
       };

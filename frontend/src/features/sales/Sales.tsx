@@ -481,17 +481,24 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
           }
 
           const originalQty = Number(item.qty || 1);
-          const netQty = Math.max(0, originalQty - returnedQty);
+          const netQtyRaw = Math.max(0, originalQty - returnedQty);
 
-          if (netQty > 0) {
+          const isBaseQtyAvailable = item.base_quantity !== undefined && item.base_quantity !== null;
+          const baseQty = Number(isBaseQtyAvailable ? item.base_quantity : originalQty);
+          const ratio = originalQty > 0 ? netQtyRaw / originalQty : 1;
+          const displayNetQty = isBaseQtyAvailable ? baseQty * ratio : netQtyRaw;
+          const amtRaw = Number(item.amount !== undefined && item.amount !== null ? item.amount : Math.round(originalQty * Number(item.rate || 0)));
+          const displayPrice = isBaseQtyAvailable && baseQty > 0 ? amtRaw / baseQty : Number(item.rate || 0);
+
+          if (netQtyRaw > 0) {
             lines.push({
               id: `${s.id}-${item.id || Math.random()}`,
               product_name: matchProd?.product_name || item.product?.product_name || item.product_name || 'Unknown Product',
               hsn: matchProd?.hsn || item.hsn || item.product?.hsn || '-',
               date: s.sale_date,
-              price: Number(item.rate || 0),
-              qty: netQty,
-              amount: Math.round(netQty * Number(item.rate || 0)),
+              price: displayPrice,
+              qty: parseFloat(displayNetQty.toFixed(4)),
+              amount: Math.round(displayNetQty * displayPrice),
               customer_name: s.customer_name || 'Cash Customer',
               rawSaleObj: s
             });
@@ -1660,22 +1667,13 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                             const matchProd = products.find(p => p.id === (item.product_id || item.product?.id));
                             const itemName = matchProd?.product_name || item.product?.product_name || item.product_name || `Item ${idx + 1}`;
                             const hsn = matchProd?.hsn || item.product?.hsn || item.hsn || '-';
-                            const qty = Number(item.qty || 1);
+                            const isBaseQtyAvailable = item.base_quantity !== undefined && item.base_quantity !== null;
+                            const qty = Number(isBaseQtyAvailable ? item.base_quantity : (item.qty || 1));
                             const unit = item.unitName || item.unit || (item.isLoose ? (matchProd?.s_unit || matchProd?.unit) : (matchProd?.p_unit)) || matchProd?.s_unit || matchProd?.unit || '';
                             let displayQty = `${qty}`;
-                            if (unit) {
-                              if (unit.startsWith('1 ')) {
-                                displayQty = `${qty} ${unit.substring(2)}`;
-                              } else if (unit.toLowerCase() === '1 feet') {
-                                displayQty = `${qty} FEET`;
-                              } else if (qty === 1 && /^\d/.test(unit)) {
-                                displayQty = unit;
-                              } else {
-                                displayQty = `${qty} ${unit}`;
-                              }
-                            }
-                            const rate = Number(item.rate || item.price || 0);
-                            const amt = Number(item.amount !== undefined && item.amount !== null ? item.amount : Math.round(qty * rate));
+                            const fallbackRate = Number(item.rate || item.price || 0);
+                            const amt = Number(item.amount !== undefined && item.amount !== null ? item.amount : Math.round(qty * fallbackRate));
+                            const rate = isBaseQtyAvailable && qty !== 0 ? amt / qty : fallbackRate;
                             
                             return (
                               <tr key={idx} className="border-b border-slate-200">
