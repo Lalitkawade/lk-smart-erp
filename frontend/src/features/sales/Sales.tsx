@@ -58,6 +58,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
   const { customers: registeredCustomers, customerPayments: payments, refreshAllData } = useErpContext();
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [returnModalInvoice, setReturnModalInvoice] = useState<any | null>(null);
+  const [viewItemsInvoice, setViewItemsInvoice] = useState<any | null>(null);
 
   useEffect(() => {
     if (autoCustomerName) {
@@ -448,63 +449,23 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
     const lines: any[] = [];
     (sales as any[]).forEach((s: any) => {
       const items = s.items || s.sales_items || [];
-      if (items.length === 0) {
-        lines.push({
-          id: s.id || s.invoice_number,
-          hsn: s.hsn || '-',
-          product_name: s.product_name || 'Sale Invoice',
-          customer_name: s.customer_name || 'Cash Customer',
-          date: s.sale_date || s.created_at || new Date().toISOString(),
-          stock: 0,
-          price: Number(s.total_amount || 0),
-          qty: 1,
-          amount: Number(s.total_amount || 0),
-          rawSaleObj: s
-        });
-      } else {
-        items.forEach((item: any) => {
-          const matchProd = products.find(p => p.id === (item.product_id || item.product?.id));
-
-          let returnedQty = 0;
-          const invoiceReturns = s.returns || s.sales_returns || [];
-          if (Array.isArray(invoiceReturns)) {
-            invoiceReturns.forEach((ret: any) => {
-              const rItems = ret.items || ret.sales_return_items || [];
-              if (Array.isArray(rItems)) {
-                rItems.forEach((ri: any) => {
-                  if (ri.sales_item_id === item.id) {
-                    returnedQty += Number(ri.return_qty || 0);
-                  }
-                });
-              }
-            });
-          }
-
-          const originalQty = Number(item.qty || 1);
-          const netQtyRaw = Math.max(0, originalQty - returnedQty);
-
-          const isBaseQtyAvailable = item.base_quantity !== undefined && item.base_quantity !== null;
-          const baseQty = Number(isBaseQtyAvailable ? item.base_quantity : originalQty);
-          const ratio = originalQty > 0 ? netQtyRaw / originalQty : 1;
-          const displayNetQty = isBaseQtyAvailable ? baseQty * ratio : netQtyRaw;
-          const amtRaw = Number(item.amount !== undefined && item.amount !== null ? item.amount : Math.round(originalQty * Number(item.rate || 0)));
-          const displayPrice = isBaseQtyAvailable && baseQty > 0 ? amtRaw / baseQty : Number(item.rate || 0);
-
-          if (netQtyRaw > 0) {
-            lines.push({
-              id: `${s.id}-${item.id || Math.random()}`,
-              product_name: matchProd?.product_name || item.product?.product_name || item.product_name || 'Unknown Product',
-              hsn: matchProd?.hsn || item.hsn || item.product?.hsn || '-',
-              date: s.sale_date,
-              price: displayPrice,
-              qty: parseFloat(displayNetQty.toFixed(4)),
-              amount: Math.round(displayNetQty * displayPrice),
-              customer_name: s.customer_name || 'Cash Customer',
-              rawSaleObj: s
-            });
-          }
-        });
+      let itemSummary = 'No items';
+      if (items.length > 0) {
+        const firstItem = items[0];
+        const matchProd = products.find(p => p.id === (firstItem.product_id || firstItem.product?.id));
+        const firstName = matchProd?.product_name || firstItem.product?.product_name || firstItem.product_name || 'Unknown Product';
+        itemSummary = items.length === 1 ? firstName : `${firstName} + ${items.length - 1} more`;
       }
+      lines.push({
+        id: s.id || s.invoice_number,
+        invoice_number: s.invoice_number || s.id,
+        date: s.sale_date || s.created_at || new Date().toISOString(),
+        customer_name: s.customer_name || 'Cash Customer',
+        amount: Number(s.total_amount || 0),
+        items_summary: itemSummary,
+        paid_amount: Number(s.paid_amount || (s.payment_status === 'Paid' ? s.total_amount : s.amount_collected || 0)),
+        rawSaleObj: s
+      });
     });
     return lines.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [sales, products]);
@@ -515,8 +476,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
     const q = searchQuery.toLowerCase().trim();
     return saleLines.filter(line => {
       const invNum = (line.rawSaleObj?.invoice_number || line.rawSaleObj?.id || '').toLowerCase();
-      return line.product_name.toLowerCase().includes(q) ||
-        line.hsn.includes(q) ||
+      return line.items_summary.toLowerCase().includes(q) ||
         (line.customer_name && line.customer_name.toLowerCase().includes(q)) ||
         invNum.includes(q);
     });
@@ -534,6 +494,56 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
             refreshAllData();
           }}
         />
+      )}
+      {viewItemsInvoice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm transition-opacity">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col border border-slate-200 dark:border-slate-800">
+            <div className="flex justify-between items-center p-4 sm:p-6 border-b border-slate-200 dark:border-slate-800">
+              <div>
+                <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">Invoice Items</h2>
+                <p className="text-xs text-slate-500 mt-1">Invoice #{viewItemsInvoice.invoice_number || viewItemsInvoice.id}</p>
+              </div>
+              <button onClick={() => setViewItemsInvoice(null)} className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-500 transition-colors">
+                <i className="fa-solid fa-times"></i>
+              </button>
+            </div>
+            <div className="p-4 sm:p-6 overflow-y-auto max-h-[60vh] bg-slate-50 dark:bg-slate-900/50">
+              <table className="w-full text-left text-sm border-collapse bg-white dark:bg-slate-900 shadow-sm rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700">
+                <thead className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold text-xs uppercase tracking-wider">
+                  <tr>
+                    <th className="p-3">Product Name</th>
+                    <th className="p-3 text-center">Qty</th>
+                    <th className="p-3 text-center">Unit</th>
+                    <th className="p-3 text-right">Rate (₹)</th>
+                    <th className="p-3 text-right">Amount (₹)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {(viewItemsInvoice.items || viewItemsInvoice.sales_items || []).map((item: any, i: number) => {
+                    const originalQty = Number(item.qty || 1);
+                    const isBaseQtyAvailable = item.base_quantity !== undefined && item.base_quantity !== null;
+                    const baseQty = Number(isBaseQtyAvailable ? item.base_quantity : originalQty);
+                    const amtRaw = Number(item.amount !== undefined && item.amount !== null ? item.amount : Math.round(originalQty * Number(item.rate || 0)));
+                    const displayPrice = isBaseQtyAvailable && baseQty > 0 ? amtRaw / baseQty : Number(item.rate || 0);
+                    
+                    const matchProd = products.find(p => p.id === (item.product_id || item.product?.id));
+                    const unit = item.unitName || item.unit || (item.isLoose ? (matchProd?.s_unit || matchProd?.unit) : (matchProd?.p_unit)) || matchProd?.s_unit || matchProd?.unit || 'Nos';
+
+                    return (
+                      <tr key={i} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                        <td className="p-3 font-semibold text-slate-800 dark:text-slate-200">{item.product_name || item.product?.product_name || 'Unknown Item'}</td>
+                        <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-400">{baseQty}</td>
+                        <td className="p-3 text-center font-mono text-slate-500 dark:text-slate-400 capitalize">{unit}</td>
+                        <td className="p-3 text-right font-mono text-slate-600 dark:text-slate-400">₹{displayPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                        <td className="p-3 text-right font-mono font-bold text-slate-800 dark:text-slate-200">₹{amtRaw.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       )}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 mb-6">
         <div>
@@ -557,12 +567,10 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
             <tr className="border-b-2 border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/90 text-slate-700 dark:text-slate-200 font-extrabold uppercase tracking-wider text-[11px] divide-x divide-slate-200 dark:divide-slate-700 whitespace-nowrap">
               <th className="py-2.5 px-3 text-center whitespace-nowrap">Invoice ID</th>
               <th className="py-2.5 px-3 text-center whitespace-nowrap">Date & Time</th>
-              <th className="py-2.5 px-3 text-center whitespace-nowrap">Product Name</th>
-              <th className="py-2.5 px-3 text-center whitespace-nowrap">HSN Code</th>
-              <th className="py-2.5 px-3 text-center whitespace-nowrap">Qty (Units)</th>
-              <th className="py-2.5 px-3 text-center whitespace-nowrap">Unit Price (₹)</th>
-              <th className="py-2.5 px-3 text-center whitespace-nowrap">Total Amount (₹)</th>
               <th className="py-2.5 px-3 text-center whitespace-nowrap">Customer Billed To</th>
+              <th className="py-2.5 px-3 text-center whitespace-nowrap">Items Summary</th>
+              <th className="py-2.5 px-3 text-center whitespace-nowrap">Total Amount (₹)</th>
+              <th className="py-2.5 px-3 text-center whitespace-nowrap">Paid Amount (₹)</th>
               <th className="py-2.5 px-3 text-center whitespace-nowrap">Status</th>
               <th className="py-2.5 px-3 text-center whitespace-nowrap">Actions</th>
             </tr>
@@ -570,7 +578,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
           <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
             {filteredSaleLines.length === 0 ? (
               <tr>
-                <td colSpan={9} className="py-8 text-center text-slate-400 text-xs font-medium">
+                <td colSpan={8} className="py-8 text-center text-slate-400 text-xs font-medium">
                   <i className="fa-solid fa-file-invoice-dollar text-2xl text-slate-400 mb-2 block"></i>
                   No sales invoices recorded yet matching "{searchQuery}". Click 'New Invoice Billing' to check out.
                 </td>
@@ -586,19 +594,19 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                     {new Date(line.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </td>
-                <td className="py-2.5 px-3 text-center text-xs font-bold text-slate-900 dark:text-slate-100 uppercase">{line.product_name}</td>
-                <td className="py-2.5 px-3 text-center font-mono text-xs">
-                  <span className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded font-bold">
-                    {line.hsn}
-                  </span>
+                <td className="py-2.5 px-3 text-center text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase">
+                  {line.customer_name}
                 </td>
-                <td className="py-2.5 px-3 text-center text-xs font-mono font-bold text-slate-900 dark:text-slate-100">{line.qty}</td>
-                <td className="py-2.5 px-3 text-center text-xs font-mono text-slate-900 dark:text-slate-100">₹{line.price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                <td className="py-2.5 px-3 text-center text-xs">
+                  <button onClick={() => setViewItemsInvoice(line.rawSaleObj)} className="font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 hover:underline transition-colors uppercase cursor-pointer">
+                    {line.items_summary}
+                  </button>
+                </td>
                 <td className="py-2.5 px-3 text-center text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">
                   ₹{line.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </td>
-                <td className="py-2.5 px-3 text-center text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase">
-                  {line.customer_name}
+                <td className="py-2.5 px-3 text-center text-xs font-mono text-slate-900 dark:text-slate-100">
+                  ₹{line.paid_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </td>
                 <td className="py-2.5 px-3 text-center text-xs font-bold uppercase">
                   <div className="flex flex-col gap-1 items-center justify-center">
@@ -1653,6 +1661,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                             <th className="p-1 border-r border-slate-300">Item Description</th>
                             <th className="p-1 border-r border-slate-300 text-center w-16">HSN</th>
                             <th className="p-1 border-r border-slate-300 text-center w-12">Qty</th>
+                            <th className="p-1 border-r border-slate-300 text-center w-12">Unit</th>
                             <th className="p-1 border-r border-slate-300 text-right w-16">Rate (₹)</th>
 
                             <th className="p-1 text-right w-20">Amount (₹)</th>
@@ -1681,6 +1690,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                                 <td className="p-1 border-r border-slate-200 font-semibold uppercase">{itemName}</td>
                                 <td className="p-1 border-r border-slate-200 text-center font-mono text-slate-600">{hsn}</td>
                                 <td className="p-1 border-r border-slate-200 text-center font-mono font-bold whitespace-nowrap">{displayQty}</td>
+                                <td className="p-1 border-r border-slate-200 text-center font-mono text-slate-600 capitalize">{unit || 'Nos'}</td>
                                 <td className="p-1 border-r border-slate-200 text-right font-mono">₹{rate.toFixed(2)}</td>
                                 <td className="p-1 text-right font-mono font-bold">₹{amt.toFixed(2)}</td>
                               </tr>
