@@ -4,7 +4,6 @@ import { useAuth } from '../../hooks/useAuth';
 import { useErpContext } from '../../context/ErpContext';
 import { useCustomers } from '../../hooks/useCustomers';
 import { CustomerService } from '../../services/customerService';
-import { SaleService } from '../../services/saleService';
 import { PaymentService } from '../../services/paymentService';
 import { supabase } from '../../api/supabase';
 import { t } from '../../utils/i18n';
@@ -63,7 +62,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
 
   // Statement Modal
   const [statementCustomer, setStatementCustomer] = useState<Customer | null>(null);
-  const [statementTab, setStatementTab] = useState<'ledger' | 'invoices' | 'products'>('ledger');
+  const [statementTab, setStatementTab] = useState<'ledger' | 'products'>('ledger');
 
   // Filter Tab State
   const [filterTab, setFilterTab] = useState<'all' | 'outstanding'>('all');
@@ -90,8 +89,6 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
     payment_mode: 'Cash',
     ref_number: ''
   });
-
-
 
   const [phoneError, setPhoneError] = useState<string | null>(null);
 
@@ -232,9 +229,6 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
     const isUuid = (id: string) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
     const nowIso = new Date().toISOString();
 
-    if (statementCustomer && (statementCustomer.id === targetCustomer.id || statementCustomer.customer_name === targetCustomer.customer_name)) {
-      setStatementCustomer({ ...statementCustomer, outstanding: newOutstanding });
-    }
 
     setPayModalOpen(false);
     if (payActionType === 'refund') {
@@ -367,17 +361,19 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
     });
 
     // 2. Outstanding Collection Payments (Credit -)
-    customerPayments.forEach(p => {
-      ledger.push({
-        date: p.payment_date || (p as any).created_at || new Date().toISOString(),
-        type: 'Outstanding Collection Payment',
-        ref: p.ref_number || 'DIR-REC',
-        mode: p.payment_mode || 'Cash',
-        debit: 0,
-        credit: Number(p.amount || 0),
-        notes: (p as any).notes || 'Ledger Payment Receipt'
+    customerPayments
+      .filter(p => Number(p.amount || 0) > 0)
+      .forEach(p => {
+        ledger.push({
+          date: p.payment_date || (p as any).created_at || new Date().toISOString(),
+          type: 'Outstanding Collection Payment',
+          ref: p.ref_number || 'DIR-REC',
+          mode: p.payment_mode || 'Cash',
+          debit: 0,
+          credit: Number(p.amount || 0),
+          notes: (p as any).notes || 'Ledger Payment Receipt'
+        });
       });
-    });
 
     // Sort chronologically ascending
     ledger.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
@@ -389,7 +385,9 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
       totalCredits += entry.credit;
     });
 
-    const initialBalance = Number(statementCustomer.outstanding || 0);
+    // Initial opening balance: Only apply if customer has no invoice transactions yet
+    const rawOutstanding = Number(statementCustomer.outstanding || 0);
+    const initialBalance = rawCustomerInvoices.length > 0 ? 0 : (rawOutstanding < 0 ? 0 : rawOutstanding);
 
     let accum = initialBalance;
     const finalLedger = ledger.map(entry => {
@@ -400,7 +398,8 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
       };
     });
 
-    if (initialBalance !== 0 || ledger.length === 0) {
+    // Only prepend an opening balance row if there is a real positive opening balance, or if no transactions exist yet
+    if (initialBalance > 0 || (ledger.length === 0 && initialBalance !== 0)) {
       finalLedger.unshift({
         date: statementCustomer.created_at || new Date().toISOString(),
         type: 'Opening Balance',
@@ -514,6 +513,22 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
     return Array.from(map.values());
   }, [customers, sales]);
 
+  // Self-heal any customer records or payments that were corrupted by previous return/refund bugs
+  useEffect(() => {
+    supabase.from('customer_payments').delete().lt('amount', 0).then();
+
+    masterCustomersList.forEach(c => {
+      const custNameUpper = (c.customer_name || '').toUpperCase().trim();
+      const hasInvoices = sales.some((inv: any) =>
+        inv.customer_name && inv.customer_name.toUpperCase().trim() === custNameUpper
+      );
+      if (c.id && (Number(c.outstanding || 0) < 0 || (hasInvoices && Number(c.outstanding || 0) !== 0))) {
+        c.outstanding = 0;
+        supabase.from('customers').update({ outstanding: 0 }).eq('id', c.id).then();
+      }
+    });
+  }, [masterCustomersList, sales]);
+
   // Pre-calculate per-customer stats (total spent, dynamic realtime outstanding, last purchase date, last payment date)
   const customerStatsMap = useMemo(() => {
     const map = new Map<string, {
@@ -525,12 +540,17 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
     }>();
 
     masterCustomersList.forEach(c => {
-      const custNameUpper = c.customer_name.toUpperCase();
+      const custNameUpper = c.customer_name.toUpperCase().trim();
       const custInvoices = sales.filter((inv: any) =>
-        inv.customer_name && inv.customer_name.toUpperCase() === custNameUpper
+        inv.customer_name && inv.customer_name.toUpperCase().trim() === custNameUpper
       );
-      const custPayments = payments.filter((p: any) =>
-        p.customer_id === c.id || (c.customer_name && p.customer_name && p.customer_name.toUpperCase() === custNameUpper)
+      const custInvoiceIds = new Set(custInvoices.map((inv: any) => inv.id));
+      const custPayments = payments.filter((p: any, index: number, self: any[]) =>
+        (p.customer_id === c.id ||
+        (c.customer_name && p.customer_name && p.customer_name.toUpperCase().trim() === custNameUpper) ||
+        (p.customer_id && custInvoiceIds.has(p.customer_id))) &&
+        Number(p.amount || 0) > 0 &&
+        self.findIndex(x => (x.id ? x.id === p.id : x === p)) === index
       );
 
       const totalSpent = custInvoices.reduce((acc: number, curr: any) => {
@@ -539,23 +559,35 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
         return acc + Math.max(0, saleTotal - returnsTotal);
       }, 0);
 
-      // Sum of invoice dues (unpaid amount for each invoice), adjusted for credit returns
-      const totalInvoiceDues = custInvoices.reduce((acc: number, inv: any) => {
-        const creditReturnsTotal = (inv.returns || []).reduce((retAcc: number, ret: any) => {
-          return retAcc + ((ret.refund_mode || '').toLowerCase().includes('credit') ? Number(ret.total_refund_amount || 0) : 0);
-        }, 0);
-        
-        const invoiceDue = inv.due_amount !== undefined
-          ? Number(inv.due_amount)
-          : (Number(inv.total_amount || 0) - Number(inv.paid_amount || 0));
-          
-        return acc + (invoiceDue - creditReturnsTotal);
-      }, 0);
+      // Unified accounting calculation matching ledger timeline exactly
+      let totalBilled = 0;
+      let totalCheckoutPaid = 0;
+      let totalCreditReturns = 0;
+
+      custInvoices.forEach(inv => {
+        const saleTotal = Number(inv.total_amount || 0);
+        totalBilled += saleTotal;
+
+        const paidAtCheckout = inv.paid_amount !== undefined
+          ? Number(inv.paid_amount || 0)
+          : (inv.amount_collected !== undefined
+              ? Number(inv.amount_collected || 0)
+              : (inv.payment_status === 'Paid' ? saleTotal : 0));
+        totalCheckoutPaid += paidAtCheckout;
+
+        const returns = inv.returns || [];
+        returns.forEach((ret: any) => {
+          const isCredit = (ret.refund_mode || '').toLowerCase().includes('credit');
+          if (isCredit) {
+            totalCreditReturns += Number(ret.total_refund_amount || 0);
+          }
+        });
+      });
 
       const totalStandalonePayments = custPayments.reduce((acc, p) => acc + Number(p.amount || 0), 0);
-      const totalPaymentsReceived = totalStandalonePayments;
-
-      const realtimeOutstanding = Number(c.outstanding || 0) + totalInvoiceDues - totalPaymentsReceived;
+      // For any customer with invoices, outstanding is strictly derived from transactions
+      const initialBal = custInvoices.length > 0 ? 0 : Math.max(0, Number(c.outstanding || 0));
+      const realtimeOutstanding = initialBal + totalBilled - totalCheckoutPaid - totalCreditReturns - totalStandalonePayments;
 
       let lastPurchDate: string | null = null;
       if (custInvoices.length > 0) {
@@ -1153,8 +1185,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
 
               {/* Header */}
               {(() => {
-                const statementStats = customerStatsMap.get(statementCustomer.id) || { realtimeOutstanding: Number(statementCustomer.outstanding || 0) };
-                const stmtDues = statementStats.realtimeOutstanding;
+                const stmtDues = statementSummaryStats.netOutstanding;
 
                 return (
                   <>
@@ -1243,12 +1274,6 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                   className={`py-2 px-3 border-b-2 transition ${statementTab === 'ledger' ? 'border-primary text-primary' : 'border-transparent text-textMuted hover:text-foreground'}`}
                 >
                   📜 Ledger Timeline ({statementLedger.length})
-                </button>
-                <button
-                  onClick={() => setStatementTab('invoices')}
-                  className={`py-2 px-3 border-b-2 transition ${statementTab === 'invoices' ? 'border-primary text-primary' : 'border-transparent text-textMuted hover:text-foreground'}`}
-                >
-                  🧾 Itemized Past Invoices ({rawCustomerInvoices.length})
                 </button>
                 <button
                   onClick={() => setStatementTab('products')}
@@ -1374,127 +1399,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
                 </div>
               )}
 
-              {/* Tab 2: Itemized Past Invoices */}
-              {statementTab === 'invoices' && (
-                <div className="space-y-3 print:hidden">
-                  {rawCustomerInvoices.length === 0 ? (
-                    <div className="text-center py-6 text-textMuted text-xs font-semibold">No invoices recorded for this customer.</div>
-                  ) : (
-                    rawCustomerInvoices.map((inv: any, idx: number) => {
-                      const invoiceTotalAmt = Number(inv.total_amount || 0);
-                      const returnsTotal = (inv.returns || []).reduce((retAcc: number, ret: any) => retAcc + Number(ret.total_refund_amount || 0), 0);
-                      
-                      // How much of the returns were credited to Udhar? (Assuming Credit Notes reduce Udhar)
-                      const creditReturnsTotal = (inv.returns || []).reduce((retAcc: number, ret: any) => {
-                        return retAcc + ((ret.refund_mode || '').toLowerCase().includes('credit') ? Number(ret.total_refund_amount || 0) : 0);
-                      }, 0);
-
-                      const collectedAmt = inv.amount_collected !== undefined
-                        ? Number(inv.amount_collected || 0)
-                        : (inv.paid_amount !== undefined ? Number(inv.paid_amount || 0) : (inv.payment_status === 'Paid' ? invoiceTotalAmt : 0));
-
-                      const rawUnpaid = inv.unpaid_current_bill !== undefined
-                        ? Number(inv.unpaid_current_bill || 0)
-                        : (inv.due_amount !== undefined ? Number(inv.due_amount || 0) : Math.max(0, invoiceTotalAmt - collectedAmt));
-                        
-                      // Actual pending udhar takes into account credit note returns
-                      const unpaidUdharAmt = Math.max(0, rawUnpaid - creditReturnsTotal);
-
-                      const isPending = unpaidUdharAmt > 0 || (inv.payment_status !== 'Paid' && unpaidUdharAmt > 0);
-
-                      return (
-                        <div key={inv.id || idx} className={`rounded-xl p-4 space-y-3 border transition-colors ${isPending ? 'bg-rose-50 dark:bg-rose-900/10 border-rose-500/50' : 'bg-secondary border-border'}`}>
-                          <div className="flex justify-between items-center border-b border-border/80 pb-2">
-                            <div>
-                              <div className="font-mono font-black text-sm text-foreground uppercase">{inv.invoice_number}</div>
-                              <div className="text-xs text-textMuted">{new Date(inv.sale_date || inv.created_at).toLocaleString()}</div>
-                            </div>
-                            <div className="text-right flex items-center gap-2">
-                              {isPending ? (
-                                <div className="inline-flex items-center gap-1 bg-rose-500/20 border border-rose-500/50 px-2.5 py-1 rounded-lg">
-                                  <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
-                                  <span className="font-mono font-black text-xs text-rose-400">⚠️ ₹{unpaidUdharAmt.toFixed(2)} Udhar Pending</span>
-                                </div>
-                              ) : (
-                                <div className="inline-flex items-center gap-1 bg-primary/10 border border-primary/30 px-2.5 py-1 rounded-lg text-primary text-xs font-bold">
-                                  ✓ Fully Settled
-                                </div>
-                              )}
-                              <button
-                                type="button"
-                                onClick={async () => {
-                                  if (!window.confirm(`Delete sales invoice ${inv.invoice_number}? This action cannot be undone.`)) return;
-                                  try {
-                                    const res = await SaleService.deleteSale(inv.id);
-                                    if (res.error) throw new Error(res.error);
-                                    await refreshAllData();
-                                    alert('✓ Invoice deleted successfully.');
-                                  } catch (err: any) {
-                                    alert('Failed to delete invoice: ' + (err.message || err));
-                                  }
-                                }}
-                                className="px-2 py-1 bg-rose-500/10 hover:bg-rose-500 hover:text-white text-rose-500 font-bold text-xs rounded-lg border border-rose-500/30 transition cursor-pointer flex items-center gap-1"
-                                title="Delete sales invoice"
-                              >
-                                <i className="fa-solid fa-trash-can text-[10px]"></i> Delete
-                              </button>
-                            </div>
-                          </div>
-
-                          {/* Payment Ledger Breakdown */}
-                          <div className={`grid ${returnsTotal > 0 ? 'grid-cols-4' : 'grid-cols-3'} gap-2 bg-background/80 p-2.5 rounded-lg text-xs font-semibold border border-border`}>
-                            <div>
-                              <span className="text-[10px] text-textMuted block uppercase font-bold">Bill Total</span>
-                              <span className={`font-mono font-extrabold ${returnsTotal > 0 ? 'line-through text-textMuted text-[10px]' : 'text-foreground'}`}>₹{invoiceTotalAmt.toFixed(2)}</span>
-                              {returnsTotal > 0 && <div className="font-mono font-extrabold text-foreground">₹{Math.max(0, invoiceTotalAmt - returnsTotal).toFixed(2)}</div>}
-                            </div>
-                            {returnsTotal > 0 && (
-                              <div>
-                                <span className="text-[10px] text-rose-400 block uppercase font-bold">Returned</span>
-                                <span className="font-mono font-extrabold text-rose-400">-₹{returnsTotal.toFixed(2)}</span>
-                              </div>
-                            )}
-                            <div>
-                              <span className="text-[10px] text-textMuted block uppercase font-bold">Amount Paid</span>
-                              <span className="font-mono font-extrabold text-primary">₹{collectedAmt.toFixed(2)}</span>
-                            </div>
-                            <div>
-                              <span className="text-[10px] text-textMuted block uppercase font-bold">Udhar Pending</span>
-                              <span className={`font-mono font-extrabold ${unpaidUdharAmt > 0 ? 'text-rose-400' : 'text-textMuted'}`}>
-                                {unpaidUdharAmt > 0 ? `+₹${unpaidUdharAmt.toFixed(2)}` : '₹0.00'}
-                              </span>
-                            </div>
-                          </div>
-
-                          {/* Items list */}
-                          <div className="space-y-1">
-                            <div className="text-[10px] font-extrabold uppercase text-textMuted">Itemized Line Products:</div>
-                            {(!inv.items || inv.items.length === 0) ? (
-                              <div className="text-xs text-textMuted">Standard bill line items</div>
-                            ) : (
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                {inv.items.map((item: any, i: number) => {
-                                  const name = item.product?.product_name || item.product_name || 'Item';
-                                  const qty = Number(item.qty || 1);
-                                  const rate = Number(item.rate || 0);
-                                  return (
-                                    <div key={i} className="flex justify-between items-center text-xs bg-background/80 p-2 rounded-lg border border-border font-semibold">
-                                      <span className="text-foreground uppercase truncate max-w-[180px]">{name} x {qty}</span>
-                                      <span className="font-mono text-primary font-bold">₹{(qty * rate).toFixed(2)}</span>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              )}
-
-              {/* Tab 3: Aggregated Purchased Products */}
+              {/* Tab 2: Aggregated Purchased Products */}
               {statementTab === 'products' && (
                 <div className="space-y-2 print:hidden">
                   <div className="overflow-x-auto">

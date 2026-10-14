@@ -87,22 +87,9 @@ export class SalesReturnService {
       }
     }
 
-    // 4. Update Customer Outstanding Balance (if Credit Note)
-    if (customerId && returnPayload.refund_mode === 'Credit' && returnPayload.total_refund_amount && returnPayload.total_refund_amount > 0) {
-        const { data: customerData } = await supabase
-          .from('customers')
-          .select('outstanding')
-          .eq('id', customerId)
-          .single();
-
-        if (customerData) {
-          const newOutstanding = (Number(customerData.outstanding) || 0) - Number(returnPayload.total_refund_amount);
-          await supabase
-            .from('customers')
-            .update({ outstanding: newOutstanding })
-            .eq('id', customerId);
-        }
-    }
+    // 4. Note: Customer ledger and outstanding balance are calculated dynamically 
+    // in real-time from sales_returns, invoices, and payments. We do NOT mutate 
+    // customers.outstanding here because that field represents the initial opening balance.
 
     // 5. Update Original Invoice Status
     if (returnPayload.invoice_id) {

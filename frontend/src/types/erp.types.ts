@@ -17,7 +17,7 @@ export type Product = Database['public']['Tables']['products']['Row'] & {
   allow_decimal?: boolean | null;
   allow_purchase_unit_selling?: boolean | null;
   track_base_unit?: boolean | null;
-  multi_units?: Array<{ name: string; conversionRate: number; price: number }>;
+  multi_units?: Array<{ name: string; unit?: string; conversionRate: number | string; price: number | string }>;
 };
 export type SalesInvoice = Database['public']['Tables']['sales_invoices']['Row'];
 export type SalesItem = Database['public']['Tables']['sales_items']['Row'];
@@ -49,7 +49,7 @@ export interface CartItem {
     discountText?: string;
     marginText?: string;
   isLoose?: boolean;
-  unitConfig?: { name: string; conversionRate: number; price: number };
+  unitConfig?: { name: string; unit?: string; conversionRate: number | string; price: number | string };
 }
 
 export interface SplitPaymentDetails {

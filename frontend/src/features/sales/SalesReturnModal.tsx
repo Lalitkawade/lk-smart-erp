@@ -1,6 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { SalesInvoiceWithItems } from '../../services/saleService';
 import { SalesReturnService } from '../../services/salesReturnService';
+import { supabase } from '../../api/supabase';
+
+interface ReturnItemState {
+  id: string;
+  product_id: string;
+  product_name: string;
+  total_amount: number;
+  actual_total_qty: number;
+  rate_per_item: number;
+  unit: string;
+  stock_per_item: number;
+  past_returned_qty: number;
+  remaining_qty: number;
+  remaining_amount: number;
+  return_qty: number;
+  error?: string;
+}
 
 interface SalesReturnModalProps {
   tenantId: string;
@@ -10,60 +27,86 @@ interface SalesReturnModalProps {
 }
 
 export default function SalesReturnModal({ tenantId, invoice, onClose, onSuccess }: SalesReturnModalProps) {
-  const [returnItems, setReturnItems] = useState<any[]>([]);
+  const [returnItems, setReturnItems] = useState<ReturnItemState[]>([]);
   const [refundMode, setRefundMode] = useState<'Credit' | 'Cash'>('Credit');
   const [reason, setReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    if (invoice && invoice.items) {
-      setReturnItems(
-        invoice.items.map((item) => {
-          const pUnit = item.product?.p_unit || 'Box';
-          const sUnit = item.product?.s_unit || item.product?.unit || 'Pcs';
-          const piecesPerPack = Math.max(0.000001, Number(item.product?.pieces_per_pack || 1));
-          // Use the actual unit saved in the invoice instead of guessing based on rates
-          const invoiceUnit = item.unit || item.base_unit || sUnit;
-          const isDualUnit = (piecesPerPack > 1 || (pUnit.toLowerCase() !== sUnit.toLowerCase())) && (invoiceUnit === pUnit || invoiceUnit === sUnit);
+    const rawItems = (invoice && (invoice.items || (invoice as any).sales_items)) || [];
+    if (rawItems.length > 0) {
+      const parsedItems: ReturnItemState[] = rawItems.map((item: any) => {
+        const prod = item.product || {};
+        const baseUnit = (item.base_unit || prod.s_unit || prod.unit || 'Nos').trim();
+        const billedQty = Number(item.qty || 1);
+        const totalAmount = Number(item.amount !== undefined && item.amount !== null ? item.amount : (billedQty * Number(item.rate || 0)));
 
-          let returnedQtyInInvoiceUnits = 0;
-          if (invoice.returns && Array.isArray(invoice.returns)) {
-            invoice.returns.forEach((ret: any) => {
-              if (ret.items && Array.isArray(ret.items)) {
-                ret.items.forEach((ri: any) => {
-                  if (ri.sales_item_id === item.id) {
-                    const pastReturnUnit = ri.return_unit || invoiceUnit;
-                    let pastQty = Number(ri.return_qty || 0);
-                    
-                    // Convert pastQty to invoiceUnit
-                    if (invoiceUnit === pUnit && pastReturnUnit === sUnit) {
-                       pastQty = pastQty / piecesPerPack;
-                    } else if (invoiceUnit === sUnit && pastReturnUnit === pUnit) {
-                       pastQty = pastQty * piecesPerPack;
-                    }
-                    returnedQtyInInvoiceUnits += pastQty;
-                  }
-                });
-              }
-            });
-          }
+        const baseQty = Number(item.base_quantity || 0);
+        const convFactor = Number(item.conversion_factor || 0);
 
-          const availableQty = Math.max(0, Number(item.qty || 0) - returnedQtyInInvoiceUnits);
+        // Determine the actual single items the customer physically purchased:
+        // If an additional unit was sold (e.g. 1 pack containing 7 pieces):
+        // Then actual items = 7 Nos! NOT 1 Nos!
+        let actualQty = billedQty;
+        let stockPerItem = 1;
 
-          return {
-            ...item,
-            original_qty: Number(item.qty || 0), // Save original qty for exact refund math
-            qty: availableQty, // Replace original qty with net available qty in invoice units
-            return_qty: 0,
-            return_unit: invoiceUnit,
-            invoice_unit: invoiceUnit,
-            p_unit: pUnit,
-            s_unit: sUnit,
-            pieces_per_pack: piecesPerPack,
-            is_dual_unit: isDualUnit
-          };
-        }).filter(item => item.qty > 0) // Only show items that still have qty available to return
-      );
+        if (baseQty > billedQty) {
+          actualQty = baseQty;
+          stockPerItem = 1;
+        } else if (convFactor > 1 && (baseQty <= 0 || baseQty === billedQty)) {
+          actualQty = billedQty * convFactor;
+          stockPerItem = 1;
+        } else if (baseQty > 0 && billedQty > 0 && baseQty < billedQty) {
+          actualQty = billedQty;
+          stockPerItem = baseQty / billedQty;
+        } else if (convFactor > 0 && convFactor < 1) {
+          actualQty = billedQty;
+          stockPerItem = convFactor;
+        } else {
+          actualQty = billedQty;
+          stockPerItem = 1;
+        }
+
+        const ratePerItem = actualQty > 0 ? (totalAmount / actualQty) : Number(item.rate || 0);
+
+        // Calculate past returned items
+        let pastReturnedQty = 0;
+        let pastRefundAmount = 0;
+        if (invoice.returns && Array.isArray(invoice.returns)) {
+          invoice.returns.forEach((ret: any) => {
+            if (ret.items && Array.isArray(ret.items)) {
+              ret.items.forEach((ri: any) => {
+                if (ri.sales_item_id === item.id) {
+                  pastRefundAmount += Number(ri.refund_amount || 0);
+                  const rQty = Number(ri.return_qty || 0);
+                  pastReturnedQty += rQty;
+                }
+              });
+            }
+          });
+        }
+
+        const remainingQty = Math.max(0, actualQty - pastReturnedQty);
+        const remainingAmount = Math.max(0, totalAmount - pastRefundAmount);
+
+        return {
+          id: item.id,
+          product_id: item.product_id,
+          product_name: prod.product_name || item.product_name || 'Item',
+          total_amount: totalAmount,
+          actual_total_qty: actualQty,
+          rate_per_item: ratePerItem,
+          unit: baseUnit,
+          stock_per_item: stockPerItem,
+          past_returned_qty: pastReturnedQty,
+          remaining_qty: remainingQty,
+          remaining_amount: remainingAmount,
+          return_qty: 0,
+          error: undefined
+        };
+      }).filter((item: ReturnItemState) => item.remaining_qty > 0.0001);
+
+      setReturnItems(parsedItems);
     }
   }, [invoice]);
 
@@ -73,221 +116,313 @@ export default function SalesReturnModal({ tenantId, invoice, onClose, onSuccess
       prev.map((item) => {
         if (item.id === itemId) {
           const validQty = isNaN(qty) ? 0 : Math.max(0, qty);
-          // We can validate if it exceeds available qty here, but let's just do it
-          return { ...item, return_qty: validQty };
+          let error: string | undefined = undefined;
+          if (validQty > item.remaining_qty + 0.0001) {
+            error = `Exceeds available (${item.remaining_qty.toFixed(2)} ${item.unit})`;
+          }
+          return { ...item, return_qty: validQty, error };
         }
         return item;
       })
     );
   };
 
-  const handleUnitChange = (itemId: string, unit: string) => {
-    setReturnItems((prev) =>
-      prev.map((item) => {
-        if (item.id === itemId) {
-          return { ...item, return_unit: unit, return_qty: 0 }; // Reset qty on unit change to avoid confusion
-        }
-        return item;
-      })
-    );
-  };
+  const calculateRefund = (item: ReturnItemState) => {
+    const returnQty = Number(item.return_qty || 0);
+    if (returnQty <= 0) return 0;
+    if (item.actual_total_qty <= 0) return 0;
 
-  const calculateRefund = (item: any) => {
-    let qtyInInvoiceUnits = item.return_qty;
-    if (item.invoice_unit === item.p_unit && item.return_unit === item.s_unit) {
-      qtyInInvoiceUnits = item.return_qty / item.pieces_per_pack;
-    } else if (item.invoice_unit === item.s_unit && item.return_unit === item.p_unit) {
-      qtyInInvoiceUnits = item.return_qty * item.pieces_per_pack;
+    // If returning all remaining items, refund the exact remaining amount
+    if (Math.abs(returnQty - item.remaining_qty) < 0.0001) {
+      return Math.max(0, item.remaining_amount);
     }
-    
-    // Use the effective rate (amount / original_qty) to account for any rounding or discounts applied during billing
-    const effectiveRate = item.original_qty > 0 ? (item.amount / item.original_qty) : Number(item.rate);
-    return Math.round(qtyInInvoiceUnits * effectiveRate);
+
+    const refund = returnQty * item.rate_per_item;
+    return Math.min(item.remaining_amount, Math.round(refund * 100) / 100);
   };
 
   const totalRefund = returnItems.reduce((acc, item) => acc + calculateRefund(item), 0);
-  const isReturnValid = totalRefund > 0;
+  const isReturnValid = totalRefund > 0 && !returnItems.some(i => !!i.error);
 
   const handleSubmit = async () => {
-    if (!isReturnValid) return;
-    
-    // Validate max qty
-    let isExceeding = false;
-    returnItems.forEach(item => {
-       let qtyInInvoiceUnits = item.return_qty;
-       if (item.invoice_unit === item.p_unit && item.return_unit === item.s_unit) {
-         qtyInInvoiceUnits = item.return_qty / item.pieces_per_pack;
-       } else if (item.invoice_unit === item.s_unit && item.return_unit === item.p_unit) {
-         qtyInInvoiceUnits = item.return_qty * item.pieces_per_pack;
-       }
-       if (qtyInInvoiceUnits > item.qty + 0.001) { // 0.001 for float math
-           isExceeding = true;
-       }
+    if (!isReturnValid || isSubmitting) return;
+
+    // Double check exceeding
+    const hasExceeding = returnItems.some((item) => {
+      return Number(item.return_qty || 0) > item.remaining_qty + 0.0001;
     });
 
-    if (isExceeding) {
-        alert("Return quantity cannot exceed purchased quantity.");
-        return;
+    if (hasExceeding) {
+      alert("Return quantity cannot exceed available quantity.");
+      return;
     }
 
     setIsSubmitting(true);
 
     try {
       const returnNumber = await SalesReturnService.generateReturnNumber(tenantId);
-      
+
       const payload = {
         tenant_id: tenantId,
         invoice_id: invoice.id,
         return_number: returnNumber,
-        total_refund_amount: totalRefund,
+        total_refund_amount: Math.round(totalRefund * 100) / 100,
         refund_mode: refundMode,
         reason: reason.trim() || null,
       };
 
       const itemsPayload = returnItems
-        .filter((item) => item.return_qty > 0)
+        .filter((item) => Number(item.return_qty) > 0)
         .map((item) => {
-           // Calculate base unit stock return qty using conversion factor
-           let stockReturnQty = item.return_qty * (Number(item.conversion_factor) || 1);
-           if (!item.conversion_factor && item.return_unit === item.p_unit) {
-               stockReturnQty = item.return_qty * item.pieces_per_pack;
-           }
+          const retQty = Number(item.return_qty);
+          const refundAmt = calculateRefund(item);
+          const stockRestore = retQty * (item.stock_per_item || 1);
 
-           return {
-             sales_item_id: item.id,
-             product_id: item.product_id,
-             return_qty: item.return_qty,
-             return_unit: item.return_unit,
-             refund_amount: calculateRefund(item),
-             stock_return_qty: stockReturnQty // We'll pass this to service to handle stock
-           };
+          return {
+            sales_item_id: item.id,
+            product_id: item.product_id,
+            return_qty: retQty,
+            return_unit: item.unit,
+            refund_amount: refundAmt,
+            stock_return_qty: stockRestore,
+            base_return_qty: stockRestore,
+            base_unit: item.unit,
+            conversion_factor: 1
+          };
         });
 
-      await SalesReturnService.createSalesReturn(payload, itemsPayload as any, null);
-      
-      alert('Return processed successfully! Stock has been updated.');
+      // Find customer id if Credit Note
+      let customerId: string | null = (invoice as any).customer_id || null;
+      if (!customerId && invoice.customer_name && invoice.customer_name.trim().toUpperCase() !== 'CASH CUSTOMER') {
+        const { data: cData } = await supabase
+          .from('customers')
+          .select('id')
+          .eq('tenant_id', tenantId)
+          .ilike('customer_name', invoice.customer_name.trim())
+          .limit(1)
+          .maybeSingle();
+        if (cData) customerId = cData.id;
+      }
+
+      const res = await SalesReturnService.createSalesReturn(payload, itemsPayload as any, customerId);
+      if (res.error) throw new Error(res.error);
+
+      alert('✓ Return processed successfully! Stock and customer account have been updated.');
       onSuccess();
       onClose();
     } catch (err: any) {
-      alert('Failed to process return: ' + err.message);
+      alert('Failed to process return: ' + (err.message || err));
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-[9999]">
-      <div className="bg-secondary border border-border p-6 rounded-2xl w-full max-w-4xl shadow-2xl flex flex-col max-h-[90vh]">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold text-foreground">Return Items - Invoice {invoice.invoice_number}</h2>
-          <button onClick={onClose} className="text-textMuted hover:text-foreground text-xl font-bold">&times;</button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto mb-4 border border-border rounded-lg p-1 bg-background/50">
-          <table className="w-full text-left text-sm text-foreground">
-            <thead>
-              <tr className="border-b border-border text-xs uppercase text-textMuted font-bold bg-secondary">
-                <th className="p-3">Product</th>
-                <th className="p-3">Invoiced As</th>
-                <th className="p-3 text-center">Available Qty</th>
-                <th className="p-3 text-center" colSpan={2}>Return Qty & Unit</th>
-                <th className="p-3 text-right">Refund Amount</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {returnItems.map((item) => (
-                <tr key={item.id} className="hover:bg-primary/5">
-                  <td className="p-3 font-semibold uppercase">{item.product?.product_name || 'Item'}</td>
-                  <td className="p-3 text-xs">
-                    <div className="font-mono text-primary font-bold">₹{Number(item.rate).toFixed(2)}</div>
-                    <div className="text-[10px] text-textMuted uppercase">{item.invoice_unit}</div>
-                  </td>
-                  <td className="p-3 text-center font-mono font-bold">{Number(item.qty).toFixed(2)} {item.invoice_unit}</td>
-                  <td className="p-3 pr-1 w-24">
-                    <input
-                      type="number"
-                      min="0"
-                      step="any"
-                      className="w-full bg-background border border-border rounded p-1.5 text-center font-bold focus:border-primary focus:outline-none text-foreground"
-                      value={item.return_qty === 0 ? '' : item.return_qty}
-                      onChange={(e) => handleQtyChange(item.id, e.target.value)}
-                    />
-                  </td>
-                  <td className="p-3 pl-1 w-28">
-                    {item.is_dual_unit ? (
-                      <select
-                        className="w-full bg-background border border-border rounded p-1.5 text-xs font-bold text-foreground focus:border-primary focus:outline-none uppercase"
-                        value={item.return_unit}
-                        onChange={(e) => handleUnitChange(item.id, e.target.value)}
-                      >
-                        <option value={item.p_unit}>{item.p_unit}</option>
-                        <option value={item.s_unit}>{item.s_unit}</option>
-                        {(item.invoice_unit !== item.p_unit && item.invoice_unit !== item.s_unit) && (
-                           <option value={item.invoice_unit}>{item.invoice_unit}</option>
-                        )}
-                      </select>
-                    ) : (
-                      <div className="p-1.5 text-xs font-bold uppercase text-textMuted text-center">{item.return_unit}</div>
-                    )}
-                  </td>
-                  <td className="p-3 text-right font-mono font-bold text-emerald-500">
-                    ₹{calculateRefund(item).toFixed(2)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4 mb-4">
+    <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 z-[9999] overflow-y-auto animate-backdrop-fade">
+      <div className="bg-secondary border border-border p-4 sm:p-6 rounded-2xl w-full max-w-4xl shadow-2xl flex flex-col max-h-[92vh] my-auto">
+        
+        {/* Header */}
+        <div className="flex justify-between items-center mb-4 pb-3 border-b border-border shrink-0">
           <div>
-            <label className="block text-xs text-textMuted font-bold mb-1">Refund Mode</label>
+            <span className="text-[10px] font-bold text-primary uppercase tracking-widest">Item Return Desk</span>
+            <h2 className="text-lg sm:text-xl font-black text-foreground uppercase mt-0.5">
+              Return Items — Invoice #{invoice.invoice_number || invoice.id}
+            </h2>
+            <div className="text-xs text-textMuted font-medium mt-0.5">
+              Customer: <strong className="text-foreground uppercase">{invoice.customer_name || 'Cash Customer'}</strong>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center rounded-lg bg-background hover:bg-slate-200 dark:hover:bg-slate-800 text-textMuted hover:text-foreground text-lg font-bold transition cursor-pointer"
+          >
+            &times;
+          </button>
+        </div>
+
+        {/* Items Table Container */}
+        <div className="flex-1 min-h-0 overflow-y-auto mb-4 border border-border rounded-xl p-1 bg-background/50 scrollbar-thin">
+          {returnItems.length === 0 ? (
+            <div className="text-center py-12 text-xs text-textMuted font-semibold">
+              <i className="fa-solid fa-check-circle text-2xl text-emerald-500 mb-2 block"></i>
+              All items on this invoice have already been returned in full.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs text-foreground min-w-[650px]">
+                <thead>
+                  <tr className="border-b border-border text-[11px] uppercase text-textMuted font-extrabold bg-secondary">
+                    <th className="p-3">Product</th>
+                    <th className="p-3">Billed As</th>
+                    <th className="p-3 text-center">Available Qty</th>
+                    <th className="p-3 text-center w-40">Return Qty</th>
+                    <th className="p-3 text-center w-24">Unit</th>
+                    <th className="p-3 text-right">Refund (₹)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {returnItems.map((item) => {
+                    const refundAmt = calculateRefund(item);
+
+                    return (
+                      <tr key={item.id} className="hover:bg-primary/5 transition-colors">
+                        <td className="p-3 font-semibold uppercase">
+                          <div className="text-foreground font-bold text-sm">{item.product_name}</div>
+                        </td>
+
+                        <td className="p-3 text-xs">
+                          <div className="font-mono font-bold text-foreground">
+                            {item.actual_total_qty} {item.unit} @ ₹{item.rate_per_item.toFixed(2)}
+                          </div>
+                          <div className="text-[10px] text-textMuted font-mono">
+                            Total: ₹{item.total_amount.toFixed(2)}
+                          </div>
+                        </td>
+
+                        <td className="p-3 text-center">
+                          <div className="font-mono font-black text-foreground text-base">
+                            {item.remaining_qty.toFixed(0)} {item.unit}
+                          </div>
+                          {item.past_returned_qty > 0 && (
+                            <div className="text-[10px] text-textMuted font-mono">
+                              ({item.past_returned_qty} already returned)
+                            </div>
+                          )}
+                        </td>
+
+                        <td className="p-3 text-center">
+                          <div className="relative inline-block w-full">
+                            <input
+                              type="number"
+                              min="0"
+                              max={item.remaining_qty}
+                              step="any"
+                              className={`w-full bg-background border ${item.error ? 'border-rose-500 ring-2 ring-rose-500/20 bg-rose-500/5' : 'border-border'} rounded-lg p-2 text-center font-mono font-bold text-foreground text-base focus:border-primary focus:outline-none`}
+                              placeholder="0"
+                              value={item.return_qty === 0 ? '' : item.return_qty}
+                              onChange={(e) => handleQtyChange(item.id, e.target.value)}
+                            />
+
+                            {/* Easy 1-click Return helper buttons */}
+                            <div className="flex gap-1 justify-center mt-1 text-[10px] font-bold">
+                              {item.remaining_qty >= 2 && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleQtyChange(item.id, '2')}
+                                  className="px-2 py-0.5 bg-primary/10 hover:bg-primary hover:text-white border border-primary/30 text-primary rounded-md cursor-pointer transition font-extrabold"
+                                  title="Return 2 items"
+                                >
+                                  Return 2
+                                </button>
+                              )}
+                              {item.remaining_qty > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleQtyChange(item.id, item.remaining_qty.toString())}
+                                  className="px-2 py-0.5 bg-background border border-border hover:border-primary text-textMuted hover:text-primary rounded-md cursor-pointer transition font-bold"
+                                  title="Return all items"
+                                >
+                                  All ({item.remaining_qty.toFixed(0)})
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          {item.error && (
+                            <div className="text-[10px] text-rose-500 font-bold mt-1">
+                              {item.error}
+                            </div>
+                          )}
+                        </td>
+
+                        <td className="p-3 text-center">
+                          <span className="font-mono font-bold text-foreground uppercase bg-background px-2.5 py-1 rounded-lg border border-border text-xs">
+                            {item.unit}
+                          </span>
+                        </td>
+
+                        <td className="p-3 text-right">
+                          <div className="font-mono font-black text-base text-emerald-500">
+                            ₹{refundAmt.toFixed(2)}
+                          </div>
+                          {item.return_qty > 0 && (
+                            <div className="text-[10px] text-textMuted font-mono">
+                              ({item.return_qty} × ₹{item.rate_per_item.toFixed(2)})
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* Refund Mode & Reason Controls */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-4 shrink-0">
+          <div>
+            <label className="block text-xs text-textMuted font-bold mb-1">Refund Settlement Mode</label>
             <select
-              className="w-full bg-background border border-border rounded-lg p-2.5 text-sm font-semibold focus:border-primary focus:outline-none text-foreground"
+              className="w-full bg-background border border-border rounded-lg p-2.5 text-xs sm:text-sm font-semibold focus:border-primary focus:outline-none text-foreground cursor-pointer"
               value={refundMode}
               onChange={(e) => setRefundMode(e.target.value as any)}
             >
-              <option value="Credit">Credit Note (Reduce Outstanding)</option>
-              <option value="Cash">Cash Refund (Given to Customer)</option>
+              <option value="Credit">Credit Note (Reduce Outstanding Udhar)</option>
+              <option value="Cash">Cash Refund (Payout Directly to Customer)</option>
             </select>
           </div>
           <div>
             <label className="block text-xs text-textMuted font-bold mb-1">Reason for Return</label>
             <input
               type="text"
-              className="w-full bg-background border border-border rounded-lg p-2.5 text-sm font-semibold focus:border-primary focus:outline-none text-foreground"
-              placeholder="e.g. Excess material, Defective"
+              className="w-full bg-background border border-border rounded-lg p-2.5 text-xs sm:text-sm font-semibold focus:border-primary focus:outline-none text-foreground"
+              placeholder="e.g. Excess material, Defective, Wrong size"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
             />
           </div>
         </div>
 
-        <div className="flex justify-between items-center border-t border-border pt-4 mt-auto">
-          <div className="text-sm">
-            <span className="text-textMuted font-bold">Total Refund: </span>
-            <span className="text-xl font-black text-emerald-500 font-mono">₹{totalRefund.toFixed(2)}</span>
+        {/* Bottom Actions */}
+        <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 border-t border-border pt-4 mt-auto shrink-0">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-textMuted font-bold uppercase tracking-wider">Total Refund Amount:</span>
+            <span className="text-xl sm:text-2xl font-black text-emerald-500 font-mono">₹{totalRefund.toFixed(2)}</span>
           </div>
+
           <div className="flex gap-2">
             <button
+              type="button"
               onClick={onClose}
-              className="px-4 py-2 border border-border text-foreground rounded-lg font-bold hover:bg-background transition"
+              className="flex-1 sm:flex-none px-4 py-2.5 border border-border text-foreground rounded-xl text-xs font-bold hover:bg-background transition active:scale-95 cursor-pointer"
             >
               Cancel
             </button>
             <button
+              type="button"
               onClick={handleSubmit}
               disabled={!isReturnValid || isSubmitting}
-              className={`px-6 py-2 rounded-lg font-bold text-white transition ${
-                isReturnValid && !isSubmitting ? 'bg-primary hover:bg-primary/90' : 'bg-primary/50 cursor-not-allowed'
+              className={`flex-1 sm:flex-none px-6 py-2.5 rounded-xl text-xs font-extrabold text-white transition shadow-md flex items-center justify-center gap-2 active:scale-95 cursor-pointer ${
+                isReturnValid && !isSubmitting ? 'bg-primary hover:bg-primary/90' : 'bg-primary/50 cursor-not-allowed opacity-60'
               }`}
             >
-              {isSubmitting ? 'Processing...' : 'Confirm Return'}
+              {isSubmitting ? (
+                <>
+                  <i className="fa-solid fa-spinner fa-spin"></i>
+                  <span>Processing Return...</span>
+                </>
+              ) : (
+                <>
+                  <i className="fa-solid fa-rotate-left"></i>
+                  <span>Confirm Return (₹{totalRefund.toFixed(2)})</span>
+                </>
+              )}
             </button>
           </div>
         </div>
+
       </div>
     </div>
   );
 }
-

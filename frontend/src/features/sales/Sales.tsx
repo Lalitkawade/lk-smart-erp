@@ -121,7 +121,8 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
 
       const custInvoices = (sales as any[]).filter(s => s.customer_name && s.customer_name.toUpperCase().trim() === nameUpper);
       const custPayments = (payments || []).filter((p: any) =>
-        p.customer_id === c.id || (p.customer_name && p.customer_name.toUpperCase().trim() === nameUpper)
+        (p.customer_id === c.id || (p.customer_name && p.customer_name.toUpperCase().trim() === nameUpper)) &&
+        Number(p.amount || 0) > 0
       );
 
       const totalInvoiceDues = custInvoices.reduce((acc: number, inv: any) => {
@@ -144,7 +145,8 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
         return acc + creditReturnsForInv;
       }, 0);
 
-      let effectiveOutstanding = Number(c.outstanding || 0) + totalInvoiceDues - totalPaymentsReceived - totalCreditReturns;
+      const initialBal = custInvoices.length > 0 ? 0 : Math.max(0, Number(c.outstanding || 0));
+      let effectiveOutstanding = initialBal + totalInvoiceDues - totalPaymentsReceived - totalCreditReturns;
 
       list.push({
         id: c.id,
@@ -165,7 +167,8 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
       seenNames.add(nameUpper);
       const custInvoices = (sales as any[]).filter(inv => inv.customer_name && inv.customer_name.toUpperCase().trim() === nameUpper);
       const custPayments = (payments || []).filter((p: any) =>
-        p.customer_name && p.customer_name.toUpperCase().trim() === nameUpper
+        p.customer_name && p.customer_name.toUpperCase().trim() === nameUpper &&
+        Number(p.amount || 0) > 0
       );
 
       const totalInvoiceDues = custInvoices.reduce((acc: number, inv: any) => {
@@ -446,6 +449,103 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
   };
 
   const saleLines = useMemo(() => {
+    // 1. Group invoices by customer to calculate subsequent payment allocations
+    const custInvoiceMap = new Map<string, any[]>();
+    (sales as any[]).forEach(s => {
+      const nameKey = (s.customer_name || 'Cash Customer').toUpperCase().trim();
+      if (!custInvoiceMap.has(nameKey)) {
+        custInvoiceMap.set(nameKey, []);
+      }
+      custInvoiceMap.get(nameKey)!.push(s);
+    });
+
+    // 2. Track allocated subsequent payments per invoice ID
+    const subsequentPaymentAllocations = new Map<string, number>();
+
+    custInvoiceMap.forEach((invoices, custName) => {
+      if (custName === 'CASH CUSTOMER') return;
+
+      // Sort customer's invoices ascending by date
+      const sortedInvs = [...invoices].sort(
+        (a, b) => new Date(a.sale_date || a.created_at || 0).getTime() - new Date(b.sale_date || b.created_at || 0).getTime()
+      );
+
+      // Invoices tracked with their unpaid balances
+      const invBalances = sortedInvs.map(inv => {
+        const total = Number(inv.total_amount || 0);
+        const returns = inv.returns || [];
+        const creditRefunds = returns.reduce((acc: number, ret: any) => {
+          return acc + ((ret.refund_mode || '').toLowerCase().includes('credit') ? Number(ret.total_refund_amount || 0) : 0);
+        }, 0);
+
+        const originalDue = inv.due_amount !== undefined && Number(inv.due_amount) >= 0 && Number(inv.due_amount) <= total
+          ? Number(inv.due_amount)
+          : undefined;
+        const initPaid = originalDue !== undefined
+          ? Math.max(0, total - originalDue)
+          : (inv.checkout_paid_amount !== undefined
+              ? Number(inv.checkout_paid_amount)
+              : (inv.initial_paid_amount !== undefined
+                  ? Number(inv.initial_paid_amount)
+                  : (inv.amount_collected !== undefined
+                      ? Math.min(Number(inv.amount_collected || 0), total)
+                      : (inv.paid_amount !== undefined ? Math.min(Number(inv.paid_amount || 0), total) : (inv.payment_status === 'Paid' ? total : 0)))));
+
+        const originalUnpaid = Math.max(0, total - initPaid);
+        const unpaid = Math.max(0, originalUnpaid - creditRefunds);
+        return {
+          id: inv.id,
+          invNum: inv.invoice_number,
+          date: new Date(inv.sale_date || inv.created_at || 0).getTime(),
+          unpaid
+        };
+      });
+
+      const regCust = (registeredCustomers || []).find(
+        rc => (rc.customer_name || '').toUpperCase().trim() === custName
+      );
+      const custId = regCust?.id;
+
+      // Get valid positive collection payments for this customer (excluding upfront invoice checkout payments)
+      const custPayments = (payments || []).filter((p: any, index: number, self: any[]) => {
+        const isCheckoutPay = p.ref_number && (p.ref_number.startsWith('PAY-INV-') || p.ref_number.startsWith('PAY-'));
+        if (isCheckoutPay) return false;
+        const isCustMatch = ((custId && p.customer_id === custId) ||
+          (p.customer_name && p.customer_name.toUpperCase().trim() === custName) ||
+          sortedInvs.some(inv => inv.id === p.customer_id));
+        return isCustMatch && Number(p.amount || 0) > 0 && self.findIndex(x => (x.id ? x.id === p.id : x === p)) === index;
+      }).sort((a, b) => new Date(a.payment_date || a.created_at || 0).getTime() - new Date(b.payment_date || b.created_at || 0).getTime());
+
+      // Allocate payments chronologically to invoices
+      custPayments.forEach(pay => {
+        let rem = Number(pay.amount || 0);
+
+        // Check if payment specifically targets an invoice number or ID
+        const targetInv = invBalances.find(b =>
+          (b.invNum && pay.ref_number && pay.ref_number.includes(b.invNum)) ||
+          (b.id && pay.customer_id === b.id)
+        );
+
+        if (targetInv && targetInv.unpaid > 0) {
+          const alloc = Math.min(targetInv.unpaid, rem);
+          targetInv.unpaid -= alloc;
+          rem -= alloc;
+          subsequentPaymentAllocations.set(targetInv.id, (subsequentPaymentAllocations.get(targetInv.id) || 0) + alloc);
+        }
+
+        // Allocate remaining payment to invoices chronologically
+        for (const item of invBalances) {
+          if (rem <= 0) break;
+          if (item.unpaid > 0) {
+            const alloc = Math.min(item.unpaid, rem);
+            item.unpaid -= alloc;
+            rem -= alloc;
+            subsequentPaymentAllocations.set(item.id, (subsequentPaymentAllocations.get(item.id) || 0) + alloc);
+          }
+        }
+      });
+    });
+
     const lines: any[] = [];
     (sales as any[]).forEach((s: any) => {
       const items = s.items || s.sales_items || [];
@@ -456,19 +556,65 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
         const firstName = matchProd?.product_name || firstItem.product?.product_name || firstItem.product_name || 'Unknown Product';
         itemSummary = items.length === 1 ? firstName : `${firstName} + ${items.length - 1} more`;
       }
+
+      const totalAmt = Number(s.total_amount || 0);
+      const returns = s.returns || [];
+      const totalRefund = returns.reduce((acc: number, ret: any) => acc + Number(ret.total_refund_amount || 0), 0);
+      const creditRefund = returns.reduce((acc: number, ret: any) => {
+        return acc + ((ret.refund_mode || '').toLowerCase().includes('credit') ? Number(ret.total_refund_amount || 0) : 0);
+      }, 0);
+      const netAmt = Math.max(0, totalAmt - creditRefund);
+
+      const originalDue = s.due_amount !== undefined && Number(s.due_amount) >= 0 && Number(s.due_amount) <= totalAmt
+        ? Number(s.due_amount)
+        : undefined;
+      const initialPaid = originalDue !== undefined
+        ? Math.max(0, totalAmt - originalDue)
+        : (s.checkout_paid_amount !== undefined
+            ? Number(s.checkout_paid_amount)
+            : (s.initial_paid_amount !== undefined
+                ? Number(s.initial_paid_amount)
+                : (s.amount_collected !== undefined
+                    ? Math.min(Number(s.amount_collected || 0), totalAmt)
+                    : (s.paid_amount !== undefined ? Math.min(Number(s.paid_amount || 0), totalAmt) : (s.payment_status === 'Paid' ? totalAmt : 0)))));
+
+      const originalUnpaid = Math.max(0, totalAmt - initialPaid);
+      const subsequentPaid = subsequentPaymentAllocations.get(s.id) || 0;
+      const totalPaid = Math.min(netAmt, initialPaid + subsequentPaid);
+      const remainingDue = Math.max(0, netAmt - totalPaid);
+
       lines.push({
         id: s.id || s.invoice_number,
         invoice_number: s.invoice_number || s.id,
         date: s.sale_date || s.created_at || new Date().toISOString(),
         customer_name: s.customer_name || 'Cash Customer',
-        amount: Number(s.total_amount || 0),
+        amount: totalAmt,
+        netAmount: netAmt,
+        totalRefund: totalRefund,
+        creditRefund: creditRefund,
         items_summary: itemSummary,
-        paid_amount: Number(s.paid_amount || (s.payment_status === 'Paid' ? s.total_amount : s.amount_collected || 0)),
-        rawSaleObj: s
+        initialPaid: initialPaid,
+        subsequentPaid: subsequentPaid,
+        paid_amount: totalPaid,
+        remainingDue: remainingDue,
+        hasReturns: returns.length > 0,
+        rawSaleObj: {
+          ...s,
+          checkout_paid_amount: initialPaid,
+          initial_paid_amount: initialPaid,
+          original_due_amount: originalUnpaid,
+          unpaid_current_bill: originalUnpaid,
+          subsequent_paid_amount: subsequentPaid,
+          total_paid_amount: totalPaid,
+          remaining_due: remainingDue,
+          paid_amount: initialPaid,
+          due_amount: remainingDue,
+          payment_status: remainingDue <= 0 ? 'Paid' : (totalPaid > 0 ? 'Partial' : (s.payment_status || 'Unpaid'))
+        }
       });
     });
     return lines.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [sales, products]);
+  }, [sales, products, payments, registeredCustomers]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [page, setPage] = useState(1);
@@ -520,14 +666,39 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {(viewItemsInvoice.items || viewItemsInvoice.sales_items || []).map((item: any, i: number) => {
-                    const originalQty = Number(item.qty || 1);
-                    const isBaseQtyAvailable = item.base_quantity !== undefined && item.base_quantity !== null;
-                    const baseQty = Number(isBaseQtyAvailable ? item.base_quantity : originalQty);
-                    const amtRaw = Number(item.amount !== undefined && item.amount !== null ? item.amount : Math.round(originalQty * Number(item.rate || 0)));
-                    const displayPrice = isBaseQtyAvailable && baseQty > 0 ? amtRaw / baseQty : Number(item.rate || 0);
-                    
                     const matchProd = products.find(p => p.id === (item.product_id || item.product?.id));
-                    const unit = item.unitName || item.unit || (item.isLoose ? (matchProd?.s_unit || matchProd?.unit) : (matchProd?.p_unit)) || matchProd?.s_unit || matchProd?.unit || 'Nos';
+                    const fallbackUnit = (item.isLoose ? (matchProd?.s_unit || matchProd?.unit) : (matchProd?.p_unit)) || matchProd?.s_unit || matchProd?.unit || 'Nos';
+                    let unit = item.unitConfig?.unit || item.unit || item.unitName || fallbackUnit;
+                    if (unit) {
+                      const qtyPrefixMatch = unit.match(/^\d+[\s._-]+([a-zA-Z]+.*)$/);
+                      if (qtyPrefixMatch) {
+                        unit = qtyPrefixMatch[1].trim();
+                      } else if (unit.includes('(') && unit.includes(')')) {
+                        if (matchProd?.s_unit) {
+                          unit = matchProd.s_unit;
+                        } else {
+                          const insideParen = unit.match(/\((?:.*?(\d+\s*))?([a-zA-Z]+)\)/);
+                          if (insideParen && insideParen[2]) {
+                            unit = insideParen[2].trim();
+                          }
+                        }
+                      }
+                    }
+
+                    const baseUnitName = (item.base_unit || matchProd?.s_unit || matchProd?.unit || '').trim().toLowerCase();
+                    const isSameAsBaseUnit = unit && baseUnitName && (unit.trim().toLowerCase() === baseUnitName);
+                    const amtRaw = Number(item.amount !== undefined && item.amount !== null ? item.amount : Math.round(Number(item.qty || 1) * Number(item.rate || 0)));
+
+                    let baseQty: number;
+                    let displayPrice: number;
+
+                    if (isSameAsBaseUnit && item.base_quantity !== undefined && item.base_quantity !== null) {
+                      baseQty = Number(item.base_quantity);
+                      displayPrice = baseQty > 0 ? amtRaw / baseQty : Number(item.rate || 0);
+                    } else {
+                      baseQty = Number(item.qty !== undefined && item.qty !== null ? item.qty : (item.base_quantity || 1));
+                      displayPrice = Number(item.rate !== undefined && item.rate !== null ? item.rate : (baseQty > 0 ? amtRaw / baseQty : 0));
+                    }
 
                     return (
                       <tr key={i} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
@@ -602,18 +773,37 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                     {line.items_summary}
                   </button>
                 </td>
-                <td className="py-2.5 px-3 text-center text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                  ₹{line.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                <td className="py-2.5 px-3 text-center text-xs font-mono">
+                  <div className="font-bold text-emerald-600 dark:text-emerald-400">
+                    ₹{line.netAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  </div>
+                  {line.totalRefund > 0 && (
+                    <div className="text-[10px] text-slate-400 font-semibold" title={`Original: ₹${line.amount.toFixed(2)}, Returned: -₹${line.totalRefund.toFixed(2)}`}>
+                      <span className="line-through">₹{line.amount.toFixed(2)}</span> <span className="text-purple-600 dark:text-purple-400 font-bold">(-₹{line.totalRefund.toFixed(2)})</span>
+                    </div>
+                  )}
                 </td>
-                <td className="py-2.5 px-3 text-center text-xs font-mono text-slate-900 dark:text-slate-100">
-                  ₹{line.paid_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                <td className="py-2.5 px-3 text-center text-xs font-mono">
+                  <div className="font-bold text-slate-900 dark:text-slate-100">
+                    ₹{line.paid_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  </div>
+                  {line.subsequentPaid > 0 && (
+                    <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold" title={`Checkout: ₹${line.initialPaid.toFixed(2)} + Post-bill receipts: ₹${line.subsequentPaid.toFixed(2)}`}>
+                      (₹{line.initialPaid.toFixed(0)} + ₹{line.subsequentPaid.toFixed(0)} rec'd)
+                    </div>
+                  )}
+                  {line.remainingDue > 0 && (
+                    <div className="text-[10px] text-rose-600 dark:text-rose-400 font-bold">
+                      Due: ₹{line.remainingDue.toFixed(2)}
+                    </div>
+                  )}
                 </td>
                 <td className="py-2.5 px-3 text-center text-xs font-bold uppercase">
                   <div className="flex flex-col gap-1 items-center justify-center">
-                    <span className={`px-2 py-0.5 rounded text-[10px] shadow-sm ${line.rawSaleObj?.payment_status?.toLowerCase() === 'paid' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800' : line.rawSaleObj?.payment_status?.toLowerCase() === 'credit' ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400 border border-rose-200 dark:border-rose-800' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border border-amber-200 dark:border-amber-800'}`}>
-                      {line.rawSaleObj?.payment_status || line.rawSaleObj?.status || 'Completed'}
+                    <span className={`px-2 py-0.5 rounded text-[10px] shadow-sm ${line.remainingDue <= 0 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800' : (line.paid_amount > 0 ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border border-amber-200 dark:border-amber-800' : 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400 border border-rose-200 dark:border-rose-800')}`}>
+                      {line.remainingDue <= 0 ? 'Paid' : (line.paid_amount > 0 ? `Partial` : 'Unpaid')}
                     </span>
-                    {(line.rawSaleObj?.status === 'Returned' || (line.rawSaleObj?.returns && line.rawSaleObj?.returns.length > 0)) && (
+                    {(line.rawSaleObj?.status === 'Returned' || line.hasReturns) && (
                       <span className="px-2 py-0.5 rounded text-[10px] shadow-sm bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 border border-purple-200 dark:border-purple-800">
                         Returned
                       </span>
@@ -1099,7 +1289,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                           availableUnits.push({
                             key: `custom_${idx}`,
                             name: mu.name,
-                            label: `${mu.name} (1 = ${mu.conversionRate} ${sUnit})`,
+                            label: `${mu.name} (1 = ${mu.conversionRate} ${mu.unit || sUnit})`,
                             isLoose: false,
                             unitConfig: mu
                           });
@@ -1676,13 +1866,39 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                             const matchProd = products.find(p => p.id === (item.product_id || item.product?.id));
                             const itemName = matchProd?.product_name || item.product?.product_name || item.product_name || `Item ${idx + 1}`;
                             const hsn = matchProd?.hsn || item.product?.hsn || item.hsn || '-';
-                            const isBaseQtyAvailable = item.base_quantity !== undefined && item.base_quantity !== null;
-                            const qty = Number(isBaseQtyAvailable ? item.base_quantity : (item.qty || 1));
-                            const unit = item.unitName || item.unit || (item.isLoose ? (matchProd?.s_unit || matchProd?.unit) : (matchProd?.p_unit)) || matchProd?.s_unit || matchProd?.unit || '';
+                            const fallbackUnit = (item.isLoose ? (matchProd?.s_unit || matchProd?.unit) : (matchProd?.p_unit)) || matchProd?.s_unit || matchProd?.unit || 'Nos';
+                            let unit = item.unitConfig?.unit || item.unit || item.unitName || fallbackUnit;
+                            if (unit) {
+                              const qtyPrefixMatch = unit.match(/^\d+[\s._-]+([a-zA-Z]+.*)$/);
+                              if (qtyPrefixMatch) {
+                                unit = qtyPrefixMatch[1].trim();
+                              } else if (unit.includes('(') && unit.includes(')')) {
+                                if (matchProd?.s_unit) {
+                                  unit = matchProd.s_unit;
+                                } else {
+                                  const insideParen = unit.match(/\((?:.*?(\d+\s*))?([a-zA-Z]+)\)/);
+                                  if (insideParen && insideParen[2]) {
+                                    unit = insideParen[2].trim();
+                                  }
+                                }
+                              }
+                            }
+
+                            const baseUnitName = (item.base_unit || matchProd?.s_unit || matchProd?.unit || '').trim().toLowerCase();
+                            const isSameAsBaseUnit = unit && baseUnitName && (unit.trim().toLowerCase() === baseUnitName);
+                            const amt = Number(item.amount !== undefined && item.amount !== null ? item.amount : Math.round(Number(item.qty || 1) * Number(item.rate || 0)));
+
+                            let qty: number;
+                            let rate: number;
+
+                            if (isSameAsBaseUnit && item.base_quantity !== undefined && item.base_quantity !== null) {
+                              qty = Number(item.base_quantity);
+                              rate = qty !== 0 ? amt / qty : Number(item.rate || 0);
+                            } else {
+                              qty = Number(item.qty !== undefined && item.qty !== null ? item.qty : (item.base_quantity || 1));
+                              rate = Number(item.rate !== undefined && item.rate !== null ? item.rate : (qty !== 0 ? amt / qty : 0));
+                            }
                             let displayQty = `${qty}`;
-                            const fallbackRate = Number(item.rate || item.price || 0);
-                            const amt = Number(item.amount !== undefined && item.amount !== null ? item.amount : Math.round(qty * fallbackRate));
-                            const rate = isBaseQtyAvailable && qty !== 0 ? amt / qty : fallbackRate;
                             
                             return (
                               <tr key={idx} className="border-b border-slate-200">
@@ -1767,7 +1983,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                             <span className="font-mono font-bold">₹{totalAmount.toFixed(2)}</span>
                           </div>
                           {(() => {
-                            const totalRefund = Math.ceil(printInvoice.returns?.reduce((acc: number, ret: any) => acc + Number(ret.total_refund_amount || 0), 0) || 0);
+                            const totalRefund = printInvoice.returns?.reduce((acc: number, ret: any) => acc + Number(ret.total_refund_amount || 0), 0) || 0;
                             if (totalRefund > 0) {
                               return (
                                 <div className="flex justify-between text-rose-600 font-bold">
@@ -1779,7 +1995,7 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                             return null;
                           })()}
                           {(() => {
-                            const totalRefund = Math.ceil(printInvoice.returns?.reduce((acc: number, ret: any) => acc + Number(ret.total_refund_amount || 0), 0) || 0);
+                            const totalRefund = printInvoice.returns?.reduce((acc: number, ret: any) => acc + Number(ret.total_refund_amount || 0), 0) || 0;
                             const netAmount = Math.max(0, totalAmount - totalRefund);
                             return (
                               <div className="flex justify-between border-t-2 border-slate-900 pt-1 text-xs font-black">
@@ -1811,11 +2027,27 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                               return acc + Math.max(0, Number(curr.due_amount || 0) - crRefunds);
                             }, 0);
 
-                            const pastPayments = payments.filter((p: any) => 
-                              (p.customer_name?.toUpperCase() === nameUpper || p.customer_id === regCust?.id)
-                              && new Date(p.payment_date || p.created_at).getTime() <= invoiceDate
+                            const allCustPayments = payments.filter((p: any, index: number, self: any[]) => {
+                              const isCheckoutPay = p.ref_number && (p.ref_number.startsWith('PAY-INV-') || p.ref_number.startsWith('PAY-'));
+                              if (isCheckoutPay) return false;
+                              return ((regCust?.id && p.customer_id === regCust.id) ||
+                                (p.customer_name && p.customer_name.toUpperCase().trim() === nameUpper) ||
+                                (printInvoice.customer_id && p.customer_id === printInvoice.customer_id)) &&
+                               Number(p.amount || 0) > 0 &&
+                               self.findIndex(x => (x.id ? x.id === p.id : x === p)) === index;
+                            });
+
+                            const pastPayments = allCustPayments.filter((p: any) => 
+                              new Date(p.payment_date || p.created_at).getTime() <= invoiceDate
                             );
                             const pastPaymentsSum = pastPayments.reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
+
+                            const subsequentPayments = allCustPayments.filter((p: any) => 
+                              new Date(p.payment_date || p.created_at).getTime() > invoiceDate
+                            );
+                            const subsequentPaymentsSum = printInvoice.subsequent_paid_amount !== undefined
+                              ? Number(printInvoice.subsequent_paid_amount || 0)
+                              : subsequentPayments.reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
                             
                             const calculatedPrevUdhar = pastUnpaidDue - pastPaymentsSum;
 
@@ -1825,32 +2057,44 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                               ? Number(printInvoice.previous_outstanding)
                               : (appliedUdhar > 0 ? (calculatedPrevUdhar + appliedUdhar) : calculatedPrevUdhar);
 
-                            const totalRefund = Math.ceil(printInvoice.returns?.reduce((acc: number, ret: any) => acc + Number(ret.total_refund_amount || 0), 0) || 0);
+                            const totalRefund = printInvoice.returns?.reduce((acc: number, ret: any) => acc + Number(ret.total_refund_amount || 0), 0) || 0;
                             const netAmount = Math.max(0, totalAmount - totalRefund);
 
                             // Calculate how much of the refund was applied to Udhar (Credit Note)
-                            const creditRefunds = Math.ceil(printInvoice.returns?.reduce((acc: number, ret: any) => {
+                            const creditRefunds = printInvoice.returns?.reduce((acc: number, ret: any) => {
                               return acc + ((ret.refund_mode || '').toLowerCase().includes('credit') ? Number(ret.total_refund_amount || 0) : 0);
-                            }, 0) || 0);
+                            }, 0) || 0;
 
-                            const originalUnpaidBill = printInvoice.unpaid_current_bill !== undefined
-                              ? Number(printInvoice.unpaid_current_bill || 0)
-                              : Number(printInvoice.due_amount || 0);
+                            // 1. Paid at checkout for this bill (NOT including subsequent collection payments):
+                            const currentBillPaid = printInvoice.checkout_paid_amount !== undefined
+                              ? Number(printInvoice.checkout_paid_amount || 0)
+                              : (printInvoice.initial_paid_amount !== undefined
+                                  ? Number(printInvoice.initial_paid_amount || 0)
+                                  : (printInvoice.applied_to_current_bill !== undefined && Number(printInvoice.applied_to_current_bill) <= totalAmount
+                                      ? Number(printInvoice.applied_to_current_bill)
+                                      : (printInvoice.original_due_amount !== undefined && Number(printInvoice.original_due_amount) <= totalAmount
+                                          ? Math.max(0, totalAmount - Number(printInvoice.original_due_amount))
+                                          : (printInvoice.due_amount !== undefined && Number(printInvoice.due_amount) > 0 && Number(printInvoice.due_amount) <= totalAmount && Number(printInvoice.due_amount) !== Number(printInvoice.remaining_due)
+                                              ? Math.max(0, totalAmount - Number(printInvoice.due_amount))
+                                              : Math.min(Number(printInvoice.paid_amount || 0), totalAmount)))));
 
-                            // Reduce unpaid bill by credit refunds first
+                            // 2. Original unpaid bill balance at checkout (before returns and subsequent payments):
+                            const originalUnpaidBill = printInvoice.original_due_amount !== undefined
+                              ? Number(printInvoice.original_due_amount || 0)
+                              : (printInvoice.unpaid_current_bill !== undefined
+                                  ? Number(printInvoice.unpaid_current_bill || 0)
+                                  : Math.max(0, totalAmount - currentBillPaid));
+
+                            // 3. Reduce unpaid bill by credit refunds first
                             const unpaidBill = Math.max(0, originalUnpaidBill - creditRefunds);
                             const remainingCreditRefund = Math.max(0, creditRefunds - originalUnpaidBill);
 
-                            const currentBillPaid = printInvoice.amount_collected !== undefined
-                              ? Math.min(Number(printInvoice.amount_collected || 0), totalAmount)
-                              : Math.min(Number(printInvoice.paid_amount || 0), totalAmount);
+                            // 4. Remaining Udhar balance after this transaction (adjust for credit refunds and subsequent payments)
+                            const baseRemUdhar = prevUdhar - appliedUdhar - remainingCreditRefund + unpaidBill;
 
-                            // Remaining Udhar balance after this transaction (adjust for credit refunds)
-                            const remUdhar = printInvoice.remaining_outstanding !== undefined
-                              ? (Number(printInvoice.remaining_outstanding) - creditRefunds)
-                              : (prevUdhar - appliedUdhar - remainingCreditRefund + unpaidBill);
+                            const netRemUdhar = baseRemUdhar - subsequentPaymentsSum;
 
-                            if (!isNamedCustomer && prevUdhar <= 0 && remUdhar <= 0 && appliedUdhar <= 0 && unpaidBill <= 0) {
+                            if (!isNamedCustomer && prevUdhar <= 0 && netRemUdhar <= 0 && appliedUdhar <= 0 && unpaidBill <= 0 && subsequentPaymentsSum <= 0) {
                               return null;
                             }
 
@@ -1858,8 +2102,8 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                               <div className="mt-2 pt-1 border-t-2 border-slate-400 text-[9px] bg-slate-50 p-2 rounded space-y-1 text-left shadow-sm">
                                 <div className="font-black text-slate-900 uppercase text-[9px] border-b border-slate-300 pb-1 mb-1 flex justify-between items-center">
                                   <span>CUSTOMER ACCOUNT CREDIT LEDGER</span>
-                                  <span className={`font-extrabold px-1.5 py-0.5 rounded border ${remUdhar > 0 ? 'text-amber-900 bg-amber-100 border-amber-300' : (remUdhar < 0 ? 'text-emerald-900 bg-emerald-100 border-emerald-300' : 'text-slate-900 bg-slate-200 border-slate-300')}`}>
-                                    {remUdhar > 0 ? '⚠️ Udhar Pending' : (remUdhar < 0 ? '💸 Advance Credit' : '✓ Account Cleared')}
+                                  <span className={`font-extrabold px-1.5 py-0.5 rounded border ${netRemUdhar > 0 ? 'text-amber-900 bg-amber-100 border-amber-300' : (netRemUdhar < 0 ? 'text-emerald-900 bg-emerald-100 border-emerald-300' : 'text-slate-900 bg-slate-200 border-slate-300')}`}>
+                                    {netRemUdhar > 0 ? '⚠️ Udhar Pending' : (netRemUdhar < 0 ? '💸 Advance Credit' : '✓ Account Cleared')}
                                   </span>
                                 </div>
 
@@ -1885,12 +2129,37 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                                   <span className="font-mono font-bold text-primary">₹{currentBillPaid.toFixed(2)}</span>
                                 </div>
 
-                                {/* 4. Unpaid Bill Added to Udhar */}
-                                {unpaidBill > 0 && (
-                                  <div className="flex justify-between text-rose-800 font-bold">
-                                    <span>4. Unpaid Bill Added to Udhar:</span>
-                                    <span className="font-mono text-rose-700">+₹{unpaidBill.toFixed(2)}</span>
+                                {/* 4. Unpaid Bill Balance Breakdown */}
+                                {creditRefunds > 0 ? (
+                                  <div className="space-y-0.5 bg-rose-50/60 p-1.5 rounded border border-rose-200 my-0.5">
+                                    <div className="flex justify-between text-slate-600 text-[8.5px]">
+                                      <span>• Bill Total Before Return:</span>
+                                      <span className="font-mono">₹{totalAmount.toFixed(2)}</span>
+                                    </div>
+                                    <div className="flex justify-between text-slate-600 text-[8.5px]">
+                                      <span>• Less Paid at Checkout:</span>
+                                      <span className="font-mono text-primary">-₹{currentBillPaid.toFixed(2)}</span>
+                                    </div>
+                                    <div className="flex justify-between text-slate-700 text-[8.5px] font-semibold border-t border-slate-200 pt-0.5">
+                                      <span>• Original Unpaid Balance:</span>
+                                      <span className="font-mono text-rose-700">₹{originalUnpaidBill.toFixed(2)}</span>
+                                    </div>
+                                    <div className="flex justify-between text-emerald-700 text-[8.5px] font-bold">
+                                      <span>• Less Return Credit Note:</span>
+                                      <span className="font-mono text-emerald-600">-₹{creditRefunds.toFixed(2)}</span>
+                                    </div>
+                                    <div className="flex justify-between text-rose-900 font-black text-[9px] border-t border-rose-300 pt-0.5">
+                                      <span>4. Remaining Unpaid for this Bill:</span>
+                                      <span className="font-mono text-rose-700">+₹{unpaidBill.toFixed(2)}</span>
+                                    </div>
                                   </div>
+                                ) : (
+                                  unpaidBill > 0 && (
+                                    <div className="flex justify-between text-rose-800 font-bold">
+                                      <span>4. Unpaid Bill Added to Udhar:</span>
+                                      <span className="font-mono text-rose-700">+₹{unpaidBill.toFixed(2)}</span>
+                                    </div>
+                                  )
                                 )}
 
                                 {/* Credit Note Refund Applied to Previous Udhar */}
@@ -1901,11 +2170,19 @@ export default function Sales({ tenantId, tenantName, autoCustomerName, onAutoCu
                                   </div>
                                 )}
 
+                                {/* Subsequent Payments Received Towards Account */}
+                                {subsequentPaymentsSum > 0 && (
+                                  <div className="flex justify-between text-emerald-700 font-bold border-t border-slate-200 pt-0.5 text-[8.5px]">
+                                    <span>• Less Payments Received After Bill:</span>
+                                    <span className="font-mono text-emerald-700">-₹{subsequentPaymentsSum.toFixed(2)}</span>
+                                  </div>
+                                )}
+
                                 {/* 5. Net Remaining Outstanding */}
                                 <div className="flex justify-between font-black text-slate-900 border-t-2 border-slate-400 pt-1 mt-1 text-[9.5px]">
                                   <span>NET REMAINING OUTSTANDING UDHAR:</span>
-                                  <span className={remUdhar > 0 ? "font-mono text-rose-900 font-black text-[10px]" : (remUdhar < 0 ? "font-mono text-emerald-700 font-black text-[10px]" : "font-mono text-primary font-bold")}>
-                                    {remUdhar > 0 ? `₹${remUdhar.toFixed(2)} (PENDING)` : (remUdhar < 0 ? `₹${Math.abs(remUdhar).toFixed(2)} (ADVANCE / OWED TO CUST.)` : `₹0.00 (CLEARED)`)}
+                                  <span className={netRemUdhar > 0 ? "font-mono text-rose-900 font-black text-[10px]" : (netRemUdhar < 0 ? "font-mono text-emerald-700 font-black text-[10px]" : "font-mono text-primary font-bold")}>
+                                    {netRemUdhar > 0 ? `₹${netRemUdhar.toFixed(2)} (PENDING)` : (netRemUdhar < 0 ? `₹${Math.abs(netRemUdhar).toFixed(2)} (ADVANCE / OWED TO CUST.)` : `₹0.00 (CLEARED)`)}
                                   </span>
                                 </div>
                               </div>

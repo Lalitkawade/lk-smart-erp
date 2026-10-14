@@ -17,14 +17,14 @@ export function useBilling(tenantId: string) {
 
   const sales = contextSales || [];
 
-  const addToCart = (product: Product, isLoose: boolean = false, unitConfig?: { name: string; conversionRate: number; price: number }) => {
+  const addToCart = (product: Product, isLoose: boolean = false, unitConfig?: { name: string; unit?: string; conversionRate: number | string; price: number | string }) => {
     const existing = cart.find(item => item.product.id === product.id && (unitConfig ? item.unitConfig?.name === unitConfig.name : (!item.unitConfig && item.isLoose === isLoose)));
     const piecesPerPack = Math.max(1, Number(product.pieces_per_pack || 1));
     const stockInBaseUnits = Number(product.current_stock || 0);
 
-    const addedBaseUnits = unitConfig ? unitConfig.conversionRate : (isLoose ? 1 : piecesPerPack);
+    const addedBaseUnits = unitConfig ? Number(unitConfig.conversionRate || 1) : (isLoose ? 1 : piecesPerPack);
     const { piecePrice, packPrice } = getProductUnitRates(product);
-    const totalAddedPrice = unitConfig ? unitConfig.price : (isLoose ? piecePrice : packPrice);
+    const totalAddedPrice = unitConfig ? Number(unitConfig.price || 0) : (isLoose ? piecePrice : packPrice);
     const ratePerBaseUnit = Number((totalAddedPrice / addedBaseUnits).toFixed(2));
 
     // Calculate total base units currently added to cart for this product
@@ -84,7 +84,7 @@ export function useBilling(tenantId: string) {
     }));
   };
 
-  const updateCartUnit = (productId: string, currentIsLoose: boolean, currentUnitConfigName: string | undefined, targetIsLoose: boolean, targetUnitConfig?: { name: string; conversionRate: number; price: number }) => {
+  const updateCartUnit = (productId: string, currentIsLoose: boolean, currentUnitConfigName: string | undefined, targetIsLoose: boolean, targetUnitConfig?: { name: string; unit?: string; conversionRate: number | string; price: number | string }) => {
     if (currentIsLoose === targetIsLoose && currentUnitConfigName === targetUnitConfig?.name) return;
     const item = cart.find(i => i.product.id === productId && (currentUnitConfigName ? i.unitConfig?.name === currentUnitConfigName : (!i.unitConfig && i.isLoose === currentIsLoose)));
     if (!item) return;
@@ -101,9 +101,9 @@ export function useBilling(tenantId: string) {
     if (!targetItem) return;
 
     const { piecePrice, packPrice } = getProductUnitRates(targetItem.product);
-    const currentAddedBaseUnits = currentUnitConfigName ? (targetItem.unitConfig?.conversionRate || 1) : (currentIsLoose ? 1 : piecesPerPack);
-    const targetAddedBaseUnits = targetUnitConfig ? targetUnitConfig.conversionRate : (targetIsLoose ? 1 : piecesPerPack);
-    const totalTargetPrice = targetUnitConfig ? targetUnitConfig.price : (targetIsLoose ? piecePrice : packPrice);
+    const currentAddedBaseUnits = currentUnitConfigName ? Number(targetItem.unitConfig?.conversionRate || 1) : (currentIsLoose ? 1 : piecesPerPack);
+    const targetAddedBaseUnits = targetUnitConfig ? Number(targetUnitConfig.conversionRate || 1) : (targetIsLoose ? 1 : piecesPerPack);
+    const totalTargetPrice = targetUnitConfig ? Number(targetUnitConfig.price || 0) : (targetIsLoose ? piecePrice : packPrice);
     const newRate = Number((totalTargetPrice / targetAddedBaseUnits).toFixed(2));
 
     const currentUnits = targetItem.qty / currentAddedBaseUnits;
@@ -293,8 +293,17 @@ export function useBilling(tenantId: string) {
       const itemsPayload = cart.map(item => {
         const baseUnit = item.product.s_unit || item.product.unit || item.product.base_unit || 'Nos';
         
-        const addedBaseUnits = item.unitConfig ? item.unitConfig.conversionRate : (item.isLoose ? 1 : Math.max(1, Number(item.product.pieces_per_pack || 1)));
-        const unitName = item.unitConfig ? item.unitConfig.name : (item.isLoose ? (item.product.s_unit || baseUnit) : (item.product.p_unit || baseUnit));
+        const addedBaseUnits = item.unitConfig ? Number(item.unitConfig.conversionRate || 1) : (item.isLoose ? 1 : Math.max(1, Number(item.product.pieces_per_pack || 1)));
+        let unitName = item.unitConfig?.unit?.trim();
+        if (!unitName) {
+          unitName = item.unitConfig 
+            ? (item.product.s_unit || item.product.unit || baseUnit) 
+            : (item.isLoose ? (item.product.s_unit || baseUnit) : (item.product.p_unit || baseUnit));
+        }
+        const qtyPrefixMatch = unitName.match(/^\d+[\s._-]+([a-zA-Z]+.*)$/);
+        if (qtyPrefixMatch) {
+          unitName = qtyPrefixMatch[1].trim();
+        }
 
         return {
           product_id: item.product.id,
@@ -315,7 +324,7 @@ export function useBilling(tenantId: string) {
 
       // 3. Update product stock in Supabase via central InventoryService
       try {
-        await InventoryService.deductStockForInvoice(cart);
+        await InventoryService.deductStockForInvoice(cart as any);
       } catch (e) {}
 
       // Return compiled invoice object (including item lines mapped for printing and udhar ledger breakdown)
@@ -332,8 +341,17 @@ export function useBilling(tenantId: string) {
         remaining_outstanding: newOutstanding,
         items: cart.map(c => {
           const baseUnit = c.product.s_unit || c.product.unit || c.product.base_unit || 'Nos';
-          const addedBaseUnits = c.unitConfig ? c.unitConfig.conversionRate : (c.isLoose ? 1 : Math.max(1, Number(c.product.pieces_per_pack || 1)));
-          const unitName = c.unitConfig ? c.unitConfig.name : (c.isLoose ? (c.product.s_unit || baseUnit) : (c.product.p_unit || baseUnit));
+          const addedBaseUnits = c.unitConfig ? Number(c.unitConfig.conversionRate || 1) : (c.isLoose ? 1 : Math.max(1, Number(c.product.pieces_per_pack || 1)));
+          let unitName = c.unitConfig?.unit?.trim();
+          if (!unitName) {
+            unitName = c.unitConfig 
+              ? (c.product.s_unit || c.product.unit || baseUnit) 
+              : (c.isLoose ? (c.product.s_unit || baseUnit) : (c.product.p_unit || baseUnit));
+          }
+          const qtyPrefixMatch = unitName.match(/^\d+[\s._-]+([a-zA-Z]+.*)$/);
+          if (qtyPrefixMatch) {
+            unitName = qtyPrefixMatch[1].trim();
+          }
 
           return {
             product_id: c.product.id,

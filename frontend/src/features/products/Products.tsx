@@ -1012,10 +1012,18 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
           supplier_phone: activeSup ? activeSup.phone : (item.supplier_phone || null),
           status: 'Active',
           piece_selling_price: sPrice,
-          allow_decimal: item.allow_decimal,
+          allow_decimal: Boolean(item.allow_decimal) || (item.multi_units || []).some((mu: any) => {
+            const rate = parseFloat(mu.conversionRate);
+            return !isNaN(rate) && !Number.isInteger(rate);
+          }),
           allow_purchase_unit_selling: item.allow_purchase_unit_selling,
           track_base_unit: item.track_base_unit,
-          multi_units: item.multi_units || [],
+          multi_units: (item.multi_units || []).map((mu: any) => ({
+            name: mu.name?.trim() || '',
+            unit: mu.unit?.trim() || '',
+            conversionRate: parseFloat(mu.conversionRate) || 1,
+            price: parseFloat(mu.price) || 0
+          })),
           ...(targetProductId && { id: targetProductId })
         };
 
@@ -2810,10 +2818,11 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
                             <button
                               type="button"
                               onClick={() => {
-                                const nextUnits = [...(item.multi_units || []), { name: '', conversionRate: 1, price: 0 }];
+                                const baseUnit = item.s_unit || item.unit || 'Piece';
+                                const nextUnits = [...(item.multi_units || []), { name: '', unit: baseUnit, conversionRate: '', price: '' }];
                                 updateProductItem(index, { multi_units: nextUnits });
                               }}
-                              className="text-[10px] bg-blue-100 hover:bg-blue-200 text-blue-700 dark:bg-blue-900 dark:text-blue-300 px-2 py-1 rounded transition font-bold"
+                              className="text-[10px] bg-blue-100 hover:bg-blue-200 text-blue-700 dark:bg-blue-900 dark:text-blue-300 px-2 py-1 rounded transition font-bold cursor-pointer"
                             >
                               + Add Unit
                             </button>
@@ -2821,59 +2830,90 @@ export default function Products({ tenantId, businessType, mode = 'catalog', aut
 
                           {item.multi_units && item.multi_units.length > 0 ? (
                             <div className="space-y-2">
+                              <div className="hidden sm:grid sm:grid-cols-12 gap-2 px-1 pb-1 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                                <div className="sm:col-span-3">Unit / Option Name</div>
+                                <div className="sm:col-span-3">Unit on Bill</div>
+                                <div className="sm:col-span-3">Eqv ({item.s_unit || item.unit || 'Nos'})</div>
+                                <div className="sm:col-span-2">Price (₹)</div>
+                                <div className="sm:col-span-1 text-right">Action</div>
+                              </div>
                               {item.multi_units.map((mu: any, muIndex: number) => (
-                                <div key={muIndex} className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 bg-white dark:bg-slate-900 p-3 sm:p-2 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm">
-                                  <input
-                                    type="text"
-                                    placeholder="Unit Name (e.g. Dozen)"
-                                    className="w-full sm:flex-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-2 sm:p-1.5 text-xs focus:outline-blue-500"
-                                    value={mu.name}
-                                    onChange={(e) => {
-                                      const nextUnits = [...item.multi_units];
-                                      nextUnits[muIndex].name = e.target.value;
-                                      updateProductItem(index, { multi_units: nextUnits });
-                                    }}
-                                  />
-                                  <div className="flex items-center gap-2 sm:gap-1.5 w-full sm:flex-1">
-                                    <span className="text-[10px] text-slate-500 whitespace-nowrap">Eqv {item.unit || 'Nos'} =</span>
+                                <div key={muIndex} className="grid grid-cols-1 sm:grid-cols-12 items-center gap-2 sm:gap-2 bg-white dark:bg-slate-900 p-2.5 sm:p-2 rounded-lg border border-slate-200 dark:border-slate-700 shadow-xs">
+                                  <div className="sm:col-span-3">
+                                    <label className="block text-[10px] text-slate-500 font-bold mb-0.5 sm:hidden">Selling Option / Name</label>
                                     <input
-                                      type="number"
-                                      placeholder="Qty"
-                                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-2 sm:p-1.5 text-xs focus:outline-blue-500 font-mono"
-                                      value={mu.conversionRate === 0 ? '' : mu.conversionRate}
+                                      type="text"
+                                      placeholder="e.g. 1 Feet, Box"
+                                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-2 sm:p-1.5 text-xs focus:outline-blue-500 font-medium"
+                                      value={mu.name}
                                       onChange={(e) => {
                                         const nextUnits = [...item.multi_units];
-                                        nextUnits[muIndex].conversionRate = Number(e.target.value);
+                                        nextUnits[muIndex].name = e.target.value;
                                         updateProductItem(index, { multi_units: nextUnits });
                                       }}
                                     />
                                   </div>
-                                  <div className="flex items-center gap-2 sm:gap-1.5 w-full sm:flex-1">
-                                    <span className="text-[10px] text-slate-500 whitespace-nowrap">Price ₹</span>
+                                  <div className="sm:col-span-3">
+                                    <label className="block text-[10px] text-slate-500 font-bold mb-0.5 sm:hidden">Bill Unit</label>
                                     <input
-                                      type="number"
-                                      placeholder="Amount"
-                                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-2 sm:p-1.5 text-xs focus:outline-blue-500 font-mono"
-                                      value={mu.price === 0 ? '' : mu.price}
+                                      type="text"
+                                      placeholder={`Unit (e.g. ${item.s_unit || item.unit || 'Piece'})`}
+                                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-2 sm:p-1.5 text-xs focus:outline-blue-500 font-medium"
+                                      value={mu.unit !== undefined ? mu.unit : (item.s_unit || item.unit || '')}
                                       onChange={(e) => {
                                         const nextUnits = [...item.multi_units];
-                                        nextUnits[muIndex].price = Number(e.target.value);
+                                        nextUnits[muIndex].unit = e.target.value;
                                         updateProductItem(index, { multi_units: nextUnits });
                                       }}
                                     />
                                   </div>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const nextUnits = [...item.multi_units];
-                                      nextUnits.splice(muIndex, 1);
-                                      updateProductItem(index, { multi_units: nextUnits });
-                                    }}
-                                    className="w-full sm:w-auto p-2 sm:p-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded transition shrink-0 flex items-center justify-center gap-2 border border-rose-100 dark:border-rose-900 sm:border-none mt-1 sm:mt-0"
-                                  >
-                                    <i className="fa-solid fa-trash text-sm sm:text-[10px]"></i>
-                                    <span className="sm:hidden text-xs font-bold">Remove Unit</span>
-                                  </button>
+                                  <div className="sm:col-span-3 flex items-center gap-1.5">
+                                    <span className="text-[10px] text-slate-500 whitespace-nowrap">Eqv =</span>
+                                    <input
+                                      type="number"
+                                      step="any"
+                                      min="0"
+                                      placeholder="e.g. 0.05 or 1"
+                                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-2 sm:p-1.5 text-xs focus:outline-blue-500 font-mono"
+                                      value={mu.conversionRate !== undefined && mu.conversionRate !== null ? mu.conversionRate : ''}
+                                      onChange={(e) => {
+                                        const nextUnits = [...item.multi_units];
+                                        nextUnits[muIndex].conversionRate = e.target.value;
+                                        updateProductItem(index, { multi_units: nextUnits });
+                                      }}
+                                    />
+                                  </div>
+                                  <div className="sm:col-span-2 flex items-center gap-1.5">
+                                    <span className="text-[10px] text-slate-500 whitespace-nowrap">₹</span>
+                                    <input
+                                      type="number"
+                                      step="any"
+                                      min="0"
+                                      placeholder="Price"
+                                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-2 sm:p-1.5 text-xs focus:outline-blue-500 font-mono font-bold"
+                                      value={mu.price !== undefined && mu.price !== null ? mu.price : ''}
+                                      onChange={(e) => {
+                                        const nextUnits = [...item.multi_units];
+                                        nextUnits[muIndex].price = e.target.value;
+                                        updateProductItem(index, { multi_units: nextUnits });
+                                      }}
+                                    />
+                                  </div>
+                                  <div className="sm:col-span-1 flex justify-end">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const nextUnits = [...item.multi_units];
+                                        nextUnits.splice(muIndex, 1);
+                                        updateProductItem(index, { multi_units: nextUnits });
+                                      }}
+                                      className="w-full sm:w-auto p-2 sm:p-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded transition shrink-0 flex items-center justify-center gap-1 border border-rose-100 dark:border-rose-900 sm:border-none cursor-pointer"
+                                      title="Remove Unit"
+                                    >
+                                      <i className="fa-solid fa-trash text-sm sm:text-xs"></i>
+                                      <span className="sm:hidden text-xs font-bold">Remove</span>
+                                    </button>
+                                  </div>
                                 </div>
                               ))}
                             </div>

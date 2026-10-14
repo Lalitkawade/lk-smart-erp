@@ -52,7 +52,7 @@ export class InventoryService {
         const totalDeductedBaseUnits = item.qty;
         
         const currentStock = Number(item.product.current_stock ?? 0);
-        const newStock = Math.max(0, currentStock - totalDeductedBaseUnits);
+        const newStock = Math.max(0, Number((currentStock - totalDeductedBaseUnits).toFixed(4)));
 
         return supabase.from('products').update({ current_stock: newStock }).eq('id', item.product.id);
       });
