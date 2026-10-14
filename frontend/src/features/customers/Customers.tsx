@@ -510,6 +510,7 @@ export default function Customers({ onNewInvoice, autoOpenModal, onModalClosed }
       }
     });
 
+    
     return Array.from(map.values());
   }, [customers, sales]);
 
